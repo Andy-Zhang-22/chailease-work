@@ -208,15 +208,15 @@
    * 一列過不過得了篩選；except 是「這一組先不算」，給篩選籤上的數字用。
    * 金主沒勾＝同業全部，但中租自家不算（自家的客戶不是要搶的對象）；要看自家就勾它。
    */
-  function passes(r, c, except) {
+  function passes(r, c, except, F = f) {
     const mine = mineOf(r, c.cm);
-    return (except === 'due' || passesDue(f.due, r.days))
-      && (except === 'lenders' || (f.lenders.size ? f.lenders.has(r.family) : r.family !== 'chailease'))
-      && (except === 'types' || !f.types.size || f.types.has(r.type))
-      && (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
-      && (except === 'districts' || !f.districts.size || f.districts.has(r.branch.district))
-      && (except === 'mine' || !f.mine.size || f.mine.has(mine ? (declined(mine) ? 'declined' : 'in') : 'out'))
-      && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
+    return (except === 'due' || passesDue(F.due, r.days))
+      && (except === 'lenders' || (F.lenders.size ? F.lenders.has(r.family) : r.family !== 'chailease'))
+      && (except === 'types' || !F.types.size || F.types.has(r.type))
+      && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
+      && (except === 'districts' || !F.districts.size || F.districts.has(r.branch.district))
+      && (except === 'mine' || !F.mine.size || F.mine.has(mine ? (declined(mine) ? 'declined' : 'in') : 'out'))
+      && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && r.amount >= c.min && r.amount <= c.max
       && !(c.hideFin && r.custIsFin)
       && (showHidden || !hidden.has(r.key))
@@ -339,7 +339,7 @@
 
   /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容、下次聯絡日」，不會當成登記清冊再問一次條件。 */
   function toCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', noteFor(r), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
     return `\uFEFF${lines.join('\n')}\n`;
   }
   const toStandardCsv = toCsv;
@@ -373,14 +373,42 @@
     render();   // 匯進去之後卡片就變成「已在名單」
   }
 
-  /** 每日自動挑名單用：這一頁目前篩選篩出來、名單裡沒有的，照到期日近的在前。第一次會先把清冊載進來。 */
+  /*
+   * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
+   *   3 個月內到期 → 同業（中租自家、同業之間的融資不算）→ 我的分公司 → 100 萬以上
+   * 到期時間是分級的：3 個月內 → 6 個月內 → 12 個月內 → 更久 → 已過期／沒迄日。其餘各打勾，
+   * 照順序比，全部一樣就快到期的先。全符合的先挑，不夠就往下補。名單裡有的、藏起來的不挑。
+   */
+  const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
+  const DAILY_PRIORITY = ['3 個月內到期', '同業', '我的分公司', '100 萬以上'];
+  const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
+  const dailyChecks = (r) => [
+    DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
+    r.family !== 'chailease' && !r.custIsFin,
+    r.branch.key === myBranch(),
+    r.amount >= 1000000,
+  ];
+  function dailyCompare(a, b) {
+    if (a._checks[0] !== b._checks[0]) return a._checks[0] - b._checks[0];
+    for (let i = 1; i < a._checks.length; i++) {
+      if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1;
+    }
+    return (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days);
+  }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneChattel');
     if (!root) return [];
     await start();
     if (!ready) return [];
-    const c = criteria();
-    return visible(c).filter((r) => !mineOf(r, c.cm));
+    const cm = customerMap();
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+      .map((r) => {
+        r._checks = dailyChecks(r);
+        const hit = DAILY_PRIORITY.filter((_, i) => (i === 0 ? r._checks[0] === 0 : r._checks[i]));
+        r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
+        return r;
+      })
+      .sort(dailyCompare);
   }
 
   function build() {
@@ -508,5 +536,5 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, dailyCandidates, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

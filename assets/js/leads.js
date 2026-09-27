@@ -323,15 +323,15 @@
       cm: customerMap(),
     };
   }
-  function passes(r, c, except) {
+  function passes(r, c, except, F = f) {
     return (c.period === 'all' || r['期別'] === c.period)
-      && (except === 'types' || f.types.has(r.type))
-      && (except === 'cities' || !f.cities.size || f.cities.has(r.city))
-      && (except === 'reasons' || r.type !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
-      && (except === 'inds' || !f.inds.size || r.classes.some((k) => f.inds.has(k)))
-      && (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
-      && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
-      && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (except === 'types' || F.types.has(r.type))
+      && (except === 'cities' || !F.cities.size || F.cities.has(r.city))
+      && (except === 'reasons' || r.type !== 'change' || !F.reasons.size || F.reasons.has(r.rk))
+      && (except === 'inds' || !F.inds.size || r.classes.some((k) => F.inds.has(k)))
+      && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
+      && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
+      && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
       && (showHidden || !hidden.has(keyOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
@@ -499,7 +499,7 @@
       if (iNext >= 0 && d) row[iNext] = d;
       // 從哪一期、什麼案由來的寫進去，之後在名單上看得出這家是怎麼來的
       const src = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
-      if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), row[iNote] || ''].filter(Boolean).join('\n');
+      if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), src._why ? `每日新名單，${src._why}` : '', row[iNote] || ''].filter(Boolean).join('\n');
     });
     return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\n')}\n`;
   }
@@ -526,15 +526,50 @@
     render();   // 匯進去之後卡片就變成「已在名單」
   }
 
-  /** 每日自動挑名單用：這一頁目前篩選篩出來、名單裡沒有、沒藏起來的，照目前排序。第一次會先把清冊載進來。 */
+  /*
+   * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
+   *   本期 → 增資 → 製造／營造（投資控股不算）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 5 年以上
+   * 每一家對這六條各打勾，照順序比：前面那條符合的一律排在不符合的前面，都一樣再比下一條，
+   * 全部一樣就資本額高的先。所以全符合的先挑，不夠就往下補，總是湊得到 10 家。
+   * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
+   */
+  const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
+  const DAILY_PRIORITY = ['本期', '增資', '製造／營造', '資本額 500～6,000 萬', '我的分公司', '成立 5 年以上'];
+  const dailyChecks = (r, latest) => [
+    r['期別'] === latest,
+    r.rk === 'up',
+    r.classes.some((k) => 'CE'.includes(k)) && !r.holding,
+    r.capital >= 5000000 && r.capital <= 60000000,
+    r.branch.key === myBranch(),
+    ageOf(r) === 'ge5',
+  ];
+  function dailyCompare(a, b) {
+    for (let i = 0; i < a._checks.length; i++) {
+      if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1;
+    }
+    return b.capital - a.capital || (a['公司名稱'] || '').localeCompare(b['公司名稱'] || '', 'zh-Hant');
+  }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneLeads');
     if (!root) return [];
     await start();
-    if (!ready) return [];
-    const c = criteria();
-    return visible().filter((r) => !mineOf(r, c.cm) && !hidden.has(keyOf(r)));
+    if (!ready || !index) return [];
+    // 池子是「本期的變更清冊」：不管畫面上現在切到哪一期、勾了什麼，這幾個檔一定要載進來
+    const latest = Object.keys(index.periods || {}).sort().pop();
+    if (!latest) return [];
+    const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
+    if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
+    const cm = customerMap();
+    return rows.filter((r) => r.type === 'change' && !mineOf(r, cm) && !hidden.has(keyOf(r)))
+      .map((r) => {
+        r._checks = dailyChecks(r, latest);
+        const hit = DAILY_PRIORITY.filter((_, i) => r._checks[i]);
+        r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
+        return r;
+      })
+      .sort(dailyCompare);
   }
+
   const csvName = (n) => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${n == null ? current.length : n}家.csv`;
 
   function build() {
@@ -662,5 +697,5 @@
     start().catch((err) => { console.error(err); toast(`新公司名單載入失敗：${err.message}`); });
   }
 
-  global.Leads = { show, dailyCandidates, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  global.Leads = { show, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);
