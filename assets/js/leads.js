@@ -323,15 +323,15 @@
       cm: customerMap(),
     };
   }
-  function passes(r, c, except) {
+  function passes(r, c, except, F = f) {
     return (c.period === 'all' || r['期別'] === c.period)
-      && (except === 'types' || f.types.has(r.type))
-      && (except === 'cities' || !f.cities.size || f.cities.has(r.city))
-      && (except === 'reasons' || r.type !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
-      && (except === 'inds' || !f.inds.size || r.classes.some((k) => f.inds.has(k)))
-      && (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
-      && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
-      && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (except === 'types' || F.types.has(r.type))
+      && (except === 'cities' || !F.cities.size || F.cities.has(r.city))
+      && (except === 'reasons' || r.type !== 'change' || !F.reasons.size || F.reasons.has(r.rk))
+      && (except === 'inds' || !F.inds.size || r.classes.some((k) => F.inds.has(k)))
+      && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
+      && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
+      && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
       && (showHidden || !hidden.has(keyOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
@@ -526,14 +526,32 @@
     render();   // 匯進去之後卡片就變成「已在名單」
   }
 
-  /** 每日自動挑名單用：這一頁目前篩選篩出來、名單裡沒有、沒藏起來的，照目前排序。第一次會先把清冊載進來。 */
+  /*
+   * 每日自動挑名單的基準（使用者定的，跟畫面上的篩選無關）：
+   * 本期 ＋ 變更清冊 ＋ 增資 ＋ 製造／營造 ＋ 資本額 500～6,000 萬 ＋ 我的分公司 ＋ 成立 5 年以上
+   * ＋ 略過投資控股 ＋ 名單裡沒有 ＋ 沒藏起來，照資本額高的在前。
+   * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。
+   */
+  const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
+  const DAILY_RECIPE = () => ({
+    types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(['C', 'E']),
+    branches: new Set([myBranch()]), ages: new Set(['ge5']), mine: new Set(['out']), q: '',
+    minCapital: 5000000, maxCapital: 60000000, skipHolding: true,
+  });
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneLeads');
     if (!root) return [];
     await start();
-    if (!ready) return [];
-    const c = criteria();
-    return visible().filter((r) => !mineOf(r, c.cm) && !hidden.has(keyOf(r)));
+    if (!ready || !index) return [];
+    // 基準是「本期的變更清冊」：不管畫面上現在切到哪一期、勾了什麼，這幾個檔一定要載進來
+    const latest = Object.keys(index.periods || {}).sort().pop();
+    if (!latest) return [];
+    const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
+    if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
+    const R = DAILY_RECIPE();
+    const c = { ...criteria(), period: latest, min: R.minCapital, max: R.maxCapital, skipHolding: R.skipHolding, terms: [] };
+    return rows.filter((r) => passes(r, c, null, R) && !hidden.has(keyOf(r)))
+      .sort((a, b) => b.capital - a.capital || (a['公司名稱'] || '').localeCompare(b['公司名稱'] || '', 'zh-Hant'));
   }
   const csvName = (n) => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${n == null ? current.length : n}家.csv`;
 
@@ -662,5 +680,5 @@
     start().catch((err) => { console.error(err); toast(`新公司名單載入失敗：${err.message}`); });
   }
 
-  global.Leads = { show, dailyCandidates, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  global.Leads = { show, dailyCandidates, DAILY_RECIPE, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);
