@@ -339,7 +339,7 @@
 
   /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容、下次聯絡日」，不會當成登記清冊再問一次條件。 */
   function toCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', noteFor(r), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
     return `\uFEFF${lines.join('\n')}\n`;
   }
   const toStandardCsv = toCsv;
@@ -374,24 +374,41 @@
   }
 
   /*
-   * 每日自動挑名單的基準（使用者定的，跟畫面上的篩選無關）：
-   * 3 個月內到期 ＋ 同業（中租自家不算）＋ 我的分公司 ＋ 100 萬以上 ＋ 藏起同業之間的融資
-   * ＋ 名單裡沒有 ＋ 沒藏起來，照到期日近的在前。「我的分公司」看「規則」那頁設的，沒設就是新莊。
+   * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
+   *   3 個月內到期 → 同業（中租自家、同業之間的融資不算）→ 我的分公司 → 100 萬以上
+   * 到期時間是分級的：3 個月內 → 6 個月內 → 12 個月內 → 更久 → 已過期／沒迄日。其餘各打勾，
+   * 照順序比，全部一樣就快到期的先。全符合的先挑，不夠就往下補。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_RECIPE = () => ({
-    due: 'm3', lenders: new Set(), types: new Set(), branches: new Set([myBranch()]), districts: new Set(), mine: new Set(['out']), ages: new Set(), q: '',
-    minAmount: 1000000, maxAmount: Infinity, hideFin: true,
-  });
+  const DAILY_PRIORITY = ['3 個月內到期', '同業', '我的分公司', '100 萬以上'];
+  const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
+  const dailyChecks = (r) => [
+    DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
+    r.family !== 'chailease' && !r.custIsFin,
+    r.branch.key === myBranch(),
+    r.amount >= 1000000,
+  ];
+  function dailyCompare(a, b) {
+    if (a._checks[0] !== b._checks[0]) return a._checks[0] - b._checks[0];
+    for (let i = 1; i < a._checks.length; i++) {
+      if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1;
+    }
+    return (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days);
+  }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneChattel');
     if (!root) return [];
     await start();
     if (!ready) return [];
-    const R = DAILY_RECIPE();
-    const c = { ...criteria(), min: R.minAmount, max: R.maxAmount, hideFin: R.hideFin, terms: [] };
-    return rows.filter((r) => passes(r, c, null, R) && !hidden.has(r.key))
-      .sort((a, b) => (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days));
+    const cm = customerMap();
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+      .map((r) => {
+        r._checks = dailyChecks(r);
+        const hit = DAILY_PRIORITY.filter((_, i) => (i === 0 ? r._checks[0] === 0 : r._checks[i]));
+        r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
+        return r;
+      })
+      .sort(dailyCompare);
   }
 
   function build() {
@@ -519,5 +536,5 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, dailyCandidates, DAILY_RECIPE, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);
