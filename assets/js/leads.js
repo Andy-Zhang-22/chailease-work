@@ -51,7 +51,39 @@
   let limit = PAGE;
   let started = false;      // 第一次切到這個分頁才去抓 index.json
   let ready = false;
-  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), q: '' };
+  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), q: '' };
+
+  /* ---------------- 跟我的名單比對 ---------------- */
+
+  /*
+   * 跟動產擔保名單那頁同一套：統編優先，沒統編才比公司名；在瀏覽器裡對 IndexedDB，
+   * 名單不會上傳。每次畫都重算（主站的 allViews 有快取，便宜），所以剛匯進去的馬上變「已在名單」。
+   */
+  function customerMap() {
+    const byTax = new Map();
+    const byName = new Map();
+    const views = typeof global.customerViews === 'function' ? global.customerViews() : [];
+    views.forEach((v) => {
+      const tax = String(v.taxId || '').replace(/\D/g, '');
+      if (tax && !byTax.has(tax)) byTax.set(tax, v);
+      if (v.company && !byName.has(v.company)) byName.set(v.company, v);
+    });
+    return { byTax, byName };
+  }
+  const mineOf = (r, cm) => (r['統一編號'] && cm.byTax.get(String(r['統一編號']).replace(/\D/g, ''))) || (r['公司名稱'] && cm.byName.get(r['公司名稱'])) || null;
+  // 主站只有「禁止推廣」這一種不能打的狀態（婉拒算已聯絡，還是可以再打）
+  const declined = (v) => !!v && (v.blocked || v.outcome === 'blocked');
+  const mineKey = (r, cm) => { const m = mineOf(r, cm); return m ? (declined(m) ? 'declined' : 'in') : 'out'; };
+  const MINE = [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']];
+
+  // 「這家不用了」：只是不想再看到，不是刪客戶，所以記在這台裝置就好（跟動產擔保那頁一樣）
+  const HIDDEN_KEY = 'leads-hidden-v1';
+  let hidden = new Set();
+  try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
+  const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  let showHidden = false;
+  const keyOf = (r) => (r['統一編號'] || r['公司名稱'] || '');
+  const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
 
   /* ---------------- 成立年 ---------------- */
 
@@ -288,6 +320,7 @@
       max: (Number($('#leads-capMax').value) || 0) * 10000 || Infinity,
       skipHolding: $('#leads-skipHolding').checked,
       terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean),
+      cm: customerMap(),
     };
   }
   function passes(r, c, except) {
@@ -298,6 +331,8 @@
       && (except === 'inds' || !f.inds.size || r.classes.some((k) => f.inds.has(k)))
       && (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
       && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
+      && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (showHidden || !hidden.has(keyOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
       && c.terms.every((t) => r.blob.includes(t));
@@ -315,7 +350,11 @@
   /* ---------------- 畫面 ---------------- */
 
   const wan = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(n % 1e8 ? 1 : 0)} 億` : `${Math.round(n / 1e4).toLocaleString()} 萬`);
-  function card(r) {
+  function card(r, c) {
+    const mine = c ? mineOf(r, c.cm) : null;
+    const mineBadge = !mine ? '' : declined(mine)
+      ? el('span', { className: 'badge badge-own', textContent: `名單上禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
+      : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })
     const reasonBadge = r.type === 'setup' ? el('span', { className: 'badge badge-new', textContent: '新設立' })
       : r.rk === 'up' ? el('span', { className: 'badge badge-up', textContent: r.reason })
         : r.rk === 'down' ? el('span', { className: 'badge badge-down', textContent: r.reason })
@@ -326,10 +365,17 @@
     const inds = r.classes.filter((c) => IND[c]).slice(0, 2).map((c) => el('span', { className: 'badge badge-ind', textContent: IND[c] }));
     const items = (r['營業項目'] || '').split('；').filter(Boolean);
     const all = $('#leads-period').value === 'all';
-    return el('article', { className: `card leads-card${r.rk === 'up' ? ' is-up' : ''}` }, [
+    const isHidden = hidden.has(keyOf(r));
+    const actions = mine
+      ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
+      : [el('button', { className: 'btn btn-tiny btn-primary leads-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
+        isHidden
+          ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(keyOf(r)); saveHidden(); render(); } })
+          : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(keyOf(r)); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
+    return el('article', { className: `card leads-card${mine ? ' is-mine' : r.rk === 'up' ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
-        r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '']),
+        r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '', mineBadge]),
       el('div', { className: 'card-meta' }, [
         el('span', { textContent: `💰 ${wan(r.capital)}` }),
         r['代表人'] ? el('span', { textContent: `👤 ${r['代表人']}` }) : '',
@@ -340,6 +386,7 @@
         el('span', { textContent: `#${r['統一編號']}` }),
       ]),
       items.length ? el('p', { className: 'leads-items', textContent: `${items.slice(0, 4).join('　')}${items.length > 4 ? `　…共 ${items.length} 項` : ''}` }) : '',
+      el('div', { className: 'card-actions' }, actions),
     ]);
   }
 
@@ -380,6 +427,7 @@
     chips($('#leads-fInd'), IND_ORDER.map((k) => [k, IND[k], facet('inds', (r) => r.classes.includes(k))]), f.inds);
     // 成立年數：只算已經知道設立日期的；還沒查的在名單上方那一行
     chips($('#leads-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
+    chips($('#leads-fMine'), MINE.map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
     // 分公司：籤是從載進來的列長出來的（清冊裡沒有這一欄），分公司在前、共同區在後、劃分表外最後
     const counts = new Map();
     rows.forEach((r) => { if (r.branch.key && passes(r, c, 'branches')) counts.set(r.branch.key, (counts.get(r.branch.key) || 0) + 1); });
@@ -399,14 +447,22 @@
     current = visible();
     const host = $('#leads-cards');
     host.textContent = '';
-    current.slice(0, limit).forEach((r) => host.append(card(r)));
+    const c = criteria();
+    current.slice(0, limit).forEach((r) => host.append(card(r, c)));
     const up = current.filter((r) => r.rk === 'up').length;
     const period = $('#leads-period').value;
-    $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}<span class="muted">　／ ${period === 'all' ? '全部期別' : '本期'}已載入 ${rows.filter((r) => period === 'all' || r['期別'] === period).length.toLocaleString()} 家</span>`;
+    const inList = current.filter((r) => mineOf(r, c.cm)).length;
+    $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}${inList ? `、已在名單 ${inList} 家` : ''}<span class="muted">　／ ${period === 'all' ? '全部期別' : '本期'}已載入 ${rows.filter((r) => period === 'all' || r['期別'] === period).length.toLocaleString()} 家</span>`;
+    const hid = rows.filter((r) => hidden.has(keyOf(r))).length;
+    const hb = $('#leads-hidden');
+    hb.hidden = !hid;
+    hb.textContent = showHidden ? `收起藏起來的 ${hid} 家` : `顯示藏起來的 ${hid} 家`;
+    const addable = current.length - inList;
+    $('#leads-add').textContent = `加入客戶名單${addable ? `（${addable} 家）` : ''}`;
     $('#leads-more').hidden = current.length <= limit;
     $('#leads-empty').hidden = !!current.length;
     $('#leads-empty').textContent = rows.length ? '沒有符合條件的公司，放寬資本額或案由試試。' : '';
-    $('#leads-add').disabled = !current.length;
+    $('#leads-add').disabled = !addable;
     $('#leads-export').disabled = !current.length;
     $('#leads-copy').disabled = !current.length;
     const pill = document.getElementById('countLeads');
@@ -419,7 +475,17 @@
     const lines = [CSV_HEAD, ...list.map((r) => CSV_HEAD.map((h) => cell(r, h)))].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
-  const csvName = () => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${current.length}家.csv`;
+  /** 單張卡片與整批都走這裡：已在名單的先剔掉，剩下的送進主站匯入流程（會再問一次條件、自動略過重複）。 */
+  async function addToList(list) {
+    if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
+    const cm = customerMap();
+    const fresh = list.filter((r) => !mineOf(r, cm));
+    if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
+    const file = new File([toCsv(fresh)], csvName(fresh.length), { type: 'text/csv' });
+    try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    render();   // 匯進去之後卡片就變成「已在名單」
+  }
+  const csvName = (n) => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${n == null ? current.length : n}家.csv`;
 
   function build() {
     root.textContent = '';
@@ -435,6 +501,7 @@
       group('案由（變更清冊）', el('div', { className: 'chips', id: 'leads-fReason' })),
       group('行業（依營業項目大類）', el('div', { className: 'chips', id: 'leads-fInd' })),
       group('成立年數（依核准設立日期；變更清冊的是查商工登記來的）', el('div', { className: 'chips', id: 'leads-fAge' })),
+      group('跟我的名單比對', el('div', { className: 'chips', id: 'leads-fMine' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
         el('input', { id: 'leads-capMax', type: 'number', min: '0', step: '100', placeholder: '上限', value: '6000' })])),
@@ -444,7 +511,9 @@
         el('option', { value: 'capital', textContent: '資本額（高到低）' }),
         el('option', { value: 'date', textContent: '日期（新到舊）' }),
         el('option', { value: 'company', textContent: '公司名稱' })]), 'leads-sort'),
-      el('div', { className: 'leads-row' }, [el('button', { className: 'btn btn-tiny', id: 'leads-reset', type: 'button', textContent: '清除篩選' })]),
+      el('div', { className: 'leads-row' }, [
+        el('button', { className: 'btn btn-tiny', id: 'leads-reset', type: 'button', textContent: '清除篩選' }),
+        el('button', { className: 'btn btn-tiny', id: 'leads-hidden', type: 'button', hidden: true })]),
     ]);
     // 桌面版預設展開，手機上先看到名單
     filters.open = !matchMedia('(max-width: 760px)').matches;
@@ -466,6 +535,9 @@
       el('div', { className: 'cards', id: 'leads-cards' }),
       el('div', { className: 'empty', id: 'leads-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'leads-more', type: 'button', textContent: '載入更多', hidden: true })]),
+      el('div', { className: 'chattel-legend' }, [
+        el('span', {}, [el('i', { className: 'swatch is-up' }), ' 增資']),
+        el('span', {}, [el('i', { className: 'swatch is-mine' }), ' 已在你的名單裡'])]),
       el('p', { className: 'muted leads-foot', textContent: '資料來源：經濟部商工登記「公司所營事業項目清冊」，GitHub Actions 每月 8 日自動抓取（清冊在次月初產製，8 月的清冊 9 月初才有）。這裡不存任何客戶資料；成立年是用統編查商工登記來的，查到的留在這台瀏覽器省得重查。' }),
     );
   }
@@ -501,7 +573,7 @@
     $('#leads-more').onclick = () => { limit += PAGE; render(); };
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
-      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.q = '';
+      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.q = ''; showHidden = false;
       $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };
@@ -510,11 +582,8 @@
      * （認得「統一編號、公司名稱、公司所在地、代表人、資本額」就是登記清冊，會再問一次
      * 資本額、地區條件，已經在名單裡的自動略過）。不另寫一條匯入路，客戶名單的邏輯不動。
      */
-    $('#leads-add').onclick = () => {
-      if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
-      const file = new File([toCsv(current)], csvName(), { type: 'text/csv' });
-      global.importLeadsFile(file);
-    };
+    $('#leads-add').onclick = () => addToList(current);
+    $('#leads-hidden').onclick = () => { showHidden = !showHidden; limit = PAGE; render(); };
     $('#leads-export').onclick = () => {
       const blob = new Blob([toCsv(current)], { type: 'text/csv;charset=utf-8' });
       const a = el('a', { href: URL.createObjectURL(blob), download: csvName() });
@@ -534,6 +603,8 @@
   function show() {
     if (!root) root = document.getElementById('paneLeads');
     if (!root) return;
+    // 第二次以後切過來重畫：名單可能剛匯了新的，「已在名單」要跟著變
+    if (started) { if (ready) render(); return; }
     start().catch((err) => { console.error(err); toast(`新公司名單載入失敗：${err.message}`); });
   }
 
