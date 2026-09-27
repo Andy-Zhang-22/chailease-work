@@ -428,6 +428,8 @@ button, input, select { font: inherit; color: inherit; }
 .branch-common { color: #b45309; }
 .badge-branch { border-color: #0f766e; color: #0f766e; }
 /* 回撥提醒 */
+.feed-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.feed-bar .feed-text { color: var(--muted); }
 .remind-bar { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; }
 .remind-bar.is-due { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
 .remind-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13.5px; }
