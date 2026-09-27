@@ -475,15 +475,65 @@
     const lines = [CSV_HEAD, ...list.map((r) => CSV_HEAD.map((h) => cell(r, h)))].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
-  /** 單張卡片與整批都走這裡：已在名單的先剔掉，剩下的送進主站匯入流程（會再問一次條件、自動略過重複）。 */
+  /**
+   * 標準欄位的 CSV（公司名稱、統編、成立、資本額…、下次聯絡日）。
+   *
+   * 以前送的是登記清冊格式，主站會再跳一次「資本額、地區」的條件對話框——這一頁已經篩過了，
+   * 再問一次是多餘的；而且清冊格式帶不了下次聯絡日。改走 fromGovRegistry → govToStandardRows
+   * （產業、有沒有設備標的、背景說明都照舊算），再把日期填進「下次聯絡日」欄。
+   */
+  function toStandardCsv(list, dates) {
+    const N = global.Normalize;
+    const gov = [CSV_HEAD, ...list.map((r) => CSV_HEAD.map((h) => r[h] || (h === '核准設立日期' && r.foundedDate ? fmtRoc(r.foundedDate) : '')))];
+    const { records } = N.fromGovRegistry(gov, { minCapital: 0, maxCapital: Infinity, cities: null, onlyCapitalUp: false });
+    const rows = N.govToStandardRows(records);
+    const head = rows[0];
+    const iNext = head.indexOf('下次聯絡日');
+    const iNote = head.indexOf('訪談內容');
+    const dateOf = new Map();
+    list.forEach((r, i) => { if (dates && dates[i]) dateOf.set(r['統一編號'] || r['公司名稱'], dates[i]); });
+    const iTax = head.indexOf('統編');
+    const iName = head.indexOf('公司名稱');
+    rows.slice(1).forEach((row) => {
+      const d = dateOf.get(row[iTax]) || dateOf.get(row[iName]) || '';
+      if (iNext >= 0 && d) row[iNext] = d;
+      // 從哪一期、什麼案由來的寫進去，之後在名單上看得出這家是怎麼來的
+      const src = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
+      if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), row[iNote] || ''].filter(Boolean).join('\n');
+    });
+    return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\n')}\n`;
+  }
+
+  /** 從哪天開始排：畫面上的日期欄，空白就是明天。 */
+  const fromDate = () => { const v = $('#leads-from') && $('#leads-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
+
+  /**
+   * 單張卡片與整批都走這裡：已在名單的先剔掉，每一家照「一天最多幾家、其中新名單幾家」找一個
+   * 日子（主站的 planNewDates），再送進主站匯入流程（自動略過重複、吃排除名單）。
+   * 加進來就有下次聯絡日，會出現在每天的提醒列，不會沉在幾百家裡面。
+   */
   async function addToList(list) {
     if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
     const cm = customerMap();
     const fresh = list.filter((r) => !mineOf(r, cm));
     if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
-    const file = new File([toCsv(fresh)], csvName(fresh.length), { type: 'text/csv' });
+    const from = fromDate();
+    const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
+    const file = new File([toStandardCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    const last = dates.filter(Boolean).sort().pop();
+    if (last) toast(`${fresh.length} 家排在 ${dates[0].replace(/-/g, '/')}${last !== dates[0] ? `～${last.replace(/-/g, '/')}` : ''}`);
     render();   // 匯進去之後卡片就變成「已在名單」
+  }
+
+  /** 每日自動挑名單用：這一頁目前篩選篩出來、名單裡沒有、沒藏起來的，照目前排序。第一次會先把清冊載進來。 */
+  async function dailyCandidates() {
+    if (!root) root = document.getElementById('paneLeads');
+    if (!root) return [];
+    await start();
+    if (!ready) return [];
+    const c = criteria();
+    return visible().filter((r) => !mineOf(r, c.cm) && !hidden.has(keyOf(r)));
   }
   const csvName = (n) => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${n == null ? current.length : n}家.csv`;
 
@@ -523,7 +573,11 @@
       el('div', { className: 'leads-head' }, [
         el('div', { className: 'leads-count', id: 'leads-count', textContent: '—' }),
         el('div', { className: 'leads-row' }, [
-          el('button', { className: 'btn btn-primary', id: 'leads-add', type: 'button', title: '把目前篩出來的公司送進「新增客戶」的匯入流程，會再問一次條件、已經在名單裡的會略過', textContent: '加入客戶名單' }),
+          el('label', { className: 'leads-from', title: '加進來的公司從這天起排下次聯絡日，照「每天打得完幾家」的上限與新名單額度往後找位子；空白＝明天' }, [
+            el('span', { className: 'muted', textContent: '排進日程：從' }),
+            el('input', { id: 'leads-from', type: 'date' }),
+            el('span', { className: 'muted', textContent: '起' })]),
+          el('button', { className: 'btn btn-primary', id: 'leads-add', type: 'button', title: '把目前篩出來、還不在名單裡的公司送進匯入流程，每家排一個下次聯絡日', textContent: '加入客戶名單' }),
           el('button', { className: 'btn', id: 'leads-copy', type: 'button', textContent: '複製統編' }),
           el('button', { className: 'btn', id: 'leads-export', type: 'button', textContent: '匯出 CSV' }),
         ]),
@@ -608,5 +662,5 @@
     start().catch((err) => { console.error(err); toast(`新公司名單載入失敗：${err.message}`); });
   }
 
-  global.Leads = { show, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  global.Leads = { show, dailyCandidates, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);

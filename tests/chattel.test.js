@@ -82,9 +82,11 @@ test('寫進訪談內容的那一行：主站不會把契約日期當成一筆�
   assert.equal(entries[0].date, null, '沒有日期，才不會變成最近聯絡日');
   assert.equal(w.Normalize.guessOutcome(note), 'new');
   const csv = C.toCsv([r]);
-  assert.match(csv.split('\n')[0], /公司名稱,統編,成立,電話,地址,訪談內容/);
+  assert.match(csv.split('\n')[0], /公司名稱,統編,分級,成立,資本額,電話,負責人,KEYMAN,產業別,下次聯絡日,最近聯絡日,訪談內容,地址/);
   const withYear = C.toCsv([C.toRecord({ '客戶名稱': '乙公司', '客戶統編': '12345678', '金主名稱': '新鑫股份有限公司', '契約迄': '2026/12/01', '成立日期': '101/10/01' }, TODAY)]);
-  assert.match(withYear.split('\n')[1], /^乙公司,12345678,2012,/, '成立欄給西元年，主站的成立欄就是這個格式');
+  assert.match(withYear.split('\n')[1], /^乙公司,12345678,,2012,/, '成立欄給西元年，主站的成立欄就是這個格式');
+  const dated = C.toCsv([C.toRecord({ '客戶名稱': '丙公司', '客戶統編': '22345678', '金主名稱': '新鑫股份有限公司', '契約迄': '2026/12/01' }, TODAY)], ['2026-10-06']);
+  assert.match(dated.split('\n')[1], /^丙公司,22345678,,,,,,,,2026-10-06,,/, '下次聯絡日在第 10 欄');
   assert.equal(w.Normalize.isGovRegistry(w.Normalize.parseCsv(csv)), false, '不能被當成經濟部登記清冊再問一次條件');
 });
 

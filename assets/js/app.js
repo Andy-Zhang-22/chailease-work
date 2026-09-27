@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260927-176';
+  const APP_VERSION = '20260927-177';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1303,7 +1303,7 @@
     host.textContent = '';
     host.append(el('h2', { textContent: '幫沒電話的找電話（Google 地圖）' }));
     const targets = visibleRecords().filter((r) => !r.phones.length && !r.blocked);
-    host.append(el('p', { className: 'muted', textContent: `「全部名單」目前篩出來的裡面有 ${targets.length} 家沒電話。想少找一點，先回名單頁用篩選（例如變更登記＝增資、產業別、客戶規模）縮小範圍再來。` }));
+    host.append(el('p', { className: 'muted', textContent: `「重點推廣名單」目前篩出來的裡面有 ${targets.length} 家沒電話。想少找一點，先回名單頁用篩選（例如變更登記＝增資、產業別、客戶規模）縮小範圍再來。` }));
     if (!placesKey()) {
       const setup = el('button', { className: 'btn btn-primary', type: 'button', textContent: '先設定 Google 地圖金鑰' });
       setup.onclick = () => openPlacesSetup(() => openPhoneHunt());
@@ -2240,11 +2240,25 @@
    *
    * 所以需要兩件事：看得到每個上班日各有幾家，以及照「我一天打得完幾家」把超過的往後挪。
    * ------------------------------------------------------------------ */
-  const DAILY_CAP_DEFAULT = 20;
+  /*
+   * 使用者：「每日上限調整到 30 通、完全新的名單佔 10 通、主力名單佔 20 通」。
+   * 上限是全部（30），其中留 10 個位子給「完全新的」——從新公司、動產擔保加進來、還沒打過的。
+   * 每天早上自動從那兩頁挑 10 家補滿（dailyFeed）；手動加進來的也算在這 10 個位子裡。
+   */
+  const DAILY_CAP_DEFAULT = 30;
+  const NEW_QUOTA_DEFAULT = 10;
   const dailyCap = () => {
     const n = Number(registryPref('daily-cap'));
     return Number.isFinite(n) && n > 0 ? Math.min(500, Math.round(n)) : DAILY_CAP_DEFAULT;
   };
+  const newQuota = () => {
+    const raw = registryPref('new-quota');
+    if (raw === '' || raw == null) return Math.min(dailyCap(), NEW_QUOTA_DEFAULT);   // 沒設過＝預設；設 0 是真的不要
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? Math.min(dailyCap(), Math.round(n)) : Math.min(dailyCap(), NEW_QUOTA_DEFAULT);
+  };
+  /** 「完全新的名單」：從新公司或動產擔保加進來、還沒打過。 */
+  const isFreshLead = (v) => !v.lastDate && /^(登記清冊|動產擔保名單|每日新名單)/.test(String(v.source || ''));
 
   /** 從今天起算的上班日（今天放假就從下一個上班日開始）。 */
   function workdaysFromToday(count) {
@@ -2310,6 +2324,44 @@
       movable.push({ v, from: v.nextDate, day, pick: scorePick(v) });
     });
     return { movable, fixed, overdue, beyond };
+  }
+
+  /** 每個上班日各有幾家「完全新的」（逾期的算第一天，跟 bucketByWorkday 同一條規則）。 */
+  function freshLoad(days) {
+    const today = todayISO();
+    const counts = new Map(days.map((d) => [d, 0]));
+    allViews().forEach((v) => {
+      if (!v.nextDate || v.blocked || !isFreshLead(v) || v.dueDoneOn === today) return;
+      const want = v.nextDate < today ? today : v.nextDate;
+      const d = days.find((x) => x >= want);
+      if (d) counts.set(d, (counts.get(d) || 0) + 1);
+    });
+    return counts;
+  }
+
+  /**
+   * 幫要加進來的新名單找日子。
+   *
+   * wants 是每一家「希望的日期」（沒有就是明天）：從那天起往後找第一個還有位子的上班日——
+   * 那天總數沒到上限、新名單也沒到 10 家。找不到（一整年都滿）就放最後一天，至少有日期。
+   * 新公司、動產擔保兩頁「加入客戶名單」都走這裡，加進來的東西才會出現在每天的提醒列，
+   * 不會沉在幾百家裡面看不到（使用者：「我發現我追蹤不完」）。
+   */
+  function planNewDates(wants) {
+    const cap = dailyCap();
+    const quota = newQuota();
+    const days = workdaysFromToday(260);
+    const { counts } = dayLoad(260);
+    const fresh = freshLoad(days);
+    const tomorrow = addDays(todayISO(), 1);
+    return wants.map((want) => {
+      const from = want && want > tomorrow ? want : tomorrow;
+      let pick = days.find((d) => d >= from && (counts.get(d) || 0) < cap && (fresh.get(d) || 0) < quota);
+      if (!pick) pick = days[days.length - 1];
+      counts.set(pick, (counts.get(pick) || 0) + 1);
+      fresh.set(pick, (fresh.get(pick) || 0) + 1);
+      return pick;
+    });
   }
 
   /** 目前每個上班日各有幾家要打。 */
@@ -2393,6 +2445,57 @@
     return true;
   }
 
+  /*
+   * 每天從新公司、動產擔保挑 10 家進名單。
+   *
+   * 使用者：「我希望你能每天從這兩個分頁裡篩選出 10 間給我到主電推名單裡撥打」。
+   * 每個上班日第一次打開網站時跑：先算今天已經排了幾家完全新的（手動加的也算），
+   * 不夠的從兩頁補——動產擔保挑快到期的、新公司挑資本額高的，各一半，一頁不夠另一頁補。
+   * 挑的就是那兩頁「目前篩選」篩出來、名單裡沒有、沒藏起來的，所以想換口味就去那兩頁改篩選。
+   * 下次聯絡日設今天，來源叫「每日新名單-日期」，哪天覺得不對可以整批刪。
+   * 「今天挑過了」的記號跟著雲端同步，手機、電腦不會各挑一次。
+   */
+  let feeding = false;
+  const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
+  async function dailyFeed(force) {
+    if (feeding) return;
+    if (!force && !dailyFeedOn()) return;
+    const today = todayISO();
+    if (window.Holidays && !window.Holidays.isWorkday(today)) return;
+    if (!force && registryPref('daily-feed-on') === today) return;
+    if (!state.records.length) return;   // 還沒有主名單，先不餵
+    if (!window.Chattel || !window.Leads) return;
+    feeding = true;
+    try {
+      const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
+      const need = newQuota() - have;
+      if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
+      const [ch, le] = await Promise.all([
+        window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
+      ]);
+      // 兩頁各一半；一頁不夠另一頁補
+      let nc = Math.min(ch.length, Math.ceil(need / 2));
+      let nl = Math.min(le.length, need - nc);
+      nc = Math.min(ch.length, need - nl);
+      const pickC = ch.slice(0, nc);
+      const pickL = le.slice(0, nl);
+      if (!pickC.length && !pickL.length) { registryPref('daily-feed-on', today); if (force) toast('兩頁篩出來的都已經在名單裡了，沒有可以挑的'); return; }
+      const parts = [];
+      if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => today)));
+      if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => today)));
+      // 兩份都是同一個標準表頭，接起來只留第一份的表頭
+      const csv = parts.map((t, i) => (i ? t.replace(/^\uFEFF?[^\n]*\n/, '') : t)).join('');
+      const file = new File([csv], `每日新名單-${today}.csv`, { type: 'text/csv' });
+      await importFiles([file]);
+      registryPref('daily-feed-on', today);
+      toast(`今天從動產擔保挑了 ${pickC.length} 家、登記清冊 ${pickL.length} 家進名單，都排在今天`);
+    } catch (err) {
+      console.error('每日新名單失敗', err);
+      toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
+    } finally { feeding = false; }
+  }
+
   /** 選單的「每天打得完幾家」：看未來每個上班日各有幾家，順便照上限重排。 */
   function openDayLoad() {
     const HORIZON = 20;
@@ -2416,6 +2519,23 @@
         el('span', { className: 'muted', textContent: '我一天最多打' }), capInput,
         el('span', { className: 'muted', textContent: '家' }), replan,
       ]));
+      const quota = newQuota();
+      const quotaInput = el('input', { type: 'number', min: '0', max: String(cap), value: String(quota), className: 'cap-input' });
+      quotaInput.onchange = () => {
+        const n = Math.max(0, Math.min(cap, Math.round(Number(quotaInput.value) || 0)));
+        quotaInput.value = String(n);
+        registryPref('new-quota', String(n));
+        draw();
+      };
+      const autoBox = el('input', { type: 'checkbox', checked: dailyFeedOn() });
+      autoBox.onchange = () => { registryPref('daily-feed-auto', autoBox.checked ? '' : '0'); };
+      const feedNow = el('button', { className: 'btn', type: 'button', textContent: '現在挑' });
+      feedNow.onclick = async () => { feedNow.disabled = true; await dailyFeed(true); feedNow.disabled = false; draw(); };
+      host.append(el('div', { className: 'card-actions cap-row' }, [
+        el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
+        el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
+      ]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保挑 ${quota} 家進名單（照那兩頁目前的篩選；動產擔保挑快到期的、登記清冊挑資本額高的）`, feedNow]));
 
       const over = days.filter((d) => (counts.get(d) || 0) > cap);
       const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);
@@ -2432,14 +2552,16 @@
       host.append(el('p', { className: 'muted', textContent: `${notes.join('；')}。點任一天可以只看那天的名單。` }));
 
       const max = Math.max(cap, ...days.map((d) => counts.get(d) || 0), 1);
+      const freshCounts = freshLoad(days);
       const list = el('div', { className: 'day-load' });
       days.forEach((d, i) => {
         const n = counts.get(d) || 0;
+        const k = freshCounts.get(d) || 0;
         const row = el('button', { className: `day-row${n > cap ? ' is-over' : ''}`, type: 'button' });
         row.append(
           el('span', { className: 'day-when', textContent: `${ymdShort(d)}（${window.Holidays ? window.Holidays.weekLabel(d) : ''}）` }),
           el('span', { className: 'day-bar' }, [el('i', { style: `width:${Math.round((n / max) * 100)}%` })]),
-          el('span', { className: 'day-n', textContent: n ? `${n} 家` : '—' }),
+          el('span', { className: 'day-n', textContent: n ? `${n} 家${k ? `（新 ${k}）` : ''}` : '—' }),
         );
         row.title = n > cap ? `${dateLabel(d)} 有 ${n} 家，超過上限 ${n - cap} 家` : `${dateLabel(d)} 有 ${n} 家`;
         row.onclick = () => {
@@ -4861,7 +4983,9 @@ export default {
     'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
-    'registry-fields-rev', 'my-branch', 'my-unit', 'daily-cap']);
+    'registry-fields-rev', 'my-branch', 'my-unit', 'daily-cap',
+    // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
+    'new-quota', 'daily-feed-on', 'daily-feed-auto']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
   const registryAutoOn = () => registryPref('registry-auto') !== '0';
   const registryPref = (key, value) => {
@@ -6389,6 +6513,9 @@ export default {
      */
     window.customerViews = () => allViews();
     window.openCustomer = (id) => openDetail(id);
+    // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
+    window.planNewDates = planNewDates;
+    window.importQuiet = (file) => importFiles([file]);
     $('#btnPick').onclick = () => $('#filePick').click();
     $('#filePick').onchange = (e) => {
       const files = [...e.target.files];
@@ -6579,8 +6706,13 @@ export default {
     render();
     if (window.DriveSync.isConfigured()) {
       await showSyncTime();
-      runSync({ quiet: true });          // 背景靜默同步，失敗就等使用者自己按
+      // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
+      runSync({ quiet: true }).then(() => dailyFeed(false)).catch(() => dailyFeed(false));
+    } else {
+      dailyFeed(false).catch(console.error);
     }
+    // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）
+    setInterval(() => { dailyFeed(false).catch(console.error); }, 60000);
     /*
      * 沒人接住的失敗至少要讓使用者看到。
      *

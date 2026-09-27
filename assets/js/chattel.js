@@ -28,7 +28,10 @@
     ['other', '其他（含設備商）', null],
   ];
   const LENDER_RE = /租賃|銀行|商銀|融資|資融|金融|信託|保險|資產管理|信用合作社|信合社|農會|漁會|票券|中租|和潤|新鑫|合迪|裕融|日盛|租賃業/;
-  const CSV_HEAD = ['公司名稱', '統編', '成立', '電話', '地址', '訪談內容'];
+  // 跟主站的標準欄位一模一樣（登記清冊那頁 govToStandardRows 也是這個順序）：每日新名單把兩頁的列接在同一份檔裡，欄位才對得上
+  const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
+  // 加進名單時下次聯絡日排在到期前幾天（換約要提早談）；已過期或太近的從明天起
+  const WHEN = [['60', '到期前 60 天'], ['30', '到期前 30 天'], ['0', '從明天起']];
   const AGE = [['lt5', '未滿 5 年'], ['ge5', '5 年以上'], ['unknown', '還不知道']];
   const AGE_YEARS = 5;
 
@@ -334,22 +337,50 @@
     if (pill) pill.textContent = current.length.toLocaleString();
   }
 
-  /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容」，不會當成登記清冊再問一次條件。 */
-  function toCsv(list) {
-    const lines = [CSV_HEAD, ...list.map((r) => [r.cust.name, r.cust.id, r.founded ? String(r.founded.y) : '', '', r.addr, noteFor(r)])].map((row) => row.map(csvCell).join(','));
-    return `﻿${lines.join('\n')}\n`;
+  /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容、下次聯絡日」，不會當成登記清冊再問一次條件。 */
+  function toCsv(list, dates) {
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', noteFor(r), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
+    return `\uFEFF${lines.join('\n')}\n`;
+  }
+  const toStandardCsv = toCsv;
+  const isoOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  /** 希望的下次聯絡日：到期前 N 天；沒有迄日、已過期、太近的都回空白（＝明天起）。 */
+  function wantedDate(r, daysBefore) {
+    const e = parseYmd(r.end);
+    if (!e || !daysBefore) return '';
+    const d = new Date(e.getFullYear(), e.getMonth(), e.getDate() - daysBefore);
+    return d > new Date() ? isoOf(d) : '';
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const csvName = (n) => `動產擔保名單-${todayIso()}-${n}家.csv`;
 
+  /*
+   * 單張與整批都走這裡：已在名單的先剔掉；每一家希望排在「到期前 N 天」（畫面上選），
+   * 再由主站 planNewDates 照「一天最多幾家、其中新名單幾家」往後找位子。加進來就有下次聯絡日。
+   */
   async function addToList(list) {
     if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
     const c = criteria();
     const fresh = list.filter((r) => !mineOf(r, c.cm));
     if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
-    const file = new File([toCsv(fresh)], csvName(fresh.length), { type: 'text/csv' });
+    const before = Number(($('#chattel-when') && $('#chattel-when').value) || 60) || 0;
+    const wants = fresh.map((r) => wantedDate(r, before));
+    const dates = typeof global.planNewDates === 'function' ? global.planNewDates(wants) : wants;
+    const file = new File([toCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    const sorted = dates.filter(Boolean).sort();
+    if (sorted.length) toast(`${fresh.length} 家排在 ${sorted[0].replace(/-/g, '/')}${sorted.length > 1 && sorted[sorted.length - 1] !== sorted[0] ? `～${sorted[sorted.length - 1].replace(/-/g, '/')}` : ''}`);
     render();   // 匯進去之後卡片就變成「已在名單」
+  }
+
+  /** 每日自動挑名單用：這一頁目前篩選篩出來、名單裡沒有的，照到期日近的在前。第一次會先把清冊載進來。 */
+  async function dailyCandidates() {
+    if (!root) root = document.getElementById('paneChattel');
+    if (!root) return [];
+    await start();
+    if (!ready) return [];
+    const c = criteria();
+    return visible(c).filter((r) => !mineOf(r, c.cm));
   }
 
   function build() {
@@ -386,7 +417,10 @@
       el('div', { className: 'leads-head' }, [
         el('div', { className: 'leads-count', id: 'chattel-count', textContent: '—' }),
         el('div', { className: 'leads-row' }, [
-          el('button', { className: 'btn btn-primary', id: 'chattel-add', type: 'button', title: '把目前篩出來、還不在名單裡的公司送進匯入流程；動保的金主、金額、到期日會寫在訪談內容', textContent: '加入客戶名單' }),
+          el('label', { className: 'leads-from', title: '加進來的公司下次聯絡日排在到期前幾天，照「每天打得完幾家」的上限與新名單額度往後找位子' }, [
+            el('span', { className: 'muted', textContent: '排進日程：' }),
+            el('select', { id: 'chattel-when' }, WHEN.map(([v, label]) => el('option', { value: v, textContent: label })))]),
+          el('button', { className: 'btn btn-primary', id: 'chattel-add', type: 'button', title: '把目前篩出來、還不在名單裡的公司送進匯入流程，每家排一個下次聯絡日；動保的金主、金額、到期日會寫在訪談內容', textContent: '加入客戶名單' }),
           el('button', { className: 'btn', id: 'chattel-copy', type: 'button', textContent: '複製統編' }),
           el('button', { className: 'btn', id: 'chattel-export', type: 'button', textContent: '匯出 CSV' }),
         ]),
@@ -474,5 +508,5 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, dailyCandidates, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);
