@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260927-180';
+  const APP_VERSION = '20260927-181';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -395,9 +395,12 @@
     const fresh = allViews().filter((v) => isFreshLead(v) && v.nextDate === today);
     const done = fresh.filter((v) => v.dueDoneOn === today).length;
     const quota = Math.max(1, newQuota());
-    const text = fresh.length
-      ? `今天的新名單 ${fresh.length} 家${done ? `，處理了 ${done} 家` : ''}${done >= fresh.length ? '，都打完了' : ''}`
-      : '今天還沒有新名單';
+    const off = window.Holidays && !window.Holidays.isWorkday(today);
+    const text = off
+      ? `今天放假（${(window.Holidays.holidayName(today)) || '週末'}），再補的會排在下一個上班日 ${dateLabel(window.Holidays.nextWorkday(today).iso)}`
+      : fresh.length
+        ? `今天的新名單 ${fresh.length} 家${done ? `，處理了 ${done} 家` : ''}${done >= fresh.length ? '，都打完了' : ''}`
+        : '今天還沒有新名單';
     const more = el('button', { className: 'btn btn-tiny btn-primary', id: 'feedMore', type: 'button', textContent: `再補 ${quota} 家`,
       title: '照優先順序從登記清冊、動產擔保再挑一批進名單，排在今天' });
     more.onclick = async () => { more.disabled = true; more.textContent = '挑選中…'; try { await dailyFeed({ more: true }); } finally { more.disabled = false; more.textContent = `再補 ${quota} 家`; render(); } };
@@ -2498,6 +2501,8 @@
     if (!window.Chattel || !window.Leads) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
     feeding = true;
     try {
+      // 假日按「再補」：排到下一個上班日，不要把名單排在放假那天（使用者：「避開台灣的假日及連續假日」）
+      const day = (window.Holidays && !window.Holidays.isWorkday(today)) ? window.Holidays.nextWorkday(today).iso : today;
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
@@ -2513,8 +2518,8 @@
       const pickL = le.slice(0, nl);
       if (!pickC.length && !pickL.length) { registryPref('daily-feed-on', today); if (force || more) toast('兩份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
       const parts = [];
-      if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => today)));
-      if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => today)));
+      if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => day)));
+      if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => day)));
       // 兩份都是同一個標準表頭，接起來只留第一份的表頭
       const csv = parts.map((t, i) => (i ? t.replace(/^\uFEFF?[^\n]*\n/, '') : t)).join('');
       // 來源名稱一天一個；再補的另外取名——同名重匯是「更新」，會把早上那一批整批換掉
@@ -2523,7 +2528,7 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
-      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家進名單，都排在今天`);
+      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
