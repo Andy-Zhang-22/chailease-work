@@ -207,18 +207,21 @@
       r.taxId ? el('span', { textContent: `#${r.taxId}` }) : '',
     ]);
     const others = r.others.filter((x) => !x.invest);
-    // 同址的排前面，再照資本額；超過 5 家先收起來，不然一張卡片一整頁
+    // 同址的排前面，再照資本額。整個名下公司清單預設收起來，點標題才展開
     const investSorted = r.invest.slice().sort((a, b) => (b.sameSpot ? 1 : 0) - (a.sameSpot ? 1 : 0) || thousandsToYuan(b.capital) - thousandsToYuan(a.capital));
-    const SHOW = 5;
     const open = expanded.has(r.key);
-    const shown = open ? investSorted : investSorted.slice(0, SHOW);
-    const moreBtn = investSorted.length > SHOW ? el('button', { className: 'btn btn-tiny btn-ghost owner-more', type: 'button', textContent: open ? '收起' : `還有 ${investSorted.length - SHOW} 家投資公司…`, onclick: () => { if (open) expanded.delete(r.key); else expanded.add(r.key); render(); } }) : '';
-    const ownerBox = r.chairman && r.others.length ? el('div', { className: 'owner-box' }, [
-      el('div', { className: 'owner-head', textContent: `董事長 ${r.chairman} 名下其他公司（${r.others.length} 家${r.invest.length ? `，投資公司 ${r.invest.length} 家${r.sameSpot.length ? `、同址 ${r.sameSpot.length} 家` : ''}` : ''}）` }),
-      ...shown.map((x) => investRow(x, r, c)),
-      moreBtn,
-      others.length ? el('p', { className: 'leads-items', textContent: `其他：${others.slice(0, 8).map((x) => x.name).join('、')}${others.length > 8 ? `…共 ${others.length} 家` : ''}` }) : '',
-      el('p', { className: 'muted owner-note', textContent: '負責人查詢只能用姓名，同名同姓的會混進來；「與上市公司同址」的最可靠。' }),
+    const headText = `董事長 ${r.chairman} 名下其他公司（${r.others.length} 家${r.invest.length ? `，投資公司 ${r.invest.length} 家${r.sameSpot.length ? `、同址 ${r.sameSpot.length} 家` : ''}` : ''}）`;
+    const ownerBox = r.chairman && r.others.length ? el('div', { className: `owner-box${open ? ' is-open' : ''}` }, [
+      el('button', { className: 'owner-head owner-toggle', type: 'button', 'aria-expanded': open ? 'true' : 'false', onclick: () => { if (open) expanded.delete(r.key); else expanded.add(r.key); render(); } }, [
+        el('span', { className: 'owner-caret', textContent: open ? '▾' : '▸' }),
+        el('span', { textContent: headText }),
+        el('span', { className: 'muted owner-hint', textContent: open ? '收起' : '展開' }),
+      ]),
+      ...(open ? [
+        ...investSorted.map((x) => investRow(x, r, c)),
+        others.length ? el('p', { className: 'leads-items', textContent: `其他：${others.slice(0, 8).map((x) => x.name).join('、')}${others.length > 8 ? `…共 ${others.length} 家` : ''}` }) : '',
+        el('p', { className: 'muted owner-note', textContent: '負責人查詢只能用姓名，同名同姓的會混進來；「與上市公司同址」的最可靠。' }),
+      ] : []),
     ]) : (r.chairman ? el('p', { className: 'muted owner-note', textContent: `董事長 ${r.chairman} 名下沒查到其他公司${index && index.chairmenLeft ? '（或還沒查到，Actions 還在補）' : ''}` }) : '');
     const fresh = r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm));
     const actions = el('div', { className: 'card-actions' }, [

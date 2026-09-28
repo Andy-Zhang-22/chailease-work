@@ -915,6 +915,11 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .listed-card.is-same { border-left-color: var(--ok); }
 .owner-box { margin-top: 10px; padding: 6px 10px; background: var(--surface-2); border-radius: 10px; display: grid; gap: 0; }
 .owner-head { font-size: 13px; font-weight: 600; padding: 4px 0 6px; }
+.owner-toggle { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: inherit; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; padding: 6px 0; }
+.owner-toggle:hover { color: var(--primary); }
+.owner-caret { flex: none; width: 1em; }
+.owner-hint { margin-left: auto; font-weight: 400; font-size: 12px; }
+.owner-box.is-open .owner-toggle { padding-bottom: 8px; }
 /* 一列一家：左邊名字＋標籤＋一行小字，右邊一顆小按鈕；列與列之間只用細線，不用一個個框 */
 .owner-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 8px; border-top: 1px solid var(--border); border-left: 3px solid transparent; }
 .owner-row.is-same { border-left-color: var(--ok); }
