@@ -905,5 +905,17 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .chattel-legend .swatch.is-due { background: var(--warn); }
 .chattel-legend .swatch.is-mine { background: var(--ok); }
 .chattel-legend .swatch.is-up { background: var(--primary); }
+
+/* ---------- 上市櫃公司：董事長名下的投資公司 ---------- */
+.listed-card.is-same { border-left-color: var(--ok); }
+.owner-box { margin-top: 10px; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; display: grid; gap: 6px; }
+.owner-head { font-size: 13px; font-weight: 600; }
+.owner-row { padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 4px; }
+.owner-row.is-same { border-color: var(--ok); }
+.owner-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.owner-name { font-weight: 600; }
+.owner-name a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border); }
+.owner-meta { font-size: 12.5px; color: var(--muted); }
+.owner-note { font-size: 12px; margin: 2px 0 0; }
 /* 手機：五個分頁要塞得下，間距縮小，「新公司」不會被擠到看不見 */
 @media (max-width: 520px) { .tab { padding: 8px 8px; font-size: 14px; } .tabs { padding-left: 8px; gap: 0; } .pill { margin-right: 0; padding: 0 5px; } }

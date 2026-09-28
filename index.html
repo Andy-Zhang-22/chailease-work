@@ -7,10 +7,10 @@
 <meta name="description" content="把電話推廣名單 PDF 轉成可搜尋、可撥號、可追蹤的工作台。資料只存在本機瀏覽器。">
 <meta name="theme-color" content="#0f172a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📞</text></svg>">
-<link rel="stylesheet" href="assets/css/app.css?v=20260928-182">
+<link rel="stylesheet" href="assets/css/app.css?v=20260928-183">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20260928-182"></script>
+<script src="assets/js/lock.js?v=20260928-183"></script>
 </head>
 <body data-theme="auto">
 
@@ -61,6 +61,7 @@
   <button class="tab is-active" data-tab="all">重點推廣名單 <span class="pill" id="countAll">0</span></button>
   <button class="tab" data-tab="leads">每月公司設立／變更登記清冊 <span class="pill" id="countLeads"></span></button>
   <button class="tab" data-tab="chattel">動產擔保名單 <span class="pill" id="countChattel"></span></button>
+  <button class="tab" data-tab="listed">上市櫃公司 <span class="pill" id="countListed"></span></button>
   <button class="tab" data-tab="stats">統計</button>
   <button class="tab" data-tab="rules">規則</button>
   <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
@@ -158,6 +159,8 @@
     <div id="paneLeads" class="leads" hidden></div>
     <!-- 動產擔保名單：新北市動產擔保登記清冊，同業客戶的契約什麼時候到期，畫面由 chattel.js 長出來 -->
     <div id="paneChattel" class="leads chattel" hidden></div>
+    <!-- 上市櫃公司：三個市場的基本資料與董事長名下的投資公司，畫面由 listed.js 長出來 -->
+    <div id="paneListed" class="leads listed" hidden></div>
   </section>
 </main>
 
@@ -274,19 +277,20 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20260928-182"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20260928-182"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20260928-183"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20260928-183"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20260928-182"></script>
-<script src="assets/js/normalize.js?v=20260928-182"></script>
-<script src="assets/js/holidays.js?v=20260928-182"></script>
-<script src="assets/js/registry.js?v=20260928-182"></script>
-<script src="assets/js/ocr.js?v=20260928-182"></script>
-<script src="assets/js/rules.js?v=20260928-182"></script>
-<script src="assets/js/store.js?v=20260928-182"></script>
-<script src="assets/js/sync.js?v=20260928-182"></script>
-<script src="assets/js/leads.js?v=20260928-182"></script>
-<script src="assets/js/chattel.js?v=20260928-182"></script>
-<script src="assets/js/app.js?v=20260928-182"></script>
+<script src="assets/js/pdf-table.js?v=20260928-183"></script>
+<script src="assets/js/normalize.js?v=20260928-183"></script>
+<script src="assets/js/holidays.js?v=20260928-183"></script>
+<script src="assets/js/registry.js?v=20260928-183"></script>
+<script src="assets/js/ocr.js?v=20260928-183"></script>
+<script src="assets/js/rules.js?v=20260928-183"></script>
+<script src="assets/js/store.js?v=20260928-183"></script>
+<script src="assets/js/sync.js?v=20260928-183"></script>
+<script src="assets/js/leads.js?v=20260928-183"></script>
+<script src="assets/js/chattel.js?v=20260928-183"></script>
+<script src="assets/js/listed.js?v=20260928-183"></script>
+<script src="assets/js/app.js?v=20260928-183"></script>
 </body>
 </html>
