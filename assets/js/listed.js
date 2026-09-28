@@ -277,9 +277,8 @@
       ] : []),
     ]) : (r.chairman ? el('p', { className: 'muted owner-note', textContent: `董事長 ${r.chairman} 名下沒查到其他公司${index && index.chairmenLeft ? '（或還沒查到，Actions 還在補）' : ''}` }) : '');
     const dynBox = dynBoxOf(r);
-    const fresh = r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm));
+    // 使用者：整張卡的「把 N 家投資公司加入客戶名單」用不到；要加就在展開的清單裡一家一家加，或用上面的整批按鈕
     const actions = el('div', { className: 'card-actions' }, [
-      fresh.length ? el('button', { className: 'btn btn-tiny btn-primary listed-add-all', type: 'button', textContent: `把 ${fresh.length} 家投資公司加入客戶名單`, onclick: () => addToList(fresh.map((x) => ({ x, r }))) }) : '',
       isHidden
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny listed-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
