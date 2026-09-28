@@ -13,7 +13,10 @@
  *      更新看到今天跑過就不重跑），用 sync.js 的 mergeDumps 跟雲端最新版合併後寫回。寫回前先把
  *      雲端硬碟目前的版本釘住（keepForever），出事可以從版本紀錄退回。
  *
- * 需要：環境變數 GDRIVE_SERVICE_ACCOUNT（服務帳號的 JSON 金鑰，放 repo Secrets）。
+ * 需要下面兩種之一：
+ *   GDRIVE_ACCESS_TOKEN     由 workflow 的 google-github-actions/auth 用 Workload Identity 聯盟換來的存取權杖
+ *                           （使用者的 Google Cloud 組織政策禁止建立服務帳號金鑰，走這條不用金鑰）
+ *   GDRIVE_SERVICE_ACCOUNT  服務帳號的 JSON 金鑰（放 repo Secrets）；組織允許建金鑰的話比較簡單
  * 用法：node tools/registry-drive.mjs [--mode report|write] [--limit N] [--mirror]
  */
 import { createRequire } from 'node:module';
@@ -159,22 +162,28 @@ const upload = (token, id, dump) => drive(token, `https://www.googleapis.com/upl
 
 /* ---------------- 主流程 ---------------- */
 
-const SETUP = `還沒設定 Google 服務帳號（repo Secrets 裡沒有 GDRIVE_SERVICE_ACCOUNT），這次沒有查。設定步驟見 README「重點推廣名單：商工登記更新改在後台跑」。`;
+const SETUP = `還沒設定 Google 的存取（Actions 變數 GCP_WIF_PROVIDER＋GCP_SERVICE_ACCOUNT，或 Secrets 的 GDRIVE_SERVICE_ACCOUNT 都沒有），這次沒有查。設定步驟見 README「重點推廣名單：商工登記更新改在後台跑」。`;
 
 async function main() {
   const raw = process.env.GDRIVE_SERVICE_ACCOUNT || '';
+  const preToken = (process.env.GDRIVE_ACCESS_TOKEN || '').trim();
   const summary = [];
   const out = (line) => { console.log(line); summary.push(line); };
-  if (!raw.trim()) { out(SETUP); await writeSummary(summary); return; }
-  let sa;
-  try { sa = JSON.parse(raw); } catch (e) { throw new Error('GDRIVE_SERVICE_ACCOUNT 不是合法的 JSON（要貼服務帳號金鑰檔的整個內容）'); }
-  if (!sa.client_email || !sa.private_key) throw new Error('GDRIVE_SERVICE_ACCOUNT 缺 client_email 或 private_key');
+  if (!raw.trim() && !preToken) { out(SETUP); await writeSummary(summary); return; }
+  let token = preToken;
+  let saEmail = process.env.GCP_SERVICE_ACCOUNT || '';
+  if (!token) {
+    let sa;
+    try { sa = JSON.parse(raw); } catch (e) { throw new Error('GDRIVE_SERVICE_ACCOUNT 不是合法的 JSON（要貼服務帳號金鑰檔的整個內容）'); }
+    if (!sa.client_email || !sa.private_key) throw new Error('GDRIVE_SERVICE_ACCOUNT 缺 client_email 或 private_key');
+    token = await accessToken(sa);
+    saEmail = sa.client_email;
+  }
 
   const w = loadModules(['normalize', 'registry', 'sync'], { fetch: fetchLikeBrowser });
   const { Registry, DriveSync } = w;
-  const token = await accessToken(sa);
   const file = await findFile(token);
-  if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${sa.client_email}（要給「編輯者」權限）`);
+  if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${saEmail || '（見設定）'}（要給「編輯者」權限）`);
   const dump = await download(token, file.id);
   const records = Array.isArray(dump.records) ? dump.records : [];
   const states = new Map((dump.states || []).map((s) => [s.recordId, s]));

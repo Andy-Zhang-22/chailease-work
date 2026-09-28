@@ -2627,18 +2627,30 @@ force＝補滿今天的額度（對話框的「現在挑」），more＝再補�
 - `daily-registry-drive.yml` 每天台灣 05:00 跑；排程模式看 Actions 變數 `REGISTRY_DRIVE_MODE`
   （沒設＝report），手動執行可直接選模式、限制筆數。Secrets 沒設就印設定步驟、直接結束。
 
-**設定步驟（一次）**：
+**設定步驟（一次）**。使用者的 Google Cloud 組織政策禁止建立服務帳號金鑰
+（`iam.disableServiceAccountKeyCreation`，新組織預設就開），所以走 **Workload Identity 聯盟**：GitHub Actions
+用自己的 OIDC token 去跟 Google 換一個短效存取權杖、以服務帳號的身分讀寫雲端硬碟，全程沒有金鑰
+（workflow 裡的 `google-github-actions/auth@v2`，`permissions: id-token: write`）。
 
-1. 到 https://console.cloud.google.com/ ，選網站雲端同步用的那個專案（或新建一個），
-   「API 和服務 → 程式庫」啟用 **Google Drive API**。
-2. 「IAM 與管理 → 服務帳號 → 建立服務帳號」，名稱隨意（例如 chailease-registry），不用給任何角色。
-3. 進那個服務帳號 →「金鑰 → 新增金鑰 → JSON」，會下載一個 .json 檔。
-4. GitHub repo →「Settings → Secrets and variables → Actions → New repository secret」，
-   名稱 `GDRIVE_SERVICE_ACCOUNT`，內容貼那個 .json 檔的**整個內容**。
-5. 雲端硬碟裡找到「電話推廣名單-同步資料.json」→ 分享 → 貼服務帳號的 email
-   （.json 裡的 `client_email`，長得像 xxx@xxx.iam.gserviceaccount.com）→ 權限**編輯者**。
-6. repo 的 Actions 頁手動跑一次「每日商工登記更新（雲端硬碟名單）」，看執行紀錄的差異清單。
-   幾天沒問題後，「Settings → Secrets and variables → Actions → Variables」新增 `REGISTRY_DRIVE_MODE`＝`write`。
+1. 到 https://console.cloud.google.com/ ，選網站雲端同步用的那個專案，「API 和服務 → 程式庫」啟用 **Google Drive API**。
+2. 「IAM 與管理 → 服務帳號 → 建立服務帳號」，名稱隨意（例如 chailease-work），不用給任何角色；記下它的 email
+   （xxx@專案.iam.gserviceaccount.com）。**不用建金鑰**。
+3. 「IAM 與管理 → Workload Identity 聯盟 → 建立集區」：名稱 `github`（其他預設）。
+4. 「新增提供者」：類型 **OpenID Connect (OIDC)**，名稱 `github`，發行者 URL
+   `https://token.actions.githubusercontent.com`，目標對象用預設。
+   屬性對應：`google.subject` ＝ `assertion.sub`，再加一列 `attribute.repository` ＝ `assertion.repository`。
+   屬性條件：`assertion.repository == "Andy-Zhang-22/chailease-work"`（只讓這個 repo 換得到權杖）。
+5. 回到集區頁面按「授予存取權」→「使用服務帳戶模擬功能」→ 選第 2 步的服務帳號 →
+   主體：屬性名稱 `repository`、值 `Andy-Zhang-22/chailease-work` → 儲存（跳出的下載設定檔視窗直接關掉）。
+6. 在提供者頁面複製它的完整資源名稱（`projects/專案編號/locations/global/workloadIdentityPools/github/providers/github`）。
+7. GitHub repo →「Settings → Secrets and variables → Actions → Variables → New repository variable」，
+   新增 `GCP_WIF_PROVIDER`＝第 6 步那串、`GCP_SERVICE_ACCOUNT`＝第 2 步的 email。
+8. 雲端硬碟裡找到「電話推廣名單-同步資料.json」→ 分享 → 貼服務帳號的 email → 權限**編輯者**。
+9. repo 的 Actions 頁手動跑一次「每日商工登記更新（雲端硬碟名單）」，看執行紀錄的差異清單。
+   幾天沒問題後，Variables 再新增 `REGISTRY_DRIVE_MODE`＝`write`。
+
+（組織允許建金鑰的話也可以走 Secrets `GDRIVE_SERVICE_ACCOUNT`＝金鑰 JSON 整個內容，其他步驟相同、跳過 3～7；
+腳本兩種都認，有存取權杖就用權杖。）
 
 ## 整理未排定的名單
 
