@@ -1,0 +1,421 @@
+/*
+ * 「上市櫃公司」分頁：上市／上櫃／興櫃公司基本資料，重點是董事長名下的投資公司。
+ *
+ * 使用者：「我可以透過這些上市櫃公司老闆另外持有的投資公司去給他額度」。上市櫃公司本身
+ * 多半是大企部的範圍，這一頁真正要打的是老闆名下的投資／控股公司：卡片下面列出來，
+ * 每一家都能「加入客戶名單」（加進去的是那家投資公司，備註寫清楚它是哪個上市櫃老闆的）。
+ *
+ * 資料由 GitHub Actions 每月抓好放在 leads/listed/（tools/fetch-listed.mjs）；這裡只讀、篩、畫。
+ * 跟客戶名單的交集跟另外兩頁一樣：瀏覽器裡拿統編比對，加入走主站現成匯入流程並排好日期。
+ * 「同名同姓」是這一頁最大的陷阱：負責人查詢只能用姓名，常見名字會撈到別人的公司。
+ * 「與上市公司同址」是最可靠的線索，畫面上特別標出來，篩選也有這一顆。
+ */
+(function (global) {
+  'use strict';
+
+  const PAGE = 60;
+  const DATA_BASE = 'leads/listed/';
+  const HIDDEN_KEY = 'listed-hidden-v1';
+  const MARKETS = ['上市', '上櫃', '興櫃'];
+  const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
+
+  let root = null;
+  const $ = (sel) => root.querySelector(sel);
+  const el = (tag, props, children) => {
+    const n = document.createElement(tag);
+    Object.entries(props || {}).forEach(([k, v]) => { if (k.includes('-')) n.setAttribute(k, v); else n[k] = v; });
+    (children || []).forEach((c) => { if (c !== '' && c != null) n.append(c); });
+    return n;
+  };
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+  const csvCell = (v) => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const parseCsv = (text) => (global.Leads && global.Leads.parseCsv ? global.Leads.parseCsv(text) : [[]]);
+
+  /* ---------------- 純邏輯 ---------------- */
+
+  /** 2012/10/01 或 20121001 → {y,m,d} */
+  function parseYmd(s) {
+    const m = String(s || '').match(/^(\d{4})[/-]?(\d{2})[/-]?(\d{2})/);
+    if (!m) return null;
+    const y = +m[1]; const mo = +m[2]; const d = +m[3];
+    if (y <= 1911 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return { y, m: mo, d };
+  }
+  function yearsSince(dt, today) {
+    const t = today || new Date();
+    let n = t.getFullYear() - dt.y;
+    if (t.getMonth() + 1 < dt.m || (t.getMonth() + 1 === dt.m && t.getDate() < dt.d)) n -= 1;
+    return Math.max(0, n);
+  }
+  /** 實收資本額（元）→ 「77.2 億」「4,644 萬」 */
+  function money(n) {
+    const v = Number(n) || 0;
+    if (v >= 1e8) return `${(v / 1e8).toLocaleString('zh-TW', { maximumFractionDigits: 1 })} 億`;
+    return `${Math.round(v / 1e4).toLocaleString()} 萬`;
+  }
+  /** 商工登記的資本額是仟元（「50,000」）→ 元 */
+  const thousandsToYuan = (s) => (Number(String(s || '').replace(/\D/g, '')) || 0) * 1000;
+
+  function branchOf(address) {
+    if (!global.Rules || !global.Normalize) return { key: '', label: '', kind: '', city: '' };
+    const { city, district } = global.Normalize.parseAddress(address);
+    const b = global.Rules.branchOf(city, district);
+    const key = b.kind === 'branch' ? `${b.branches[0]}分公司`
+      : b.kind === 'common' ? `${b.branches.join('／')}共同區`
+      : b.kind === 'shared' ? '全公司共同區域'
+      : (city ? '不在劃分表上' : '無中文地址');
+    return { key, label: b.label || key, kind: b.kind, city };
+  }
+
+  function toRecord(o, owners, today) {
+    const r = {
+      market: o['市場別'] || '', code: o['公司代號'] || '', name: o['公司名稱'] || '', abbr: o['公司簡稱'] || '',
+      taxId: (o['統一編號'] || '').replace(/\D/g, ''), industry: o['產業別'] || '', address: o['住址'] || '',
+      chairman: o['董事長'] || '', gm: o['總經理'] || '', phone: o['總機電話'] || '',
+      founded: parseYmd(o['成立日期']), listedOn: parseYmd(o['上市櫃日期']),
+      capital: Number(String(o['實收資本額'] || '').replace(/\D/g, '')) || 0, web: o['網址'] || '',
+    };
+    r.years = r.founded ? yearsSince(r.founded, today) : null;
+    r.branch = branchOf(r.address);
+    r.others = (owners && owners[r.chairman]) || [];
+    r.invest = r.others.filter((x) => x.invest);
+    r.sameSpot = r.invest.filter((x) => x.sameSpot);
+    r.key = r.taxId || r.code;
+    r.blob = [r.code, r.name, r.abbr, r.taxId, r.chairman, r.gm, r.industry, r.address, ...r.others.map((x) => `${x.name} ${x.taxId}`)].join(' ').toLowerCase();
+    return r;
+  }
+
+  /* ---------------- 跟名單比對 ---------------- */
+
+  function customerMap() {
+    const byTax = new Map(); const byName = new Map();
+    const views = typeof global.customerViews === 'function' ? global.customerViews() : [];
+    views.forEach((v) => {
+      const tax = String(v.taxId || '').replace(/\D/g, '');
+      if (tax && !byTax.has(tax)) byTax.set(tax, v);
+      if (v.company && !byName.has(v.company)) byName.set(v.company, v);
+    });
+    return { byTax, byName };
+  }
+  const mineOfTax = (taxId, name, cm) => (taxId && cm.byTax.get(taxId)) || (name && cm.byName.get(name)) || null;
+  const declined = (v) => !!v && (v.blocked || v.outcome === 'blocked');
+  const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
+
+  /* ---------------- 狀態 ---------------- */
+
+  let index = null;
+  let rows = [];
+  let owners = {};
+  let limit = PAGE;
+  let started = false;
+  let ready = false;
+  let showHidden = false;
+  const f = { markets: new Set(), inds: new Set(), branches: new Set(), invest: new Set(), mine: new Set(), q: '' };
+  let hidden = new Set();
+  try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
+  const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+
+  function criteria() {
+    return {
+      min: (Number($('#listed-capMin').value) || 0) * 1e8,
+      max: (Number($('#listed-capMax').value) || 0) * 1e8 || Infinity,
+      terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean),
+      cm: customerMap(),
+    };
+  }
+  /** 名下投資公司的狀態：有／同址／已在名單／沒有 */
+  function investKeys(r, cm) {
+    const keys = new Set();
+    if (r.invest.length) keys.add('has'); else keys.add('none');
+    if (r.sameSpot.length) keys.add('same');
+    if (r.invest.some((x) => mineOfTax(x.taxId, x.name, cm))) keys.add('in');
+    return keys;
+  }
+  const mineKey = (r, cm) => { const m = mineOfTax(r.taxId, r.name, cm); return m ? (declined(m) ? 'declined' : 'in') : 'out'; };
+  function passes(r, c, except) {
+    return (except === 'markets' || !f.markets.size || f.markets.has(r.market))
+      && (except === 'inds' || !f.inds.size || f.inds.has(r.industry))
+      && (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
+      && (except === 'invest' || !f.invest.size || [...f.invest].some((k) => investKeys(r, c.cm).has(k)))
+      && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && r.capital >= c.min && r.capital <= c.max
+      && (showHidden || !hidden.has(r.key))
+      && c.terms.every((t) => r.blob.includes(t));
+  }
+  function visible(c) {
+    const list = rows.filter((r) => passes(r, c, null));
+    const sort = $('#listed-sort').value;
+    list.sort((a, b) => (sort === 'invest' ? (b.sameSpot.length - a.sameSpot.length) || (b.invest.length - a.invest.length) || b.capital - a.capital
+      : sort === 'code' ? a.code.localeCompare(b.code)
+        : sort === 'company' ? a.name.localeCompare(b.name, 'zh-Hant')
+          : b.capital - a.capital));
+    return list;
+  }
+
+  /* ---------------- 畫面 ---------------- */
+
+  const findbiz = (taxId, text, title) => el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(taxId)}`, target: '_blank', rel: 'noopener', textContent: text, title: title || '商工登記公示資料' });
+
+  function investRow(x, r, c) {
+    const mine = mineOfTax(x.taxId, x.name, c.cm);
+    const name = el('span', { className: 'owner-name' }, [x.taxId ? findbiz(x.taxId, x.name) : document.createTextNode(x.name)]);
+    const badges = [
+      x.sameSpot ? el('span', { className: 'badge badge-mine', textContent: '與上市公司同址', title: '地址跟上市櫃公司一樣，幾乎可以確定是同一位老闆' }) : '',
+      x.listed ? el('span', { className: 'badge', textContent: '也是上市櫃公司' }) : '',
+      mine ? (declined(mine)
+        ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' })
+        : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
+    ];
+    const meta = el('span', { className: 'owner-meta', textContent: [
+      x.capital ? `資本 ${money(thousandsToYuan(x.capital))}` : '',
+      x.founded ? `成立 ${String(x.founded).slice(0, 4)}` : '',
+      x.address || '',
+    ].filter(Boolean).join('　') });
+    const btn = mine
+      ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })
+      : el('button', { className: 'btn btn-tiny btn-primary listed-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([{ x, r }]) });
+    return el('div', { className: `owner-row${x.sameSpot ? ' is-same' : ''}` }, [el('div', { className: 'owner-top' }, [name, ...badges, btn]), meta]);
+  }
+
+  function card(r, c) {
+    const mine = mineOfTax(r.taxId, r.name, c.cm);
+    const isHidden = hidden.has(r.key);
+    const top = el('div', { className: 'card-top' }, [
+      el('span', { className: 'card-name' }, [r.taxId ? findbiz(r.taxId, r.name) : document.createTextNode(r.name)]),
+      el('span', { className: 'badge badge-new', textContent: `${r.market} ${r.code}` }),
+      r.industry ? el('span', { className: 'badge badge-ind', textContent: r.industry }) : '',
+      r.invest.length ? el('span', { className: 'badge badge-peer', textContent: `名下投資公司 ${r.invest.length} 家${r.sameSpot.length ? `（同址 ${r.sameSpot.length}）` : ''}` }) : '',
+      r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
+      mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
+    ]);
+    const meta = el('div', { className: 'card-meta' }, [
+      el('span', { textContent: `💰 實收資本 ${money(r.capital)}` }),
+      r.chairman ? el('span', { textContent: `👤 董事長 ${r.chairman}${r.gm && r.gm !== r.chairman ? `・總經理 ${r.gm}` : ''}` }) : '',
+      r.phone ? el('span', { textContent: `📞 ${r.phone}` }) : '',
+      r.address ? el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}`, target: '_blank', rel: 'noopener', textContent: r.address })]) : '',
+      r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}（${r.years} 年）` }) : '',
+      r.listedOn ? el('span', { textContent: `📈 ${r.market} ${r.listedOn.y}` }) : '',
+      r.taxId ? el('span', { textContent: `#${r.taxId}` }) : '',
+    ]);
+    const others = r.others.filter((x) => !x.invest);
+    const ownerBox = r.chairman && r.others.length ? el('div', { className: 'owner-box' }, [
+      el('div', { className: 'owner-head', textContent: `董事長 ${r.chairman} 名下其他公司（${r.others.length} 家${r.invest.length ? `，投資公司 ${r.invest.length} 家` : ''}）` }),
+      ...r.invest.map((x) => investRow(x, r, c)),
+      others.length ? el('p', { className: 'leads-items', textContent: `其他：${others.slice(0, 8).map((x) => x.name).join('、')}${others.length > 8 ? `…共 ${others.length} 家` : ''}` }) : '',
+      el('p', { className: 'muted owner-note', textContent: '負責人查詢只能用姓名，同名同姓的會混進來；「與上市公司同址」的最可靠。' }),
+    ]) : (r.chairman ? el('p', { className: 'muted owner-note', textContent: `董事長 ${r.chairman} 名下沒查到其他公司${index && index.chairmenLeft ? '（或還沒查到，Actions 還在補）' : ''}` }) : '');
+    const fresh = r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm));
+    const actions = el('div', { className: 'card-actions' }, [
+      fresh.length ? el('button', { className: 'btn btn-tiny btn-primary listed-add-all', type: 'button', textContent: `把 ${fresh.length} 家投資公司加入客戶名單`, onclick: () => addToList(fresh.map((x) => ({ x, r }))) }) : '',
+      isHidden
+        ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
+        : el('button', { className: 'btn btn-tiny listed-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
+    ]);
+    return el('article', { className: `card leads-card listed-card${r.sameSpot.length ? ' is-same' : r.invest.length ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, ownerBox, actions]);
+  }
+
+  function chips(host, options, set) {
+    host.textContent = '';
+    options.forEach(([value, label, count]) => {
+      const b = el('button', { className: 'chip', type: 'button' }, [document.createTextNode(label), count != null ? el('small', { textContent: String(count) }) : '']);
+      b.setAttribute('aria-pressed', String(set.has(value)));
+      b.onclick = () => { if (set.has(value)) set.delete(value); else set.add(value); limit = PAGE; render(); };
+      host.append(b);
+    });
+  }
+  function drawChips(c) {
+    const facet = (except, pred) => { let n = 0; rows.forEach((r) => { if (pred(r) && passes(r, c, except)) n += 1; }); return n; };
+    chips($('#listed-fMarket'), MARKETS.map((m) => [m, m, facet('markets', (r) => r.market === m)]), f.markets);
+    const ic = new Map(); rows.forEach((r) => { if (r.industry && passes(r, c, 'inds')) ic.set(r.industry, (ic.get(r.industry) || 0) + 1); });
+    const inds = [...new Set([...ic.keys(), ...f.inds])].sort((a, b) => (ic.get(b) || 0) - (ic.get(a) || 0));
+    chips($('#listed-fInd'), inds.map((k) => [k, k, ic.get(k) || 0]), f.inds);
+    const bc = new Map(); rows.forEach((r) => { if (r.branch.key && passes(r, c, 'branches')) bc.set(r.branch.key, (bc.get(r.branch.key) || 0) + 1); });
+    const order = (k) => (/分公司$/.test(k) ? 0 : /共同區$/.test(k) ? 1 : 2);
+    const bkeys = [...new Set([...bc.keys(), ...f.branches])].sort((a, b) => order(a) - order(b) || (bc.get(b) || 0) - (bc.get(a) || 0));
+    chips($('#listed-fBranch'), bkeys.map((k) => [k, k, bc.get(k) || 0]), f.branches);
+    chips($('#listed-fInvest'), [['has', '有投資公司'], ['same', '與上市公司同址'], ['in', '投資公司已在我的名單'], ['none', '沒查到投資公司']]
+      .map(([k, label]) => [k, label, facet('invest', (r) => investKeys(r, c.cm).has(k))]), f.invest);
+    chips($('#listed-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+  }
+
+  let current = [];
+  function render() {
+    if (!ready) return;
+    const c = criteria();
+    drawChips(c);
+    current = visible(c);
+    const host = $('#listed-cards');
+    host.textContent = '';
+    current.slice(0, limit).forEach((r) => host.append(card(r, c)));
+    const invest = current.reduce((n, r) => n + r.invest.length, 0);
+    const fresh = current.reduce((n, r) => n + r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm)).length, 0);
+    $('#listed-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家上市櫃公司<span class="muted">　／ 名下投資公司 ${invest.toLocaleString()} 家${invest - fresh ? `，其中 ${invest - fresh} 家已在名單` : ''}</span>`;
+    const hid = rows.filter((r) => hidden.has(r.key)).length;
+    const hb = $('#listed-hidden');
+    hb.hidden = !hid;
+    hb.textContent = showHidden ? `收起藏起來的 ${hid} 家` : `顯示藏起來的 ${hid} 家`;
+    $('#listed-more').hidden = current.length <= limit;
+    $('#listed-empty').hidden = !!current.length;
+    $('#listed-empty').textContent = rows.length ? '沒有符合條件的公司，把篩選放寬試試。' : '';
+    $('#listed-add').disabled = !fresh;
+    $('#listed-add').textContent = `把投資公司加入客戶名單${fresh ? `（${fresh} 家）` : ''}`;
+    $('#listed-export').disabled = !current.length;
+    const pill = document.getElementById('countListed');
+    if (pill) pill.textContent = current.length.toLocaleString();
+  }
+
+  /* ---------------- 加入客戶名單（加的是投資公司） ---------------- */
+
+  const dash = (s) => String(s || '').replace(/\//g, '-');
+  function noteFor(x, r) {
+    return [`上市櫃老闆的投資公司：${r.chairman} 是${r.market} ${r.name}（${r.code}）董事長`,
+      x.sameSpot ? '與上市公司同址' : '同名同姓查到的，先確認是不是同一位',
+      r.phone ? `上市公司總機 ${r.phone}` : '', r.address ? `上市公司地址 ${r.address}` : '',
+      x.founded ? `投資公司設立 ${dash(x.founded).slice(0, 10)}` : ''].filter(Boolean).join('，');
+  }
+  function toStandardCsv(items, dates) {
+    const lines = [CSV_HEAD, ...items.map(({ x, r }, i) => [x.name, x.taxId, '', x.founded ? String(x.founded).slice(0, 4) : '', x.capital || '', '', x.owner || r.chairman, '', '投資控股', (dates && dates[i]) || '', '', noteFor(x, r), x.address || '', '', ''])].map((row) => row.map(csvCell).join(','));
+    return `﻿${lines.join('\n')}\n`;
+  }
+  const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const fromDate = () => { const v = $('#listed-from') && $('#listed-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
+  async function addToList(items) {
+    if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
+    const cm = customerMap();
+    const seen = new Set();
+    const fresh = items.filter(({ x }) => x.taxId && !mineOfTax(x.taxId, x.name, cm) && !seen.has(x.taxId) && seen.add(x.taxId));
+    if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
+    const from = fromDate();
+    const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
+    const file = new File([toStandardCsv(fresh, dates)], `上市櫃投資公司-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
+    try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    const sorted = dates.filter(Boolean).sort();
+    if (sorted.length) toast(`${fresh.length} 家投資公司排在 ${sorted[0].replace(/-/g, '/')}${sorted.length > 1 && sorted[sorted.length - 1] !== sorted[0] ? `～${sorted[sorted.length - 1].replace(/-/g, '/')}` : ''}`);
+    render();
+  }
+
+  /* ---------------- 建畫面、載資料 ---------------- */
+
+  function build() {
+    root.textContent = '';
+    const group = (label, node, forId) => el('div', { className: 'leads-group' }, [
+      forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
+    const filters = el('details', { className: 'leads-filters', id: 'listed-filters' }, [
+      el('summary', {}, [el('strong', { textContent: '篩選' })]),
+      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。要打的是老闆名下的投資公司，不是上市櫃公司本身。' }),
+      group('市場別', el('div', { className: 'chips', id: 'listed-fMarket' })),
+      group('名下投資公司', el('div', { className: 'chips', id: 'listed-fInvest' })),
+      group('歸屬分公司（依上市櫃公司地址，同「規則」的劃分表）', el('div', { className: 'chips', id: 'listed-fBranch' })),
+      group('產業別', el('div', { className: 'chips', id: 'listed-fInd' })),
+      group('上市櫃公司本身跟我的名單比對', el('div', { className: 'chips', id: 'listed-fMine' })),
+      group('實收資本額（億元）', el('div', { className: 'leads-row' }, [
+        el('input', { id: 'listed-capMin', type: 'number', min: '0', step: '1', placeholder: '下限' }), '～',
+        el('input', { id: 'listed-capMax', type: 'number', min: '0', step: '1', placeholder: '上限' })])),
+      group('關鍵字', el('input', { id: 'listed-q', type: 'search', placeholder: '公司、代號、統編、董事長、總經理、地址、投資公司名稱', autocomplete: 'off' }), 'listed-q'),
+      group('排序', el('select', { id: 'listed-sort' }, [
+        el('option', { value: 'invest', textContent: '投資公司多的在前（同址優先）' }),
+        el('option', { value: 'capital', textContent: '實收資本額（高到低）' }),
+        el('option', { value: 'code', textContent: '公司代號' }),
+        el('option', { value: 'company', textContent: '公司名稱' })]), 'listed-sort'),
+      el('div', { className: 'leads-row' }, [
+        el('button', { className: 'btn btn-tiny', id: 'listed-reset', type: 'button', textContent: '清除篩選' }),
+        el('button', { className: 'btn btn-tiny', id: 'listed-hidden', type: 'button', hidden: true })]),
+    ]);
+    filters.open = !matchMedia('(max-width: 760px)').matches;
+    root.append(
+      el('p', { className: 'muted leads-sub', id: 'listed-sub', textContent: '上市／上櫃／興櫃公司，以及董事長名下的投資公司' }),
+      filters,
+      el('div', { className: 'leads-head' }, [
+        el('div', { className: 'leads-count', id: 'listed-count', textContent: '—' }),
+        el('div', { className: 'leads-row' }, [
+          el('label', { className: 'leads-from', title: '加進來的投資公司從這天起排下次聯絡日，照「每天打得完幾家」的上限與新名單額度往後找位子；空白＝明天' }, [
+            el('span', { className: 'muted', textContent: '排進日程：從' }),
+            el('input', { id: 'listed-from', type: 'date' }),
+            el('span', { className: 'muted', textContent: '起' })]),
+          el('button', { className: 'btn btn-primary', id: 'listed-add', type: 'button', title: '把目前篩出來的上市櫃公司名下、還不在名單裡的投資公司全部送進匯入流程', textContent: '把投資公司加入客戶名單' }),
+          el('button', { className: 'btn', id: 'listed-export', type: 'button', textContent: '匯出投資公司 CSV' }),
+        ]),
+      ]),
+      el('div', { className: 'leads-loading', id: 'listed-loading', hidden: true }),
+      el('div', { className: 'cards', id: 'listed-cards' }),
+      el('div', { className: 'empty', id: 'listed-empty', hidden: true }),
+      el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'listed-more', type: 'button', textContent: '載入更多', hidden: true })]),
+      el('div', { className: 'chattel-legend' }, [
+        el('span', {}, [el('i', { className: 'swatch is-mine' }), ' 名下有與上市公司同址的投資公司']),
+        el('span', {}, [el('i', { className: 'swatch is-up' }), ' 名下有投資公司'])]),
+      el('p', { className: 'muted leads-foot', textContent: '資料來源：證交所、櫃買中心的公司基本資料開放 API（每月更新），董事長名下公司是拿姓名查經濟部「公司負責人資料」，投資公司的地址、資本額查商工登記；GitHub Actions 每月 12 日抓。負責人查詢只能用姓名，同名同姓的會混進來，「與上市公司同址」的最可靠。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
+    );
+  }
+
+  async function start() {
+    if (started) return;
+    started = true;
+    build();
+    try {
+      const res = await fetch(`${DATA_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      index = await res.json();
+    } catch (err) {
+      $('#listed-empty').hidden = false;
+      $('#listed-empty').textContent = '還沒有抓好的資料。GitHub Actions 每月 12 日會自動抓，也可以到 repo 的 Actions 頁手動執行「每月上市櫃公司」。';
+      return;
+    }
+    $('#listed-sub').textContent = `上市 ${(index.markets || {})['上市'] || 0}、上櫃 ${(index.markets || {})['上櫃'] || 0}、興櫃 ${(index.markets || {})['興櫃'] || 0} 家　·　名下有投資公司的 ${index.withInvest || 0} 家（投資公司 ${index.investCompanies || 0} 家）　·　上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.chairmenLeft ? `　·　還有 ${index.chairmenLeft} 位董事長沒查完` : ''}`;
+    $('#listed-loading').hidden = false;
+    $('#listed-loading').textContent = '下載資料…';
+    try {
+      const [csvRes, ownRes] = await Promise.all([
+        fetch(`${DATA_BASE}companies.csv?t=${index.generatedAt}`, { cache: 'force-cache' }),
+        fetch(`${DATA_BASE}owners.json?t=${index.generatedAt}`, { cache: 'force-cache' }),
+      ]);
+      if (!csvRes.ok) throw new Error(`companies.csv：HTTP ${csvRes.status}`);
+      owners = ownRes.ok ? await ownRes.json() : {};
+      const table = parseCsv(await csvRes.text());
+      const head = table[0] || [];
+      table.slice(1).forEach((cells) => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ''; }); rows.push(toRecord(o, owners)); });
+    } catch (err) {
+      $('#listed-loading').hidden = true;
+      $('#listed-empty').hidden = false;
+      $('#listed-empty').textContent = `資料下載失敗：${err.message}`;
+      return;
+    }
+    $('#listed-loading').hidden = true;
+    ready = true;
+    const rerender = () => { limit = PAGE; render(); };
+    ['#listed-capMin', '#listed-capMax'].forEach((s) => { $(s).oninput = rerender; });
+    $('#listed-sort').onchange = rerender;
+    let qt = null;
+    $('#listed-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; rerender(); }, 120); };
+    $('#listed-more').onclick = () => { limit += PAGE; render(); };
+    $('#listed-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
+    $('#listed-reset').onclick = () => {
+      f.markets.clear(); f.inds.clear(); f.branches.clear(); f.invest.clear(); f.mine.clear(); f.q = '';
+      $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-sort').value = 'invest'; showHidden = false;
+      rerender();
+    };
+    $('#listed-add').onclick = () => { const c = criteria(); addToList(current.flatMap((r) => r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm)).map((x) => ({ x, r })))); };
+    $('#listed-export').onclick = () => {
+      const items = current.flatMap((r) => r.invest.map((x) => ({ x, r })));
+      const blob = new Blob([toStandardCsv(items)], { type: 'text/csv;charset=utf-8' });
+      const a = el('a', { href: URL.createObjectURL(blob), download: `上市櫃投資公司-${todayIso()}-${items.length}家.csv` });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast(`已匯出 ${items.length} 家投資公司`);
+    };
+    rerender();
+  }
+
+  function show() {
+    if (!root) root = document.getElementById('paneListed');
+    if (!root) return;
+    if (started) { if (ready) render(); return; }
+    start().catch((err) => { console.error(err); toast(`上市櫃公司載入失敗：${err.message}`); });
+  }
+
+  global.Listed = { show, toRecord, toStandardCsv, noteFor, money, parseYmd, yearsSince, thousandsToYuan };
+})(window);

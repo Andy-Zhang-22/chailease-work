@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-182';
+  const APP_VERSION = '20260928-183';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3338,8 +3338,9 @@
     $('#paneRules').hidden = tab !== 'rules';
     $('#paneLeads').hidden = tab !== 'leads';
     $('#paneChattel').hidden = tab !== 'chattel';
+    $('#paneListed').hidden = tab !== 'listed';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel';
+    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
@@ -3355,6 +3356,8 @@
     } else if (tab === 'chattel') {
       // 動產擔保名單分頁自己管自己（chattel.js）：第一次切過去才抓清冊，之後每次切過來重比對名單
       if (window.Chattel) window.Chattel.show();
+    } else if (tab === 'listed') {
+      if (window.Listed) window.Listed.show();
     } else { renderList(); renderRemindBar(); }
   }
 
@@ -6798,7 +6801,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'leads' || want === 'chattel') {
+    if (want === 'leads' || want === 'chattel' || want === 'listed') {
       $('#importer').hidden = true;
       switchTab(want);
     }

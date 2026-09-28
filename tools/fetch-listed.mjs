@@ -180,17 +180,19 @@ async function main() {
   if (!companies.length) throw new Error('一家都沒抓到');
   const listedIds = new Set(companies.map((c) => c.taxId).filter(Boolean));
 
-  // 上櫃、興櫃的中文地址：拿統編查商工登記
+  // 上櫃、興櫃的中文地址：拿統編查商工登記。上市的地址有些沒寫「區」（台北市中山北路2段113號），
+  // 分公司劃分要靠區，這種也拿商工登記的地址換掉
+  const hasDistrict = (a) => /^[^\s]{2}[市縣][^\s]{1,3}[區鄉鎮市]/.test(String(a || '').replace(/^臺/, '台'));
   let addrDone = 0;
   for (const c of companies) {
-    if (c.address || !c.taxId) continue;
+    if (!c.taxId || (c.address && hasDistrict(c.address))) continue;
     if (timeUp()) { stopped = stopped || `時間到（${MINUTES} 分鐘）`; break; }
     if (stopped) break;
     const d = await regOf(c.taxId, c.name);
-    if (d && !d.missing) { c.address = d.address || ''; addrDone += 1; }
+    if (d && !d.missing && d.address) { c.address = d.address; addrDone += 1; }
     await nap(300);
   }
-  console.log(`上櫃、興櫃補中文地址：這次查了 ${addrDone} 家`);
+  console.log(`補中文地址（上櫃、興櫃，以及上市地址沒寫區的）：這次查了 ${addrDone} 家`);
 
   // 董事長名下的其他公司
   const names = [...new Set(companies.map((c) => c.chairman).filter((n) => n && n.length >= 2 && n.length <= 6 && !/－|法人|代表/.test(n)))];
@@ -253,4 +255,7 @@ async function main() {
   console.log(stopped ? `\n沒查完：${stopped}，下次接著查。` : '\n完成');
 }
 
-main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
+export { normalize, sameSpot, INDUSTRY, INVEST_RE, HEAD };
+if (process.argv[1] && /fetch-listed\.mjs$/.test(process.argv[1])) {
+  main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
+}
