@@ -1,0 +1,51 @@
+# 重點推廣名單的商工登記更新，每天在後台跑（tools/registry-drive.mjs）。
+#
+# 使用者：「我的重點電推名單的自動透過商工登記更新的步驟也能在後台自動跑嗎」。
+# 名單在使用者自己的雲端硬碟（電話推廣名單-同步資料.json），這裡用 Google 服務帳號讀它、
+# 逐筆查商工登記、把差異寫回同一個檔（write 模式），使用者開網站同步就更新了。
+#
+# 模式：report＝只把差異列在執行紀錄，不碰雲端硬碟；write＝寫回。
+#   排程用的模式看 repo 的 Actions 變數 REGISTRY_DRIVE_MODE（沒設就是 report），
+#   先跑幾天 report 確認沒問題，再把變數設成 write。手動執行可以直接選。
+# 需要 Secrets：GDRIVE_SERVICE_ACCOUNT（服務帳號金鑰 JSON）。沒設就印設定步驟、直接結束。
+name: 每日商工登記更新（雲端硬碟名單）
+
+on:
+  schedule:
+    - cron: '0 21 * * *'   # 台灣 05:00，使用者還沒開始用網站
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'report＝只列差異；write＝寫回雲端硬碟'
+        required: false
+        default: 'report'
+        type: choice
+        options: [report, write]
+      limit:
+        description: '只查前 N 筆（測試用，0＝全部）'
+        required: false
+        default: '0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-drive
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 查商工登記、寫回雲端硬碟
+        env:
+          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          MODE: ${{ inputs.mode || vars.REGISTRY_DRIVE_MODE || 'report' }}
+          LIMIT: ${{ inputs.limit || '0' }}
+        run: node tools/registry-drive.mjs --mode "$MODE" --limit "$LIMIT"

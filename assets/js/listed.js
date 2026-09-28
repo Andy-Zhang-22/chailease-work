@@ -20,6 +20,7 @@
   const DATA_BASE = 'leads/listed/';
   const HIDDEN_KEY = 'listed-hidden-v1';
   const MARKETS = ['上市', '上櫃', '興櫃'];
+  const BIG_CAPITAL = 50e8;   // 使用者：實收資本額 50 億以上的企業剔除（預設藏起來，篩選裡可以打開）
   const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
 
   let root = null;
@@ -173,6 +174,7 @@
 
   function criteria() {
     return {
+      hideBig: $('#listed-hideBig').checked,
       min: (Number($('#listed-capMin').value) || 0) * 1e8,
       max: (Number($('#listed-capMax').value) || 0) * 1e8 || Infinity,
       terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean),
@@ -196,6 +198,7 @@
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (except === 'dyn' || !f.dyn.size || [...f.dyn].some((k) => r.dynKeys && r.dynKeys.has(k)))
       && r.capital >= c.min && r.capital <= c.max
+      && (!c.hideBig || r.capital < BIG_CAPITAL)
       && (showHidden || !hidden.has(r.key))
       && c.terms.every((t) => r.blob.includes(t));
   }
@@ -416,6 +419,7 @@
       group('歸屬分公司（依上市櫃公司地址，同「規則」的劃分表）', el('div', { className: 'chips', id: 'listed-fBranch' })),
       group('產業別', el('div', { className: 'chips', id: 'listed-fInd' })),
       group('上市櫃公司本身跟我的名單比對', el('div', { className: 'chips', id: 'listed-fMine' })),
+      el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'listed-hideBig', checked: true }), ' 剔除實收資本額 50 億以上的企業'])]),
       group('實收資本額（億元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'listed-capMin', type: 'number', min: '0', step: '1', placeholder: '下限' }), '～',
         el('input', { id: 'listed-capMax', type: 'number', min: '0', step: '1', placeholder: '上限' })])),
@@ -505,6 +509,7 @@
     ready = true;
     const rerender = () => { limit = PAGE; render(); };
     ['#listed-capMin', '#listed-capMax'].forEach((s) => { $(s).oninput = rerender; });
+    $('#listed-hideBig').onchange = rerender;
     $('#listed-sort').onchange = rerender;
     let qt = null;
     $('#listed-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; rerender(); }, 120); };
@@ -512,7 +517,7 @@
     $('#listed-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#listed-reset').onclick = () => {
       f.markets.clear(); f.inds.clear(); f.branches.clear(); f.invest.clear(); f.mine.clear(); f.dyn.clear(); f.q = '';
-      $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-sort').value = 'invest'; showHidden = false;
+      $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-hideBig').checked = true; $('#listed-sort').value = 'invest'; showHidden = false;
       rerender();
     };
     $('#listed-add').onclick = () => { const c = criteria(); addToList(current.flatMap((r) => r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm)).map((x) => ({ x, r })))); };

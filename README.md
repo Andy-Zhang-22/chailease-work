@@ -2606,6 +2606,40 @@ force＝補滿今天的額度（對話框的「現在挑」），more＝再補�
 提示文字跟著換；統計、規則沒有東西可搜，停用。切分頁時頂端的字對齊那一頁目前的關鍵字，
 各頁的關鍵字各自保留。
 
+## 上市櫃公司：剔除實收資本額 50 億以上
+
+使用者：「幫我把上市櫃公司分頁裡的名單剔除掉…超過 50 億以上的企業」。篩選面板多一個勾選
+「剔除實收資本額 50 億以上的企業」（`BIG_CAPITAL`），預設勾著；要看大公司就把勾拿掉，「清除篩選」會勾回來。
+
+## 重點推廣名單：商工登記更新改在後台跑
+
+使用者：「我的重點電推名單的自動透過商工登記更新的步驟也能在後台自動跑嗎」，選了走雲端硬碟。
+名單不在 GitHub 上（在瀏覽器與使用者自己的雲端硬碟），所以 `tools/registry-drive.mjs` 用 Google
+**服務帳號**讀雲端硬碟裡的「電話推廣名單-同步資料.json」，逐筆用網站自己的 `registry.js` 查商工登記
+（跟瀏覽器裡一模一樣），比對 `REGISTRY_FIELDS` 那幾個欄位，然後：
+
+- **report 模式**（預設）：只把差異列在執行紀錄，不碰雲端硬碟。先跑幾天確認無誤。
+- **write 模式**：差異寫成「編輯」（`edits`＋`editsAt`，詳細頁可還原）、記 `regAt`、變更登記歷程
+  `regChanges` 往上加（`DriveSync.mergeRegChanges`）、`registry-auto-last` 設成今天（瀏覽器那條每日更新
+  看到今天跑過就不重跑，等於後台沒跑時瀏覽器自動接手），用 `DriveSync.mergeDumps` 跟雲端最新版合併後
+  寫回；寫回前把雲端硬碟目前的版本釘住（`keepForever`），出事可從版本紀錄退回。
+- 服務帳號的 access token 自己用 JWT（RS256）換，不裝任何套件。
+- `daily-registry-drive.yml` 每天台灣 05:00 跑；排程模式看 Actions 變數 `REGISTRY_DRIVE_MODE`
+  （沒設＝report），手動執行可直接選模式、限制筆數。Secrets 沒設就印設定步驟、直接結束。
+
+**設定步驟（一次）**：
+
+1. 到 https://console.cloud.google.com/ ，選網站雲端同步用的那個專案（或新建一個），
+   「API 和服務 → 程式庫」啟用 **Google Drive API**。
+2. 「IAM 與管理 → 服務帳號 → 建立服務帳號」，名稱隨意（例如 chailease-registry），不用給任何角色。
+3. 進那個服務帳號 →「金鑰 → 新增金鑰 → JSON」，會下載一個 .json 檔。
+4. GitHub repo →「Settings → Secrets and variables → Actions → New repository secret」，
+   名稱 `GDRIVE_SERVICE_ACCOUNT`，內容貼那個 .json 檔的**整個內容**。
+5. 雲端硬碟裡找到「電話推廣名單-同步資料.json」→ 分享 → 貼服務帳號的 email
+   （.json 裡的 `client_email`，長得像 xxx@xxx.iam.gserviceaccount.com）→ 權限**編輯者**。
+6. repo 的 Actions 頁手動跑一次「每日商工登記更新（雲端硬碟名單）」，看執行紀錄的差異清單。
+   幾天沒問題後，「Settings → Secrets and variables → Actions → Variables」新增 `REGISTRY_DRIVE_MODE`＝`write`。
+
 ## 整理未排定的名單
 
 使用者：「把未排定的名單刪除，保留有跟中租往來的，並且將它們都標記在 2027.04.15 過後再聯絡」。
