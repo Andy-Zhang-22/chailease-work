@@ -18,4 +18,5 @@ jobs:
       - name: 探路
         run: node tools/probe-listed.mjs 2>&1 | tee probe.txt
       - name: 把結果印在執行紀錄上
-        run: { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
