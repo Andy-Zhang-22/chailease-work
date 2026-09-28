@@ -913,14 +913,19 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 
 /* ---------- 上市櫃公司：董事長名下的投資公司 ---------- */
 .listed-card.is-same { border-left-color: var(--ok); }
-.owner-box { margin-top: 10px; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; display: grid; gap: 6px; }
-.owner-head { font-size: 13px; font-weight: 600; }
-.owner-row { padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 4px; }
-.owner-row.is-same { border-color: var(--ok); }
-.owner-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.owner-name { font-weight: 600; }
+.owner-box { margin-top: 10px; padding: 6px 10px; background: var(--surface-2); border-radius: 10px; display: grid; gap: 0; }
+.owner-head { font-size: 13px; font-weight: 600; padding: 4px 0 6px; }
+/* 一列一家：左邊名字＋標籤＋一行小字，右邊一顆小按鈕；列與列之間只用細線，不用一個個框 */
+.owner-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 8px; border-top: 1px solid var(--border); border-left: 3px solid transparent; }
+.owner-row.is-same { border-left-color: var(--ok); }
+.owner-main { flex: 1; min-width: 0; }
+.owner-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.owner-top .badge { padding: 0 7px; font-size: 11px; }
+.owner-name { font-weight: 600; font-size: 14px; }
 .owner-name a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border); }
-.owner-meta { font-size: 12.5px; color: var(--muted); }
-.owner-note { font-size: 12px; margin: 2px 0 0; }
+.owner-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.owner-row .btn { flex: none; }
+.owner-more { justify-self: start; margin: 6px 0 2px; }
+.owner-note { font-size: 12px; margin: 4px 0 2px; }
 /* 手機：五個分頁要塞得下，間距縮小，「新公司」不會被擠到看不見 */
 @media (max-width: 520px) { .tab { padding: 8px 8px; font-size: 14px; } .tabs { padding-left: 8px; gap: 0; } .pill { margin-right: 0; padding: 0 5px; } }
