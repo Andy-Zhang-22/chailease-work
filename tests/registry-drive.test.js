@@ -46,3 +46,14 @@ test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不�
   assert.equal(merged.records.length, 2);
   assert.equal(merged.states.find((s) => s.recordId === 'a').edits.capital, '30,000');
 });
+
+test('報告：筆數在第一行，明細列公司與欄位前後值，太長會截', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'registry-drive.mjs'));
+  const diffs = [{ company: '甲', view: { capital: '1,000' }, changes: { capital: { from: '1,000', to: '2,000' } } }];
+  const text = m.buildReport({ mode: 'report', today: '2026-09-29', results: [1, 2], diffs, failed: [{ company: '乙', reason: '查無資料\n第二行' }], missing: [1], seconds: 12 });
+  assert.match(text.split('\n')[0], /^2026-09-29 後台商工登記更新（只列差異、沒套用）：查 2 筆，12 秒；1 筆跟登記不一致，1 筆查不到（1 筆登記上真的沒有）/);
+  assert.match(text, /• 甲（增資）：資本總額（仟元） 1,000 → 2,000/);
+  assert.match(text, /• 乙：查無資料$/m);
+  const big = m.buildReport({ mode: 'write', today: '2026-09-29', results: [], diffs: Array.from({ length: 400 }, (_, i) => ({ company: `公司${i}`, view: {}, changes: { address: { from: '舊地址'.repeat(5), to: '新地址'.repeat(5) } } })), failed: [], missing: [], seconds: 1 });
+  assert.ok(big.length <= 12100 && /太長，後面略/.test(big));
+});

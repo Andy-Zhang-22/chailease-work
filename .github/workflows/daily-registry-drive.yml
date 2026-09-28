@@ -13,9 +13,8 @@
 #   B. Secrets GDRIVE_SERVICE_ACCOUNT（服務帳號金鑰 JSON）
 name: 每日商工登記更新（雲端硬碟名單）
 
+# 使用者後來說「算了不需要了」（Google 那邊的設定太難）：排程拿掉，只留手動執行，程式留著以後想用再開。
 on:
-  schedule:
-    - cron: '0 21 * * *'   # 台灣 05:00，使用者還沒開始用網站
   workflow_dispatch:
     inputs:
       mode:

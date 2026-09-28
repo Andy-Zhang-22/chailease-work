@@ -7,7 +7,9 @@
  *   1. 用 Google 服務帳號讀雲端硬碟裡的「電話推廣名單-同步資料.json」（使用者要把這個檔分享給服務帳號）
  *   2. 每一筆客戶拿統編（沒統編用名稱）查商工登記——用網站自己的 registry.js，跟瀏覽器裡一模一樣
  *   3. 比對名單上的欄位（跟 app.js 的 REGISTRY_FIELDS 同一套）：資本總額、實收資本額、負責人、地址、成立年、核准變更日期
- *   4. report 模式：只把差異印在執行紀錄，不碰雲端硬碟（先跑幾天確認無誤）
+ *   4. 這個 repo 是公開的，Actions 的執行紀錄誰都看得到，所以紀錄裡只印筆數；差異的明細寫進同步檔的
+ *      設定 registry-drive-report，網站「從商工登記更新公司資料」視窗會顯示。
+ *      report 模式：只寫報告，不動任何客戶資料（先跑幾天確認無誤）
  *      write 模式：把差異寫成「編輯」（edits＋editsAt，跟瀏覽器套用登記的做法一樣，詳細頁可還原）、
  *      記查核時間與變更登記歷程（regAt／regChanges），把 registry-auto-last 設成今天（瀏覽器那條每日
  *      更新看到今天跑過就不重跑），用 sync.js 的 mergeDumps 跟雲端最新版合併後寫回。寫回前先把
@@ -213,44 +215,56 @@ async function main() {
   const failed = results.filter((r) => !r.ok);
   const missing = failed.filter((r) => /查無資料|沒有一筆的統編是|只回了部分欄位|不是 8 碼/.test(String(r.reason || '')));
   const sourceDown = !okList.length && failed.length === results.length && !missing.length && results.length > 0;
-  out(`查了 ${results.length} 筆（${Math.round((Date.now() - started) / 1000)} 秒）：${diffs.length} 筆跟登記不一致，${failed.length} 筆查不到（其中 ${missing.length} 筆是登記上真的沒有）`);
+  out(`查了 ${results.length} 筆（${Math.round((Date.now() - started) / 1000)} 秒）：${diffs.length} 筆跟登記不一致，${failed.length} 筆查不到（其中 ${missing.length} 筆是登記上真的沒有）。明細在網站選單「從商工登記更新公司資料」裡。`);
   if (sourceDown) { out('✗ 每一筆都失敗，是來源連不上，不是資料的問題；這次不寫回。'); await writeSummary(summary); process.exitCode = 1; return; }
 
-  out('');
-  out(`### 有差異的 ${diffs.length} 筆`);
-  diffs.slice(0, 200).forEach((d) => {
-    const kinds = classify(d.changes, d.view);
-    out(`- **${d.company}**${kinds.length ? `（${kinds.map((k) => ({ capitalUp: '增資', capitalDown: '減資', address: '變更地址', owner: '變更負責人', other: '其他' })[k]).join('、')}）` : '（補齊空白欄位）'}：${Object.entries(d.changes).map(([k, ch]) => `${FIELD_LABEL[k]} ${ch.from || '（空）'} → ${ch.to}`).join('；')}`);
-  });
-  if (diffs.length > 200) out(`- …還有 ${diffs.length - 200} 筆`);
-  if (failed.length) {
-    out('');
-    out(`### 查不到的 ${failed.length} 筆`);
-    failed.slice(0, 50).forEach((f) => out(`- ${f.company}：${String(f.reason || '').split('\n')[0].slice(0, 80)}`));
-  }
-
-  if (MODE !== 'write') { out(''); out('（report 模式：只列出來，沒有寫回雲端硬碟。確認幾天沒問題後把 workflow 的模式改成 write。）'); await writeSummary(summary); return; }
-
-  // 寫回：釘住目前版本 → 重新下載最新版（使用者可能剛同步過）→ 套上結果 → 合併 → 上傳
   const now = Date.now();
   const today = new Date(now + 8 * 3600000).toISOString().slice(0, 10);   // 台灣日期
+  const report = buildReport({ mode: MODE, today, results, diffs, failed, missing, seconds: Math.round((now - started) / 1000) });
+
+  // 寫回：釘住目前版本 → 重新下載最新版（使用者可能剛同步過）→ 套上結果 → 合併 → 上傳
+  // report 模式只把報告寫進設定，客戶資料一個字都不動
   const pinned = await pinCurrentRevision(token, file.id);
   const latestTime = await modifiedTimeOf(token, file.id);
   const base = latestTime !== file.modifiedTime ? await download(token, file.id) : dump;
-  const patched = applyResults(base, results, { now, today, mergeRegChanges: DriveSync.mergeRegChanges, regHistoryOf: DriveSync.regHistoryOf });
+  const patched = MODE === 'write'
+    ? applyResults(base, results, { now, today, mergeRegChanges: DriveSync.mergeRegChanges, regHistoryOf: DriveSync.regHistoryOf })
+    : { ...base, settings: { ...(base.settings || {}) }, edited: 0 };
+  patched.settings['registry-drive-report'] = { v: report, at: now };
   const merged = DriveSync.mergeDumps(base, { ...patched, records: [], logs: [] });
-  merged.settings = { ...(merged.settings || {}), ...Object.fromEntries(['registry-auto-last', 'registry-auto-summary'].map((k) => [k, patched.settings[k]])) };
+  const keep = MODE === 'write' ? ['registry-auto-last', 'registry-auto-summary', 'registry-drive-report'] : ['registry-drive-report'];
+  merged.settings = { ...(merged.settings || {}), ...Object.fromEntries(keep.map((k) => [k, patched.settings[k]])) };
   await upload(token, file.id, merged);
-  out('');
-  out(`已寫回雲端硬碟：更新 ${patched.edited} 筆的欄位，${results.length} 筆記了查核時間${pinned ? `；寫回前的版本已釘在版本紀錄（可退回）` : ''}。下次開網站同步就會看到。`);
+  out(MODE === 'write'
+    ? `已寫回雲端硬碟：更新 ${patched.edited} 筆的欄位，${results.length} 筆記了查核時間${pinned ? '；寫回前的版本已釘在版本紀錄（可退回）' : ''}。下次開網站同步就會看到。`
+    : '（report 模式：只把報告寫進同步檔，客戶資料沒動。確認幾天沒問題後把 Actions 變數 REGISTRY_DRIVE_MODE 設成 write。）');
   await writeSummary(summary);
+}
+
+/** 給網站看的報告（純文字，最多一萬多字；同步檔的設定會進 localStorage，不能太大） */
+function buildReport({ mode, today, results, diffs, failed, missing, seconds }) {
+  const KIND = { capitalUp: '增資', capitalDown: '減資', address: '變更地址', owner: '變更負責人', other: '其他' };
+  const lines = [`${today} 後台商工登記更新（${mode === 'write' ? '已套用' : '只列差異、沒套用'}）：查 ${results.length} 筆，${seconds} 秒；${diffs.length} 筆跟登記不一致，${failed.length} 筆查不到（${missing.length} 筆登記上真的沒有）。`];
+  if (diffs.length) {
+    lines.push('', `▍有差異的 ${diffs.length} 筆`);
+    diffs.forEach((d) => {
+      const kinds = classify(d.changes, d.view);
+      lines.push(`• ${d.company}${kinds.length ? `（${kinds.map((k) => KIND[k]).join('、')}）` : '（補齊空白欄位）'}：${Object.entries(d.changes).map(([k, ch]) => `${FIELD_LABEL[k]} ${ch.from || '（空）'} → ${ch.to}`).join('；')}`);
+    });
+  }
+  if (failed.length) {
+    lines.push('', `▍查不到的 ${failed.length} 筆`);
+    failed.forEach((f) => lines.push(`• ${f.company}：${String(f.reason || '').split('\n')[0].slice(0, 80)}`));
+  }
+  const text = lines.join('\n');
+  return text.length > 12000 ? `${text.slice(0, 12000)}\n…（太長，後面略）` : text;
 }
 
 async function writeSummary(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
 }
 
-export { diffFields, classify, applyResults, viewOf, REGISTRY_FIELDS };
+export { diffFields, classify, applyResults, viewOf, buildReport, REGISTRY_FIELDS };
 
 if (process.argv[1] && /registry-drive\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });

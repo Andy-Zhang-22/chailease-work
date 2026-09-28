@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-192';
+  const APP_VERSION = '20260928-193';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5141,7 +5141,7 @@ export default {
     'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
-    'registry-fields-rev', 'my-branch', 'my-unit', 'daily-cap',
+    'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
     'new-quota', 'daily-feed-on', 'daily-feed-auto']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
@@ -5487,6 +5487,14 @@ export default {
       auto,
       el('span', { textContent: ' 每天自動更新全部名單（跨過 0:00 就在背景查一次，查到的差異直接套用；網站沒開著就等下次打開時補跑）' }),
     ]), autoInfo);
+    // 後台（GitHub Actions）跑的報告：寫在同步檔的設定裡，同步過來就看得到
+    const driveReport = registryPref('registry-drive-report');
+    if (driveReport) {
+      host.append(el('details', { className: 'registry-drive-report' }, [
+        el('summary', { textContent: `後台更新的報告：${driveReport.split('\n')[0].slice(0, 80)}` }),
+        el('pre', { className: 'registry-report-text', textContent: driveReport }),
+      ]));
+    }
 
     /*
      * 兩個資料集網址都可以自己填：萬一政府改了編號，不用等改版。
