@@ -72,6 +72,8 @@ test('每日動態：重大訊息主旨分類、掛到公司上、篩選鍵與�
   assert.equal(L.newsKind('公告本公司董事長異動'), 'people');
   assert.equal(L.newsKind('公告本公司代理發言人異動'), 'people');
   assert.equal(L.newsKind('公告本公司名稱由「甲」更名為「乙」'), 'rename');
+  assert.equal(L.newsKind('公告本公司名稱由「世紀離岸風電設備股份有限公司」更名為「世紀能源設備股份有限公司」'), 'rename', '公司名裡的「設備」不是買設備');
+  assert.equal(L.newsKind('公告本公司股票面額由「新台幣10元」變更為「新台幣5元」'), 'other');
   assert.equal(L.newsKind('公告本公司除息基準日'), 'meeting');
   assert.equal(L.newsKind('公告本公司115年8月自結營收'), 'ops');
   assert.equal(L.newsKind('公告本公司「全坤御峰」工地火災事件說明'), 'other');
