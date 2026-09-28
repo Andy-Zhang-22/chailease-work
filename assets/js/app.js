@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-189';
+  const APP_VERSION = '20260928-191';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -6593,10 +6593,39 @@ export default {
     state.userStates = new Map(states.map((s) => [s.recordId, s]));
   }
 
+  /*
+   * 頂端搜尋欄跟著目前的分頁走（使用者：「這個搜尋欄，請幫我重設為僅限各分頁使用」）：
+   * 重點推廣名單搜客戶；登記清冊、動產擔保、上市櫃分頁就轉給那一頁自己的關鍵字欄
+   * （各頁的篩選面板裡本來就有一個，兩邊同步）；統計、規則沒有東西可搜，停用。
+   */
+  const TAB_SEARCH = {
+    all: { placeholder: '搜尋公司、統編、負責人、電話、地址、訪談內容…' },
+    leads: { input: '#leads-q', placeholder: '搜尋登記清冊：公司、統編、代表人、地址、營業項目' },
+    chattel: { input: '#chattel-q', placeholder: '搜尋動產擔保名單：公司、統編、金主、地址、登記編號' },
+    listed: { input: '#listed-q', placeholder: '搜尋上市櫃公司：公司、代號、統編、董事長、地址、投資公司名稱' },
+  };
+  /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
+  function syncSearchBox() {
+    const box = $('#search');
+    const cfg = TAB_SEARCH[state.tab];
+    box.disabled = !cfg;
+    box.placeholder = cfg ? cfg.placeholder : '這個分頁沒有搜尋';
+    if (!cfg) { box.value = ''; return; }
+    if (!cfg.input) { box.value = state.search || ''; return; }
+    const own = document.querySelector(cfg.input);
+    box.value = own ? own.value : '';
+  }
   function wireEvents() {
     let searchTimer = null;
     $('#search').oninput = (e) => {
       const value = e.target.value;
+      const cfg = TAB_SEARCH[state.tab];
+      if (cfg && cfg.input) {
+        // 轉給那一頁自己的關鍵字欄；那一頁還沒載好就先放著，載好後 syncSearchBox 會對齊回來
+        const own = document.querySelector(cfg.input);
+        if (own && own.value !== value) { own.value = value; own.dispatchEvent(new Event('input', { bubbles: true })); }
+        return;
+      }
       clearTimeout(searchTimer);
       // 每打一個字就重算幾百筆會頓，等使用者停一下再算
       searchTimer = setTimeout(() => {
@@ -6605,6 +6634,14 @@ export default {
         render();
       }, 120);
     };
+    // 在分頁自己的關鍵字欄打字，頂端搜尋欄跟著；按那一頁的「清除篩選」也要跟著清
+    document.addEventListener('input', (e) => {
+      const cfg = TAB_SEARCH[state.tab];
+      if (cfg && cfg.input && e.target && e.target.matches && e.target.matches(cfg.input) && $('#search').value !== e.target.value) $('#search').value = e.target.value;
+    });
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.matches && e.target.matches('#leads-reset, #chattel-reset, #listed-reset')) setTimeout(syncSearchBox, 0);
+    });
     // 下拉的預設值跟 state 對齊，不然畫面顯示第一個選項、實際卻是另一種排序
     $('#sortBy').value = state.sort;
     $('#sortBy').onchange = (e) => { state.sort = e.target.value; render(); };
@@ -6854,6 +6891,7 @@ export default {
     state.limit = PAGE_SIZE;
     [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', b === btn));
     render();
+    syncSearchBox();
   }
 
   async function init() {
