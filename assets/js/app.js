@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-183';
+  const APP_VERSION = '20260928-184';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2533,6 +2533,71 @@
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
     } finally { feeding = false; }
+  }
+
+  /*
+   * 整理未排定的名單。
+   *
+   * 使用者：「把未排定的名單刪除，保留有跟中租往來的，並且將它們都標記在 2027.04.15 過後再聯絡」。
+   * 未排定＝沒有下次聯絡日、也沒有約回撥時間。裡面：
+   *   - 有跟中租往來的（現在往來中、或以前往來過）：留著，下次聯絡日設成指定那天（預設 2027/04/16，
+   *     落在假日就往後推）
+   *   - 禁止推廣的：留著不動（那是「不要打」的名單，刪了以後匯入又會回來）
+   *   - 其餘：刪掉。先自動下載一份備份；刪掉的公司會記排除，以後匯入不會再帶回來
+   *     （「管理已排除的公司」可以放回）
+   */
+  function pruneUnscheduled() {
+    const views = allViews();
+    const unscheduled = views.filter((v) => !v.nextDate && !v.remindAt);
+    const dealing = unscheduled.filter((v) => v.dealingKind === 'active' || (v.dealing && v.dealing.ended));
+    const rest = unscheduled.filter((v) => !dealing.includes(v));
+    const blocked = rest.filter((v) => v.blocked);
+    const del = rest.filter((v) => !v.blocked);
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: '整理未排定的名單' }));
+    if (!unscheduled.length) {
+      host.append(el('p', { className: 'muted', textContent: '目前每一家都有下次聯絡日或回撥時間，沒有要整理的。' }));
+      $('#editor').hidden = false;
+      return;
+    }
+    const dateIn = el('input', { type: 'date', value: '2027-04-16', id: 'pruneDate' });
+    host.append(el('p', { className: 'muted', textContent: `沒有下次聯絡日、也沒約回撥時間的有 ${unscheduled.length} 家：` }));
+    const ul = el('ul', { className: 'prune-list' });
+    ul.append(el('li', {}, [`有跟中租往來的 ${dealing.length} 家（往來中 ${dealing.filter((v) => v.dealingKind === 'active').length}、以前往來過 ${dealing.filter((v) => v.dealingKind !== 'active').length}）：留著，下次聯絡日設成 `, dateIn, '（假日會往後推）']));
+    ul.append(el('li', { textContent: `禁止推廣的 ${blocked.length} 家：留著不動` }));
+    ul.append(el('li', { textContent: `其餘 ${del.length} 家：刪掉。會先下載一份備份；刪掉的公司會記排除，以後匯入不會再帶回來（「管理已排除的公司」可以放回）` }));
+    host.append(ul);
+    if (del.length) host.append(el('p', { className: 'muted', textContent: `要刪的例如：${del.slice(0, 12).map((v) => v.company).join('、')}${del.length > 12 ? `　…共 ${del.length} 家` : ''}` }));
+    const go = el('button', { className: 'btn btn-primary danger', type: 'button', id: 'pruneGo', textContent: `開始整理（刪 ${del.length} 家、改日期 ${dealing.length} 家）` });
+    const cancel = el('button', { className: 'btn', type: 'button', textContent: '取消' });
+    cancel.onclick = () => { $('#editor').hidden = true; };
+    go.onclick = async () => {
+      const want = /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value) ? dateIn.value : '2027-04-16';
+      const target = window.Holidays ? window.Holidays.nextWorkday(want).iso : want;
+      const ok = await askConfirm(`確定要刪掉 ${del.length} 家、把 ${dealing.length} 家有往來的下次聯絡日設成 ${dateLabel(target)}？\n\n刪掉的通話紀錄與編輯內容會一起消失，並會同步到其他裝置。備份會先下載。`, { danger: true, okText: '確定整理' });
+      if (!ok) return;
+      go.disabled = true; go.textContent = '整理中…';
+      try {
+        if (del.length) download(`電話推廣名單備份_整理前_${todayISO()}.json`, JSON.stringify(await window.Store.exportAll()), 'application/json');
+        let deleted = 0;
+        for (const v of del) { await window.Store.deleteRecord(v.id); deleted += 1; }
+        let dated = 0;
+        for (const v of dealing) { await saveState(v.id, { nextDate: target }); dated += 1; }
+        await reload();
+        closeOverlays();
+        render();
+        scheduleSync();
+        toast(`刪了 ${deleted} 家，${dated} 家有往來的排到 ${dateLabel(target)}`);
+      } catch (err) {
+        console.error('整理未排定名單失敗', err);
+        go.disabled = false; go.textContent = '再試一次';
+        toast(`整理到一半失敗：${err && err.message ? err.message : err}`);
+        await reload(); render();
+      }
+    };
+    host.append(el('div', { className: 'card-actions' }, [go, cancel]));
+    $('#editor').hidden = false;
   }
 
   /** 選單的「每天打得完幾家」：看未來每個上班日各有幾家，順便照上限重排。 */
@@ -6615,6 +6680,7 @@ export default {
       if (act === 'check-update') { await checkForUpdate(true); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
+      if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
       if (act === 'feed-more') { await dailyFeed({ more: true }); render(); return; }
       if (act === 'spread-undo') { await undoSpread(); return; }
       if (act === 'manage') {
