@@ -465,37 +465,60 @@
     );
   }
 
+  /*
+   * 資料載入獨立出來：主站（重點推廣名單）要拿這份清冊對客戶的統編，不需要畫這一頁。
+   * 同一個 promise 共用，分頁跟主站誰先要都只抓一次。
+   */
+  let dataPromise = null;
+  function ensureData() {
+    if (!dataPromise) {
+      dataPromise = (async () => {
+        const res = await fetch(`${DATA_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { noData: true });
+        index = await res.json();
+        for (const file of index.files || []) {
+          const r = await fetch(`${DATA_BASE}${file.path}?t=${index.generatedAt}`, { cache: 'force-cache' });
+          if (!r.ok) throw new Error(`${file.path}：HTTP ${r.status}`);
+          const table = parseCsv(await r.text());
+          const head = table[0] || [];
+          table.slice(1).forEach((cells) => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ''; }); rows.push(toRecord(o)); });
+        }
+        byTax = null;
+        return rows;
+      })().catch((err) => { dataPromise = null; throw err; });
+    }
+    return dataPromise;
+  }
+  /** 統編 → 這家在清冊上的案件（到期日近的在前）。給主站的客戶卡片用。 */
+  let byTax = null;
+  function casesOf(taxId) {
+    const id = String(taxId || '').replace(/\D/g, '');
+    if (!id || !rows.length) return [];
+    if (!byTax) {
+      byTax = new Map();
+      rows.forEach((r) => { if (r.cust.id) { if (!byTax.has(r.cust.id)) byTax.set(r.cust.id, []); byTax.get(r.cust.id).push(r); } });
+      byTax.forEach((list) => list.sort((x, y) => (x.days == null ? 1e9 : x.days) - (y.days == null ? 1e9 : y.days)));
+    }
+    return byTax.get(id) || [];
+  }
+  /** 金主的短名：新鑫股份有限公司 → 新鑫 */
+  const lenderShort = (name) => String(name || '').replace(/股份有限公司|有限公司|國際租賃|企業|股份/g, '').trim() || '不明';
+
   async function start() {
     if (started) return;
     started = true;
     build();
     try {
-      const res = await fetch(`${DATA_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      index = await res.json();
+      await ensureData();
     } catch (err) {
       $('#chattel-empty').hidden = false;
-      $('#chattel-empty').textContent = '還沒有抓好的清冊。GitHub Actions 每月 10 日會自動抓，也可以到 repo 的 Actions 頁手動執行「每月動保清冊」。';
+      $('#chattel-empty').textContent = err.noData
+        ? '還沒有抓好的清冊。GitHub Actions 每月 10 日會自動抓，也可以到 repo 的 Actions 頁手動執行「每月動保清冊」。'
+        : `清冊下載失敗：${err.message}`;
       return;
     }
     const through = String(index.dataThrough || '').slice(0, 7);
     $('#chattel-sub').textContent = `新北市動產擔保登記清冊（新北市經發局，每月更新）　·　資料截到 ${through || '？'}　·　上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
-    $('#chattel-loading').hidden = false;
-    $('#chattel-loading').textContent = `下載清冊… ${(index.kept || 0).toLocaleString()} 筆`;
-    try {
-      for (const file of index.files || []) {
-        const r = await fetch(`${DATA_BASE}${file.path}?t=${index.generatedAt}`, { cache: 'force-cache' });
-        if (!r.ok) throw new Error(`${file.path}：HTTP ${r.status}`);
-        const table = parseCsv(await r.text());
-        const head = table[0] || [];
-        table.slice(1).forEach((cells) => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ''; }); rows.push(toRecord(o)); });
-      }
-    } catch (err) {
-      $('#chattel-loading').hidden = true;
-      $('#chattel-empty').hidden = false;
-      $('#chattel-empty').textContent = `清冊下載失敗：${err.message}`;
-      return;
-    }
     $('#chattel-loading').hidden = true;
     ready = true;
     const rerender = () => { limit = PAGE; render(); };
@@ -536,5 +559,5 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, ensureData, casesOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

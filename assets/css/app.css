@@ -425,6 +425,9 @@ button, input, select { font: inherit; color: inherit; }
 .badge-micro { border-color: var(--primary); color: var(--primary); }
 .badge-large { border-color: #7c3aed; color: #7c3aed; }
 .badge-regchange { border-color: #d97706; color: #b45309; }
+.badge-chattel { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); color: var(--primary); }
+.badge-chattel.is-soon { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); font-weight: 600; }
+.detail-chattel .reg-history li.is-soon > b { color: var(--danger); }
 .branch-common { color: #b45309; }
 .badge-branch { border-color: #0f766e; color: #0f766e; }
 /* 回撥提醒 */
@@ -709,6 +712,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .phone-row input.is-bad { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
 /* 每天打得完幾家：一天一列，長條讓「哪幾天爆了」一眼看得出來 */
 .cap-row { align-items: center; gap: 8px; margin: 12px 0; }
+.prune-list { padding-left: 20px; font-size: 14px; line-height: 1.8; }
+.prune-list input[type="date"] { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; }
 .cap-auto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0 12px; }
 .leads-from { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .leads-from input, .leads-from select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }

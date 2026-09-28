@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-183';
+  const APP_VERSION = '20260928-185';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -18,6 +18,9 @@
     other: '其他', none: '無變更', unchecked: '未查核',
   };
   const REG_KIND_ORDER = ['capitalUp', 'capitalDown', 'address', 'owner', 'other', 'none', 'unchecked'];
+  // 動產擔保（同業）：客戶現在跟誰借錢、什麼時候到期。清冊是新北市登記的，其他縣市的客戶對不到
+  const CHATTEL_LABEL = { m3: '3 個月內到期', m12: '12 個月內到期', has: '有動保登記', none: '清冊裡沒有' };
+  const CHATTEL_ORDER = ['m3', 'm12', 'has', 'none'];
   /*
    * 有沒有機會：業務自己判斷的，不是從訪談內容猜的。
    *
@@ -73,7 +76,7 @@
     sort: 'regchanged',
     limit: PAGE_SIZE,
     hideBlocked: true,
-    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), branch: new Set(), added: new Set(), industry: '' },
+    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), industry: '' },
   };
 
   /* ---------------- 工具 ---------------- */
@@ -521,6 +524,11 @@
     if (!y) return '';
     return y === todayISO().slice(0, 4) ? `${+m}/${+d}` : `${y}/${+m}/${+d}`;
   };
+  const chattelMoney = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(n % 1e8 ? 1 : 0)} 億` : `${Math.round(n / 1e4).toLocaleString()} 萬`);
+  /** 滑過動保標記看到全部案件 */
+  function chattelBrief(r) {
+    return (r.chattel || []).map((c) => `${window.Chattel.lenderShort(c.lender.name)} ${window.Chattel.typeShort(c.type)} ${chattelMoney(c.amount)}，${c.start} → ${c.end}${c.days == null ? '' : c.days < 0 ? `（已過期 ${-c.days} 天，未註銷）` : `（還有 ${c.days} 天）`}`).join('\n');
+  }
   function regBadgeText(r) {
     return r.regKinds
       .filter((k) => k !== 'none' && k !== 'unchecked')
@@ -818,6 +826,16 @@
         : b.kind === 'shared' ? '全公司共同區域'
         : (reg.city ? '不在劃分表上' : '無登記地址');
     }
+    /*
+     * 動產擔保（同業）：拿統編對新北市動保清冊（chattel.js 載好的資料）。
+     * 使用者要的是「打電話前就知道對方的金主和換約時機」：卡片標「新鑫 11/12 到期」，
+     * 詳細頁列全部案件，篩選可以撈 3 個月內到期的。清冊沒載好或不是新北市登記的就是空的。
+     */
+    out.chattel = (window.Chattel && window.Chattel.casesOf) ? window.Chattel.casesOf(out.taxId) : [];
+    out.chattelNext = out.chattel.find((c) => c.days != null && c.days >= 0) || null;
+    out.chattelKinds = out.chattel.length
+      ? ['has', out.chattelNext && out.chattelNext.days <= 92 ? 'm3' : '', out.chattelNext && out.chattelNext.days <= 366 ? 'm12' : ''].filter(Boolean)
+      : ['none'];
     out.remindAt = (mine && mine.remindAt) || 0;
     // 提醒列上按過「完成」的那一天，當天就不再列出來（見 remindItems）
     out.dueDoneOn = (mine && mine.dueDoneOn) || '';
@@ -2064,12 +2082,13 @@
    * 順便把到期分組、客戶規模與搜尋索引一次算完，後面就不必重複計算。
    */
   let dataVersion = 0;
+  let chattelVersion = 0;   // 動保清冊載好了就加一，allViews 才會重算每家的動保欄位
   let viewsKey = '';
   let viewsCache = [];
   const touch = () => { dataVersion += 1; };
 
   function allViews() {
-    const key = `${dataVersion}|${todayISO()}`;
+    const key = `${dataVersion}|${todayISO()}|${chattelVersion}`;
     if (viewsKey === key) return viewsCache;
     const groupCount = new Map();
     groupMap().forEach((group) => groupCount.set(group, (groupCount.get(group) || 0) + 1));
@@ -2535,6 +2554,71 @@
     } finally { feeding = false; }
   }
 
+  /*
+   * 整理未排定的名單。
+   *
+   * 使用者：「把未排定的名單刪除，保留有跟中租往來的，並且將它們都標記在 2027.04.15 過後再聯絡」。
+   * 未排定＝沒有下次聯絡日、也沒有約回撥時間。裡面：
+   *   - 有跟中租往來的（現在往來中、或以前往來過）：留著，下次聯絡日設成指定那天（預設 2027/04/16，
+   *     落在假日就往後推）
+   *   - 禁止推廣的：留著不動（那是「不要打」的名單，刪了以後匯入又會回來）
+   *   - 其餘：刪掉。先自動下載一份備份；刪掉的公司會記排除，以後匯入不會再帶回來
+   *     （「管理已排除的公司」可以放回）
+   */
+  function pruneUnscheduled() {
+    const views = allViews();
+    const unscheduled = views.filter((v) => !v.nextDate && !v.remindAt);
+    const dealing = unscheduled.filter((v) => v.dealingKind === 'active' || (v.dealing && v.dealing.ended));
+    const rest = unscheduled.filter((v) => !dealing.includes(v));
+    const blocked = rest.filter((v) => v.blocked);
+    const del = rest.filter((v) => !v.blocked);
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: '整理未排定的名單' }));
+    if (!unscheduled.length) {
+      host.append(el('p', { className: 'muted', textContent: '目前每一家都有下次聯絡日或回撥時間，沒有要整理的。' }));
+      $('#editor').hidden = false;
+      return;
+    }
+    const dateIn = el('input', { type: 'date', value: '2027-04-16', id: 'pruneDate' });
+    host.append(el('p', { className: 'muted', textContent: `沒有下次聯絡日、也沒約回撥時間的有 ${unscheduled.length} 家：` }));
+    const ul = el('ul', { className: 'prune-list' });
+    ul.append(el('li', {}, [`有跟中租往來的 ${dealing.length} 家（往來中 ${dealing.filter((v) => v.dealingKind === 'active').length}、以前往來過 ${dealing.filter((v) => v.dealingKind !== 'active').length}）：留著，下次聯絡日設成 `, dateIn, '（假日會往後推）']));
+    ul.append(el('li', { textContent: `禁止推廣的 ${blocked.length} 家：留著不動` }));
+    ul.append(el('li', { textContent: `其餘 ${del.length} 家：刪掉。會先下載一份備份；刪掉的公司會記排除，以後匯入不會再帶回來（「管理已排除的公司」可以放回）` }));
+    host.append(ul);
+    if (del.length) host.append(el('p', { className: 'muted', textContent: `要刪的例如：${del.slice(0, 12).map((v) => v.company).join('、')}${del.length > 12 ? `　…共 ${del.length} 家` : ''}` }));
+    const go = el('button', { className: 'btn btn-primary danger', type: 'button', id: 'pruneGo', textContent: `開始整理（刪 ${del.length} 家、改日期 ${dealing.length} 家）` });
+    const cancel = el('button', { className: 'btn', type: 'button', textContent: '取消' });
+    cancel.onclick = () => { $('#editor').hidden = true; };
+    go.onclick = async () => {
+      const want = /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value) ? dateIn.value : '2027-04-16';
+      const target = window.Holidays ? window.Holidays.nextWorkday(want).iso : want;
+      const ok = await askConfirm(`確定要刪掉 ${del.length} 家、把 ${dealing.length} 家有往來的下次聯絡日設成 ${dateLabel(target)}？\n\n刪掉的通話紀錄與編輯內容會一起消失，並會同步到其他裝置。備份會先下載。`, { danger: true, okText: '確定整理' });
+      if (!ok) return;
+      go.disabled = true; go.textContent = '整理中…';
+      try {
+        if (del.length) download(`電話推廣名單備份_整理前_${todayISO()}.json`, JSON.stringify(await window.Store.exportAll()), 'application/json');
+        let deleted = 0;
+        for (const v of del) { await window.Store.deleteRecord(v.id); deleted += 1; }
+        let dated = 0;
+        for (const v of dealing) { await saveState(v.id, { nextDate: target }); dated += 1; }
+        await reload();
+        closeOverlays();
+        render();
+        scheduleSync();
+        toast(`刪了 ${deleted} 家，${dated} 家有往來的排到 ${dateLabel(target)}`);
+      } catch (err) {
+        console.error('整理未排定名單失敗', err);
+        go.disabled = false; go.textContent = '再試一次';
+        toast(`整理到一半失敗：${err && err.message ? err.message : err}`);
+        await reload(); render();
+      }
+    };
+    host.append(el('div', { className: 'card-actions' }, [go, cancel]));
+    $('#editor').hidden = false;
+  }
+
   /** 選單的「每天打得完幾家」：看未來每個上班日各有幾家，順便照上限重排。 */
   function openDayLoad() {
     const HORIZON = 20;
@@ -2667,6 +2751,7 @@
     taxKind: (r) => r.taxKind,
     phoneKind: (r) => r.phoneKind,
     regChange: (r) => r.regKinds,   // 一家可能屬多類
+    chattel: (r) => r.chattelKinds,
     branch: (r) => r.branchKey,
     added: (r) => r.addedBucket,
   };
@@ -2915,6 +3000,10 @@
     const regCounts = new Map(REG_KIND_ORDER.map((k) => [k, 0]));
     all.forEach((r) => { r.regKinds.forEach((k) => regCounts.set(k, (regCounts.get(k) || 0) + 1)); });
     chips($('#fltRegChange'), 'regChange', REG_KIND_ORDER.map((k) => [k, regCounts.get(k)]), state.filters.regChange, (v) => REG_KIND_LABEL[v]);
+    // 動產擔保（同業）：固定順序含 0 筆；3 個月內的也算在 12 個月內、有登記裡
+    const chCounts = new Map(CHATTEL_ORDER.map((k) => [k, 0]));
+    all.forEach((r) => { r.chattelKinds.forEach((k) => chCounts.set(k, (chCounts.get(k) || 0) + 1)); });
+    chips($('#fltChattel'), 'chattel', CHATTEL_ORDER.map((k) => [k, chCounts.get(k)]), state.filters.chattel, (v) => CHATTEL_LABEL[v]);
 
     // 歸屬分公司：下拉選單，依筆數排，自己分公司的通常最多、排最前面
     {
@@ -3075,6 +3164,7 @@
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: '禁止推廣' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
+      r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean));
@@ -3086,6 +3176,7 @@
       (r.keyman || r.owner) && `👤 ${r.keyman || r.owner}`,
       (r.city || r.address) && `📍 ${r.city}${r.district}`,
       r.capital && `💰 ${r.capital} 仟元`,
+      r.chattelNext && `🏦 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${window.Chattel.typeShort(r.chattelNext.type)} ${chattelMoney(r.chattelNext.amount)}・${r.chattelNext.days === 0 ? '今天到期' : `還有 ${r.chattelNext.days} 天`}${r.chattel.length > 1 ? `（共 ${r.chattel.length} 件）` : ''}`,
       r.nextDate && `📅 下次 ${dateLabel(r.nextDate)}${bucket === 'overdue' ? `（逾期 ${-dayDiff(r.nextDate)} 天）` : ''}`,
       r.lastDate && `🕘 最近 ${dateLabel(r.lastDate)}`,
       `📄 ${r.source.replace(/\.pdf$/i, '')}`,
@@ -3125,7 +3216,8 @@
     const filterKey = Object.entries(state.filters)
       .map(([name, value]) => `${name}:${value instanceof Set ? [...value].sort().join(',') : value}`)
       .join('|');
-    const key = [dataVersion, state.tab, state.search, state.sort,
+    // chattelVersion 也算進去：動保清冊是開站後才載好的，載好了卡片要重畫才標得出「跟誰借錢、什麼時候到期」
+    const key = [dataVersion, chattelVersion, state.tab, state.search, state.sort,
       state.limit, state.hideBlocked, filterKey].join('|');
     if (listKey === key) return;
     listKey = key;
@@ -3242,6 +3334,7 @@
       if (last !== null && last >= 90 && r.outcome !== 'new') add(8, `${Math.round(last / 30)} 個月沒聯絡`);
     }
     if (r.visitKind === 'no' && r.chance === 'yes') add(8, '有機會但還沒拜訪', PICK_QUIET);
+    if (r.chattelNext && r.chattelNext.days <= 92) add(15, `同業動保契約 ${r.chattelNext.days} 天內到期`);
     if (r.keyman && r.keymanFrom && r.keymanFrom !== 'owner') add(5, '知道 KEYMAN', PICK_QUIET);
     if (r.groupSize > 1) add(4, `同老闆 ${r.groupSize} 家`, PICK_QUIET);
     // 打不到、不能做的往後排
@@ -3568,6 +3661,29 @@
     };
     addrRow('登記地址', r.addressRegistered);
     addrRow('實際地址', r.addressActual);
+    // 動產擔保（同業）：這家現在跟誰借錢、什麼時候到期
+    {
+      dl.append(el('dt', { textContent: '動產擔保' }));
+      const dd = el('dd', { className: 'detail-chattel' });
+      if (r.chattel && r.chattel.length) {
+        const ol = el('ol', { className: 'reg-history' });
+        r.chattel.forEach((c) => {
+          const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天，未註銷` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天到期`;
+          const li = el('li', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '' }, [
+            el('b', { textContent: `${c.lender.name || '不明'}　${window.Chattel.typeShort(c.type)}　${chattelMoney(c.amount)}` }),
+            el('div', { className: 'muted', textContent: `契約 ${c.start || '？'} → ${c.end || '？'}${when ? `（${when}）` : ''}` }),
+            c.addr ? el('div', { className: 'muted', textContent: `標的物所在地 ${c.addr}${c.items ? `，${c.items} 件` : ''}` }) : '',
+            c.no ? el('div', { className: 'muted', textContent: `登記 ${c.no}` }) : '',
+          ]);
+          ol.append(li);
+        });
+        dd.append(ol);
+        dd.append(el('div', { className: 'muted', textContent: '新北市動產擔保登記清冊（每月更新）裡登記的案件；快到期的就是換約時機。' }));
+      } else {
+        dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有這家（只有在新北市登記的動產抵押、附條件買賣）' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
+      }
+      dl.append(dd);
+    }
     // 變更登記：查核結果與異動明細
     {
       dl.append(el('dt', { textContent: '變更登記' }));
@@ -6615,6 +6731,7 @@ export default {
       if (act === 'check-update') { await checkForUpdate(true); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
+      if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
       if (act === 'feed-more') { await dailyFeed({ more: true }); render(); return; }
       if (act === 'spread-undo') { await undoSpread(); return; }
       if (act === 'manage') {
@@ -6769,6 +6886,10 @@ export default {
       toast(`有個動作沒完成：${String(why).slice(0, 60)}。請重新整理再試一次。`);
     });
     prebuildRules();
+    // 動保清冊：載好之後每家客戶的卡片才標得出「跟誰借錢、什麼時候到期」；抓不到就當沒有
+    if (window.Chattel && window.Chattel.ensureData) {
+      window.Chattel.ensureData().then(() => { chattelVersion += 1; render(); }).catch(() => {});
+    }
     checkForUpdate(false);
     dropOldDossierDb();
     // 查核欄位改版了：把「今天已經跑過」的記號清掉，馬上重查一次補上新欄位
