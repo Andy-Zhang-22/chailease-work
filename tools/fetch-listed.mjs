@@ -189,6 +189,7 @@ async function regOf(taxId, name) {
   }
   dirty += 1;
   if (dirty >= 200) await saveCache();
+  await nap(300);   // 真的有查才等（快取命中不等，不然每天光等就十幾分鐘）
   return cache.reg[taxId];
 }
 
@@ -244,7 +245,6 @@ async function main() {
     if (stopped) break;
     const d = await regOf(c.taxId, c.name);
     if (d && !d.missing && d.address) { c.address = d.address; addrDone += 1; }
-    await nap(300);
   }
   console.log(`補中文地址（上櫃、興櫃，以及上市地址沒寫區的）：這次查了 ${addrDone} 家`);
 
@@ -272,7 +272,6 @@ async function main() {
         if (d && !d.missing) {
           item.address = d.address || ''; item.capital = d.capital || ''; item.founded = d.founded || ''; item.owner = d.owner || '';
           item.sameSpot = mine.some((c) => sameSpot(c.address, d.address));
-          await nap(300);
         }
       }
       out.push(item);
