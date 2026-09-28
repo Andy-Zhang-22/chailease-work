@@ -14,10 +14,12 @@
  *   上櫃、興櫃的中文地址與投資公司的資料，拿統編查商工登記（Registry，跟主站同一套）。
  *
  * 產出 leads/listed/：
+ *   （每天由 daily-listed.yml 跑；重大訊息與營收在 fetch-listed-daily.mjs）
  *   companies.csv  每家上市櫃公司一列（市場別、代號、名稱、統編、產業、地址、董事長、總經理、電話、成立、上市櫃日、實收資本額、網址、名下投資公司數）
  *   owners.json    董事長姓名 → 名下其他公司 [{ 統編、名稱、是否投資公司、地址、資本額（仟元）、設立日期、是否與上市公司同址 }]
  *   cache.json     查過的東西（負責人查詢、商工登記），下個月只查新的
- *   index.json     抓取時間、各市場家數、查了幾位董事長、找到幾家投資公司
+ *   changes.json   基本資料跟前一天比的異動（董事長、總經理、資本額、名稱、地址換了；新掛牌、下市櫃），留 180 天
+ *   index.json     抓取時間、各市場家數、查了幾位董事長、找到幾家投資公司（動態那兩個檔的 dailyAt 由 fetch-listed-daily.mjs 記）
  *
  * 只能在 GitHub Actions 跑（開發環境連不上這些網站）。負責人查詢與商工登記一家一家查，
  * 有 --minutes 的時間預算，到了就存檔收工，workflow 看到還有剩會自己再排一輪。
@@ -64,6 +66,54 @@ const ymd = (s) => { const t = String(s || '').trim(); return /^\d{8}$/.test(t) 
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim().replace(/^－\s*$/, '');
 const csvCell = (v) => { const t = String(v == null ? '' : v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 const toCsv = (rows) => `﻿${rows.map((r) => r.map(csvCell).join(',')).join('\n')}\n`;
+/** 最簡單的 CSV 讀回來（自己寫的檔，只有引號跟逗號要處理） */
+function parseCsv(text) {
+  const rows = []; let row = []; let cell = ''; let q = false;
+  const t = String(text || '').replace(/^﻿/, '');
+  for (let i = 0; i < t.length; i += 1) {
+    const ch = t[i];
+    if (q) { if (ch === '"') { if (t[i + 1] === '"') { cell += '"'; i += 1; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i += 1; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c !== ''));
+}
+
+/**
+ * 基本資料跟前一天比：董事長、總經理、實收資本額、公司名稱、地址、市場別換了，或新掛牌、下市櫃。
+ * 使用者要的是「每天及時更新動態」，這些就是基本資料面的動態；每一筆 { d, code, name, market, field, from, to }。
+ * 地址只在兩邊都是中文地址時比（上櫃、興櫃的英文地址等商工登記補，補到之前不算異動）。
+ */
+const DIFF_FIELDS = ['董事長', '總經理', '實收資本額', '公司名稱', '住址', '市場別'];
+function diffCompanies(oldRows, newRows, today) {
+  const byCode = (rows) => { const m = new Map(); (rows || []).forEach((r) => { if (r['公司代號']) m.set(r['公司代號'], r); }); return m; };
+  const before = byCode(oldRows); const after = byCode(newRows);
+  const out = [];
+  const zh = (a) => /[\u4e00-\u9fff]/.test(String(a || ''));
+  after.forEach((n, code) => {
+    const o = before.get(code);
+    if (!o) { if (before.size) out.push({ d: today, code, name: n['公司名稱'] || '', market: n['市場別'] || '', field: '新掛牌', from: '', to: n['市場別'] || '' }); return; }
+    DIFF_FIELDS.forEach((f) => {
+      const a = clean(o[f]); const b = clean(n[f]);
+      if (a === b || !a || !b) return;
+      if (f === '住址' && !(zh(a) && zh(b))) return;
+      out.push({ d: today, code, name: n['公司名稱'] || '', market: n['市場別'] || '', field: f, from: a, to: b });
+    });
+  });
+  before.forEach((o, code) => { if (!after.has(code)) out.push({ d: today, code, name: o['公司名稱'] || '', market: o['市場別'] || '', field: '下市櫃', from: o['市場別'] || '', to: '' }); });
+  return out;
+}
+/** 併進累積的異動：同一天同公司同欄位只留一筆，留最近 keepDays 天，新的在前 */
+function mergeChanges(existing, fresh, today, keepDays) {
+  const cutoff = new Date(`${today}T00:00:00Z`); cutoff.setUTCDate(cutoff.getUTCDate() - keepDays);
+  const floor = cutoff.toISOString().slice(0, 10);
+  const map = new Map();
+  [...(existing || []), ...fresh].forEach((c) => { if (c && c.d >= floor) map.set(`${c.d}|${c.code}|${c.field}`, c); });
+  return [...map.values()].sort((a, b) => b.d.localeCompare(a.d) || a.code.localeCompare(b.code));
+}
 
 async function getJson(url) {
   const res = await fetchLikeBrowser(url, { headers: { Accept: 'application/json' } });
@@ -241,15 +291,33 @@ async function main() {
   if (PROBE) { console.log('（--probe，不寫檔）'); return; }
 
   await fs.mkdir(OUT, { recursive: true });
+  // 跟前一天的 companies.csv 比，基本資料的異動記進 changes.json（留 180 天）
+  let oldRows = [];
+  try {
+    const table = parseCsv(await fs.readFile(path.join(OUT, 'companies.csv'), 'utf8'));
+    const head = table[0] || [];
+    oldRows = table.slice(1).map((cells) => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ''; }); return o; });
+  } catch (e) { console.log('還沒有前一次的 companies.csv，這次不比異動'); }
   const rows = [HEAD, ...companies.map((c) => [c.market, c.code, c.name, c.abbr, c.taxId, INDUSTRY[c.industryCode] || c.industryCode, c.address || c.addressEn, c.chairman, c.gm, c.phone, c.founded, c.listed, c.capital, c.web, countInvest(c.chairman), countOther(c.chairman)])];
   await fs.writeFile(path.join(OUT, 'companies.csv'), toCsv(rows), 'utf8');
   await fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(owners)}\n`, 'utf8');
+  const newRows = rows.slice(1).map((cells) => { const o = {}; HEAD.forEach((h, i) => { o[h] = cells[i] == null ? '' : String(cells[i]); }); return o; });
+  const freshChanges = diffCompanies(oldRows, newRows, today);
+  let oldChanges = [];
+  try { oldChanges = JSON.parse(await fs.readFile(path.join(OUT, 'changes.json'), 'utf8')).items || []; } catch (e) { /* 第一次 */ }
+  const changes = mergeChanges(oldChanges, freshChanges, today, 180);
+  await fs.writeFile(path.join(OUT, 'changes.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), items: changes })}\n`, 'utf8');
+  console.log(`基本資料異動：今天 ${freshChanges.length} 筆${freshChanges.length ? `（${freshChanges.slice(0, 5).map((c) => `${c.name} ${c.field}`).join('、')}${freshChanges.length > 5 ? '…' : ''}）` : ''}，changes.json 共 ${changes.length} 筆`);
   const generatedAt = new Date().toISOString();
+  let prevIndex = {};
+  try { prevIndex = JSON.parse(await fs.readFile(path.join(OUT, 'index.json'), 'utf8')); } catch (e) { /* 第一次 */ }
   const index = {
+    ...(prevIndex.dailyAt ? { dailyAt: prevIndex.dailyAt, newsAt: prevIndex.newsAt || '', newsCount: prevIndex.newsCount || 0, revenueYm: prevIndex.revenueYm || '' } : {}),
     generatedAt, total: companies.length,
     markets: Object.fromEntries(SOURCES.map((s) => [s.market, companies.filter((c) => c.market === s.market).length])),
     chairmen: names.length, chairmenLeft: ownersLeft, withInvest, investCompanies: totalInvest,
-    files: [{ path: 'companies.csv', rows: companies.length }, { path: 'owners.json' }],
+    files: [{ path: 'companies.csv', rows: companies.length }, { path: 'owners.json' }, { path: 'changes.json', rows: changes.length },
+      ...(prevIndex.files || []).filter((f) => /^(news|revenue)\.json$/.test(f.path))],
   };
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
   console.log(`寫入 companies.csv（${companies.length} 家）、owners.json（${Object.keys(owners).length} 位董事長）`);
@@ -259,7 +327,7 @@ async function main() {
   console.log(stopped ? `\n沒查完：${stopped}，下次接著查。` : '\n完成');
 }
 
-export { normalize, sameSpot, INDUSTRY, INVEST_RE, HEAD };
+export { normalize, sameSpot, INDUSTRY, INVEST_RE, HEAD, parseCsv, diffCompanies, mergeChanges };
 if (process.argv[1] && /fetch-listed\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
 }
