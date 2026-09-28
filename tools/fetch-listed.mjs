@@ -104,7 +104,10 @@ function sameSpot(a, b) {
 /* ---------------- 快取 ---------------- */
 const CACHE = path.join(OUT, 'cache.json');
 let cache = { reg: {}, owners: {} };
-try { cache = { reg: {}, owners: {}, ...JSON.parse(await fs.readFile(CACHE, 'utf8')) }; } catch (e) { console.log('還沒有 cache.json，這次從頭建'); }
+// 在 main() 裡才讀：測試會 import 這支檔案拿純函式，import 時不要碰檔案、不要印東西
+async function loadCache() {
+  try { cache = { reg: {}, owners: {}, ...JSON.parse(await fs.readFile(CACHE, 'utf8')) }; } catch (e) { console.log('還沒有 cache.json，這次從頭建'); }
+}
 let dirty = 0;
 const saveCache = async () => { await fs.mkdir(OUT, { recursive: true }); await fs.writeFile(CACHE, `${JSON.stringify(cache)}\n`, 'utf8'); dirty = 0; };
 const today = new Date().toISOString().slice(0, 10);
@@ -169,6 +172,7 @@ async function companiesOf(personName) {
 
 /* ---------------- 主流程 ---------------- */
 async function main() {
+  await loadCache();
   const companies = [];
   for (const src of SOURCES) {
     const rows = await getJson(src.url);
