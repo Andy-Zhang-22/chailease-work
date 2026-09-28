@@ -1,0 +1,57 @@
+# 每月抓一次上市／上櫃／興櫃公司基本資料，並查董事長名下的其他公司（找投資公司），
+# 存進 leads/listed/，網站的「上市櫃公司」分頁讀這裡。
+#
+# 為什麼在 GitHub Actions：開發環境連不上這些網站，政府網站也沒有 CORS；只有 Actions 出得去。
+# 負責人查詢與商工登記一家一家查，時間到會自己再排一輪接著查（跟成立年同一套）。
+name: 每月上市櫃公司
+
+on:
+  schedule:
+    - cron: '0 2 12 * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: '最多跑幾分鐘（查不完會自己再排一輪）'
+        required: false
+        default: '280'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 抓上市櫃公司與董事長名下公司
+        id: listed
+        env:
+          MINUTES: ${{ inputs.minutes || '280' }}
+        run: |
+          node tools/fetch-listed.mjs --minutes "$MINUTES" | tee fetch-listed.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-listed.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/listed
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "上市櫃公司與董事長名下公司：$(date -u +%Y-%m-%d)"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: 還沒查完，再排一輪
+        if: steps.listed.outputs.timeout == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINUTES: ${{ inputs.minutes || '280' }}
+        run: |
+          echo "還剩 ${{ steps.listed.outputs.remaining }} 位董事長，再排一輪"
+          gh workflow run monthly-listed.yml --ref "$GITHUB_REF_NAME" -f minutes="$MINUTES"
