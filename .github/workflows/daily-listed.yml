@@ -1,0 +1,77 @@
+# 每天抓上市／上櫃／興櫃公司：基本資料（跟前一天比出董事長、資本額、地址等異動）、董事長名下的
+# 其他公司（有快取，只查新的與過期的）、每日重大訊息、每月營收，存進 leads/listed/，
+# 網站的「上市櫃公司」分頁讀這裡。
+#
+# 使用者：「我想要的效果是這些上市櫃名單每天都能及時更新他的動態面資訊」。
+# 重大訊息的 API 每次只給昨天發的，所以一定要天天抓、自己累積。
+# 為什麼在 GitHub Actions：開發環境連不上這些網站，政府網站也沒有 CORS；只有 Actions 出得去。
+# 負責人查詢與商工登記一家一家查，時間到會自己再排一輪接著查（跟成立年同一套）。
+name: 每日上市櫃公司
+
+on:
+  schedule:
+    - cron: '30 22 * * *'   # 台灣 06:30，重大訊息是前一天整天的
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: '基本資料與董事長名下公司最多查幾分鐘（查不完會自己再排一輪）'
+        required: false
+        default: '40'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: daily-listed-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 基本資料、異動、董事長名下公司
+        id: listed
+        continue-on-error: true
+        env:
+          MINUTES: ${{ inputs.minutes || '40' }}
+        run: |
+          node tools/fetch-listed.mjs --minutes "$MINUTES" | tee fetch-listed.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-listed.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 重大訊息、每月營收
+        id: daily
+        run: |
+          node tools/fetch-listed-daily.mjs | tee fetch-listed-daily.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-listed-daily.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/listed
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "上市櫃公司每日動態：$(date -u +%Y-%m-%d)"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: 基本資料那一步失敗就讓這次顯示失敗
+        if: steps.listed.outcome == 'failure'
+        run: |
+          echo "fetch-listed.mjs 失敗（重大訊息與營收已經存了）"
+          exit 1
+
+      - name: 還沒查完，再排一輪
+        if: steps.listed.outputs.timeout == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINUTES: ${{ inputs.minutes || '40' }}
+        run: |
+          echo "還剩 ${{ steps.listed.outputs.remaining }} 位董事長，再排一輪"
+          gh workflow run daily-listed.yml --ref "$GITHUB_REF_NAME" -f minutes="$MINUTES"

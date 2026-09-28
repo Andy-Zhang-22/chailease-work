@@ -934,3 +934,23 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .owner-note { font-size: 12px; margin: 4px 0 2px; }
 /* 手機：五個分頁要塞得下，間距縮小，「新公司」不會被擠到看不見 */
 @media (max-width: 520px) { .tab { padding: 8px 8px; font-size: 14px; } .tabs { padding-left: 8px; gap: 0; } .pill { margin-right: 0; padding: 0 5px; } }
+
+/* 上市櫃公司：卡片上的「動態」（營收、基本資料異動、重大訊息） */
+.badge-dyn { color: var(--warn, #b45309); border-color: color-mix(in srgb, var(--warn, #b45309) 50%, var(--border)); }
+.dyn-box { margin-top: 8px; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 10px; font-size: 12.5px; display: grid; gap: 4px; }
+.dyn-head { font-weight: 600; font-size: 12px; color: var(--muted); }
+.dyn-line { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.dyn-pct.is-up { color: var(--ok); font-weight: 600; }
+.dyn-pct.is-down { color: var(--danger, #b91c1c); font-weight: 600; }
+.dyn-change { color: var(--primary); }
+.dyn-news { display: grid; gap: 3px; }
+.dyn-item { display: grid; grid-template-columns: 3em auto 1fr; gap: 6px; align-items: baseline; }
+.dyn-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.dyn-subj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dyn-item .tag { font-size: 11px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.dyn-item .tag-asset { color: var(--ok); border-color: var(--ok); }
+.dyn-item .tag-fund { color: var(--primary); border-color: var(--primary); }
+.dyn-item .tag-people { color: var(--warn, #b45309); border-color: var(--warn, #b45309); }
+.dyn-item .tag-deal { color: #7c3aed; border-color: #7c3aed; }
+.dyn-more { justify-self: start; margin-top: 2px; }
+@media (max-width: 760px) { .dyn-subj { white-space: normal; } .dyn-item { grid-template-columns: 3em auto; } .dyn-item .dyn-subj { grid-column: 1 / -1; } }

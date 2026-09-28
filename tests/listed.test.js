@@ -61,3 +61,64 @@ test('加入客戶名單：加的是投資公司，備註寫清楚是哪個上�
   assert.equal(rec.owner, '張安平'); assert.equal(rec.industry, '投資控股'); assert.equal(rec.nextDate, '2026-10-06'); assert.equal(rec.lastDate, null);
   assert.equal(w.Normalize.isGovRegistry(rows), false);
 });
+
+test('每日動態：重大訊息主旨分類、掛到公司上、篩選鍵與最新動態日', () => {
+  assert.equal(L.newsKind('公告本公司董事會決議取得不動產暨興建廠房'), 'asset');
+  assert.equal(L.newsKind('代子公司公告取得機器設備'), 'asset');
+  assert.equal(L.newsKind('公告本公司董事會決議辦理現金增資發行新股'), 'fund');
+  assert.equal(L.newsKind('公告本公司資金貸與他人'), 'fund');
+  assert.equal(L.newsKind('公告本公司取得子公司股權'), 'deal');
+  assert.equal(L.newsKind('公告本公司處分股票'), 'deal');
+  assert.equal(L.newsKind('公告本公司董事長異動'), 'people');
+  assert.equal(L.newsKind('公告本公司代理發言人異動'), 'people');
+  assert.equal(L.newsKind('公告本公司名稱由「甲」更名為「乙」'), 'rename');
+  assert.equal(L.newsKind('公告本公司除息基準日'), 'meeting');
+  assert.equal(L.newsKind('公告本公司115年8月自結營收'), 'ops');
+  assert.equal(L.newsKind('公告本公司「全坤御峰」工地火災事件說明'), 'other');
+  const dyn = L.groupDyn(
+    { items: [
+      { m: '上市', code: '1101', d: '2026-09-27', t: '16:52', s: '公告本公司董事會決議取得不動產', c: '第20款' },
+      { m: '上市', code: '1101', d: '2026-08-01', t: '09:00', s: '公告本公司除息基準日', c: '' },
+      { m: '上市', code: '1101', d: '2026-07-01', t: '09:00', s: '很久以前的', c: '' },
+    ] },
+    { ym: '2026-08', by: { 1101: { code: '1101', ym: '2026-08', cur: 13515534, yoy: 25.3, mom: -1.7, cumPct: 2.7 } } },
+    { items: [{ d: '2026-09-20', code: '1101', name: '台泥', field: '董事長', from: '甲', to: '乙' }] });
+  const r = L.attachDyn(L.toRecord({ '市場別': '上市', '公司代號': '1101', '公司名稱': '臺灣水泥股份有限公司', '統一編號': '11913502', '實收資本額': '1' }, {}, TODAY), dyn, TODAY);
+  assert.equal(r.news.length, 3); assert.equal(r.news[0].kind, 'asset');
+  assert.equal(r.recentNews, 1, '近 30 天只有 9/27 那則');
+  assert.deepEqual([...r.dynKeys].sort(), ['asset', 'basic', 'news', 'rev-up']);
+  assert.equal(r.active, '2026-09-27');
+  assert.equal(r.rev.yoy, 25.3);
+  const none = L.attachDyn(L.toRecord({ '市場別': '上櫃', '公司代號': '9999', '公司名稱': '無', '實收資本額': '1' }, {}, TODAY), dyn, TODAY);
+  assert.equal(none.dynKeys.size, 0); assert.equal(none.active, ''); assert.equal(none.rev, null);
+});
+
+test('抓動態的腳本：民國日期、重大訊息與營收欄位對應、累積去重只留最近幾天', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-listed-daily.mjs'));
+  assert.equal(m.rocDate('1150927'), '2026-09-27'); assert.equal(m.rocYm('11508'), '2026-08'); assert.equal(m.hhmm('70004'), '07:00');
+  const zh = m.normNews({ '出表日期': '1150928', '發言日期': '1150927', '發言時間': '165242', '公司代號': '2509', '公司名稱': '全坤建', '主旨 ': '公告本公司「全坤御峰」工地\r\n火災事件說明', '符合條款': '第26款', '事實發生日': '1150926', '說明': '長長的說明' }, '上市');
+  assert.deepEqual(zh, { m: '上市', code: '2509', name: '全坤建', d: '2026-09-27', t: '16:52', s: '公告本公司「全坤御峰」工地 火災事件說明', c: '第26款', f: '2026-09-26' });
+  const en = m.normNews({ Date: '1150928', '發言日期': '1150927', '發言時間': '70004', SecuritiesCompanyCode: '4530', CompanyName: '天意能創', '主旨': '公告更名', '符合條款': '第53款', '事實發生日': '1150708' }, '上櫃');
+  assert.equal(en.code, '4530'); assert.equal(en.name, '天意能創'); assert.equal(en.t, '07:00');
+  assert.equal(m.normNews({ '公司代號': '', '發言日期': '1150927', '主旨': 'x' }, '上市'), null);
+  const merged = m.mergeNews([{ ...zh, d: '2026-07-01' }, zh], [zh, { ...zh, t: '17:00' }], '2026-09-28', 45);
+  assert.equal(merged.length, 2, '7/1 的過期丟掉、重複的只留一則'); assert.equal(merged[0].t, '17:00', '新的在前');
+  const rev = m.normRevenue({ '出表日期': '1150917', '資料年月': '11508', '公司代號': '1101', '營業收入-當月營收': '13515534', '營業收入-上月營收': '13744103', '營業收入-去年當月營收': '12214776', '營業收入-上月比較增減(%)': '-1.6630332295967223', '營業收入-去年同月增減(%)': '10.649053245020621', '累計營業收入-當月累計營收': '98726969', '累計營業收入-去年累計營收': '96131621', '累計營業收入-前期比較增減(%)': '2.699785952844798', '備註': '-' }, '上市');
+  assert.deepEqual(rev, { code: '1101', m: '上市', ym: '2026-08', cur: 13515534, prev: 13744103, ly: 12214776, mom: -1.7, yoy: 10.6, cum: 98726969, cumLy: 96131621, cumPct: 2.7 });
+  assert.equal(m.normRevenue({ '資料年月': '11508', '公司代號': '1', '營業收入-當月營收': '' }, '上市').cur, null);
+});
+
+test('基本資料跟前一天比：董事長換人、新掛牌、下市櫃；英文地址換中文不算異動', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-listed.mjs'));
+  const o = [{ '公司代號': '1101', '公司名稱': '台泥', '市場別': '上市', '董事長': '張安平', '總經理': '程耀輝', '實收資本額': '100', '住址': '台北市中山區中山北路2段113號' },
+    { '公司代號': '9999', '公司名稱': '走了', '市場別': '上櫃', '住址': '2F., No.30' }];
+  const n = [{ '公司代號': '1101', '公司名稱': '台泥', '市場別': '上市', '董事長': '王大明', '總經理': '程耀輝', '實收資本額': '100', '住址': '台北市中山區中山北路2段113號' },
+    { '公司代號': '1234', '公司名稱': '新的', '市場別': '興櫃' }];
+  const d = m.diffCompanies(o, n, '2026-09-28');
+  assert.deepEqual(d.map((c) => `${c.code} ${c.field} ${c.from}→${c.to}`), ['1101 董事長 張安平→王大明', '1234 新掛牌 →興櫃', '9999 下市櫃 上櫃→']);
+  assert.deepEqual(m.diffCompanies([], n, '2026-09-28'), [], '第一次沒有舊檔，不把全部當新掛牌');
+  assert.deepEqual(m.diffCompanies([{ '公司代號': '1', '公司名稱': 'a', '住址': 'No.1 Rd.' }], [{ '公司代號': '1', '公司名稱': 'a', '住址': '台北市中山區一路1號' }], '2026-09-28'), []);
+  const merged = m.mergeChanges([{ d: '2026-01-01', code: '1', field: '董事長', from: 'x', to: 'y' }, d[0]], [d[0]], '2026-09-28', 180);
+  assert.equal(merged.length, 1, '過期丟掉、同一天同公司同欄位只留一筆');
+  assert.deepEqual(m.parseCsv('﻿a,b\n1,"x,""y"\n'), [['a', 'b'], ['1', 'x,"y']]);
+});
