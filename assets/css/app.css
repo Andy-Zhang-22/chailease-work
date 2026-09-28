@@ -955,3 +955,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .dyn-item .tag-deal { color: #7c3aed; border-color: #7c3aed; }
 .dyn-more { justify-self: start; margin-top: 2px; }
 @media (max-width: 760px) { .dyn-subj { white-space: normal; } .dyn-item { grid-template-columns: 3em auto; } .dyn-item .dyn-subj { grid-column: 1 / -1; } }
+
+/* 後台商工登記更新的報告（設定視窗裡） */
+.registry-drive-report { margin: 6px 0 10px; font-size: 13px; }
+.registry-drive-report summary { cursor: pointer; color: var(--primary); }
+.registry-report-text { white-space: pre-wrap; font: inherit; font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow: auto; background: var(--surface-2); padding: 8px 10px; border-radius: 8px; margin: 6px 0 0; }

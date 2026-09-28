@@ -2618,7 +2618,10 @@ force＝補滿今天的額度（對話框的「現在挑」），more＝再補�
 **服務帳號**讀雲端硬碟裡的「電話推廣名單-同步資料.json」，逐筆用網站自己的 `registry.js` 查商工登記
 （跟瀏覽器裡一模一樣），比對 `REGISTRY_FIELDS` 那幾個欄位，然後：
 
-- **report 模式**（預設）：只把差異列在執行紀錄，不碰雲端硬碟。先跑幾天確認無誤。
+- 這個 repo 是公開的，Actions 的執行紀錄誰都看得到，所以紀錄裡只印筆數；差異的明細寫進同步檔的設定
+  `registry-drive-report`（會同步、進 localStorage，所以最多一萬多字），網站選單「從商工登記更新公司資料」
+  視窗裡有「後台更新的報告」可以展開看。
+- **report 模式**（預設）：只寫報告，客戶資料一個字都不動。先跑幾天確認無誤。
 - **write 模式**：差異寫成「編輯」（`edits`＋`editsAt`，詳細頁可還原）、記 `regAt`、變更登記歷程
   `regChanges` 往上加（`DriveSync.mergeRegChanges`）、`registry-auto-last` 設成今天（瀏覽器那條每日更新
   看到今天跑過就不重跑，等於後台沒跑時瀏覽器自動接手），用 `DriveSync.mergeDumps` 跟雲端最新版合併後
