@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-195';
+  const APP_VERSION = '20260929-196';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5165,6 +5165,26 @@ export default {
     if (key === 'founded') { const m = v.match(/(\d{4})/); return m ? m[1] : v; }
     return v;
   };
+  /** 「最近核准變更日期」→ 毫秒；接受 2026/09/17、2026-09-17、115/09/17，看不懂回 0 */
+  const regDateMs = (v) => {
+    const m = String(v || '').match(/(\d{2,4})[/\-.](\d{1,2})[/\-.](\d{1,2})/);
+    if (!m) return 0;
+    const y = +m[1] < 1911 ? +m[1] + 1911 : +m[1];
+    return Date.UTC(y, +m[2] - 1, +m[3]);
+  };
+  /*
+   * 查到的資料比名單上的舊，不能拿來蓋掉。
+   *
+   * 查詢有好幾個來源（官方統編、官方名稱、g0v 鏡像），鏡像常慢好幾個月：官方 9/17 核准
+   * 的新地址已經套上了，隔天官方連不上、鏡像回的是 1/21 那版舊地址，就把地址改回去，
+   * 再隔天官方又改回來——變更登記裡就出現 562 號 ⇄ 568 號來回三次。
+   * 核准變更日期是登記資料自己的版本號：查到的比名單上的舊，就是舊快照，整筆不套用。
+   */
+  const staleRegistry = (r, data) => {
+    const mine = regDateMs(listValue('regChanged', r));
+    const got = regDateMs(registryValue('regChanged', data));
+    return !!(mine && got && got < mine);
+  };
 
   // 這幾個設定要跟著雲端同步：在電腦上設定好，手機打開也要能用
   const SYNCED_PREFS = new Set(['registry-proxy-url', 'registry-dataset-url', 'registry-dataset-taxid-url',
@@ -5196,6 +5216,7 @@ export default {
     const diffs = [];
     const failures = [];
     const checked = [];   // 每一筆查成功的都在這裡，含沒差異的；變更登記的分類靠它
+    const stale = [];     // 查到了，但比名單上的舊（備援來源的舊快照），沒套用
     for (let i = 0; i < targets.length; i++) {
       if (isCancelled && isCancelled()) break;
       const { rec, r } = targets[i];
@@ -5204,7 +5225,13 @@ export default {
       // 統編查不齊（資料集只回一半）會自動再用名稱補，所以統編、名稱一起給
       const res = await window.Registry.lookupCompany({ taxId: r.taxId, name: r.company }, opts);
       if (!res.ok) { failures.push({ rec, company: r.company, reason: res.reason }); }
-      else {
+      else if (staleRegistry(r, res.data)) {
+        // 來源回的是舊快照：算查過了（記查核時間），但一個欄位都不動、也不記成變更
+        const item = { rec, r, changes: {}, stale: true };
+        checked.push(item);
+        stale.push(item);
+        if (onEach) await onEach({ ok: true, checked: item, diff: null });
+      } else {
         const changes = {};
         const all = {};
         REGISTRY_FIELDS.forEach(([key]) => {
@@ -5226,7 +5253,7 @@ export default {
       if (failures.length >= 8 && diffs.length === 0 && failures.length === i + 1) break;
       if (delay) await new Promise((done) => setTimeout(done, delay));
     }
-    return { diffs, failures, checked };
+    return { diffs, failures, checked, stale };
   }
 
   /**
@@ -5417,7 +5444,7 @@ export default {
     Object.assign(registryJob, { running: true, cancelled: false, done: 0, total: targets.length, company: '', updated: 0, result: null, auto: !!auto });
     renderRegistryBar();
     let wrote = 0;
-    const { diffs, failures, checked } = await registryBatch(targets, {
+    const { diffs, failures, checked, stale } = await registryBatch(targets, {
       useMirror,
       onProgress: (i, n, r) => { registryJob.done = i; registryJob.company = r.company; renderRegistryBar(); },
       isCancelled: () => registryJob.cancelled,
@@ -5438,7 +5465,7 @@ export default {
     registryJob.running = false;
     registryJob.result = {
       at: Date.now(), stopped: registryJob.cancelled, sourceDown,
-      checkedCount: checked.length, updated: diffs.length, failed: failures.length,
+      checkedCount: checked.length, updated: diffs.length, failed: failures.length, stale: stale.length,
       diffs: diffs.slice(0, 20), diffTotal: diffs.length, reason: failures.length ? failures[0].reason : '',
     };
     renderRegistryBar();
@@ -5467,7 +5494,7 @@ export default {
       return;
     }
     note(`上次更新（${r.stopped ? '中途停止' : '已完成'}）：查了 ${r.checkedCount} 筆，`
-      + `${r.updated} 筆跟登記不一致、已直接更新，${r.failed} 筆查不到或失敗。`, 'rule-verdict is-ok');
+      + `${r.updated} 筆跟登記不一致、已直接更新，${r.failed} 筆查不到或失敗${r.stale ? `，${r.stale} 筆查到的比名單上的舊（備援來源的舊資料）沒套用` : ''}。`, 'rule-verdict is-ok');
     if (!r.diffTotal) { note('登記資料跟名單一致，沒有要更新的。'); return; }
     r.diffs.forEach((d) => {
       const dl = el('dl');

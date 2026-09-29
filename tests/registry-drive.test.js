@@ -57,3 +57,16 @@ test('報告：筆數在第一行，明細列公司與欄位前後值，太長�
   const big = m.buildReport({ mode: 'write', today: '2026-09-29', results: [], diffs: Array.from({ length: 400 }, (_, i) => ({ company: `公司${i}`, view: {}, changes: { address: { from: '舊地址'.repeat(5), to: '新地址'.repeat(5) } } })), failed: [], missing: [], seconds: 1 });
   assert.ok(big.length <= 12100 && /太長，後面略/.test(big));
 });
+
+test('防呆：查到的核准變更日期比名單上的舊（鏡像的舊快照），整筆不套用', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'registry-drive.mjs'));
+  assert.equal(m.regDateMs('2026/09/17'), Date.UTC(2026, 8, 17)); assert.equal(m.regDateMs('115/09/17'), Date.UTC(2026, 8, 17)); assert.equal(m.regDateMs(''), 0);
+  const r = { company: '甲', address: '新北市新莊區富貴路568號6樓', regChanged: '2026/09/17' };
+  const old = { address: '新北市新莊區富貴路562號6樓', regChanged: '2026/01/21' };
+  assert.equal(m.staleRegistry(r, old), true);
+  assert.deepEqual(m.diffFields(r, old), {}, '舊快照一個欄位都不動');
+  const newer = { address: '新北市新莊區富貴路570號', regChanged: '2026/10/01' };
+  assert.equal(m.staleRegistry(r, newer), false);
+  assert.deepEqual(Object.keys(m.diffFields(r, newer)).sort(), ['address', 'regChanged']);
+  assert.equal(m.staleRegistry({ company: '沒查過' }, old), false, '名單上沒有日期就沒得比，照常套用');
+});
