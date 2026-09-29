@@ -39,3 +39,12 @@ test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、
   assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /商行／企業社（稅籍登記）：獨資，資本額 100 萬，設立 2022-04-13/);
   assert.equal(w.Normalize.parseNotes(B.noteFor(r)).length, 1, '備註裡的日期用 - 不會被當成通話');
 });
+
+test('抓資料腳本：有限合夥、財團法人、寺廟、管委會不算商行', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-biz.mjs'));
+  const mk = (name, org) => m.parseLine(`"新北市新莊區x路1號",12345678,,"${name}",1000000,1040413,${org},Y,1,a,,,,,,`);
+  assert.equal(m.normalize(mk('奇跡資本有限合夥', '有限合夥'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.equal(m.normalize(mk('財團法人下文山清水祖師', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.equal(m.normalize(mk('某某大廈管理委員會', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.ok(m.normalize(mk('躍祥精密工業社', '獨資'), { cities: ['新北市'], minCapital: 0 }));
+});

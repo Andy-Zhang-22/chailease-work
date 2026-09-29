@@ -68,7 +68,9 @@ function normalize(cells, { cities = CITIES, minCapital = MIN_CAPITAL } = {}) {
   const [addrRaw, taxId, headOffice, name, capRaw, setup, org, invoice, code1, ind1, , ind2, , ind3] = cells;
   const tax = String(taxId || '').replace(/\D/g, '');
   if (tax.length !== 8 || !name) return null;
-  if (!/獨資|合夥/.test(org || '')) return null;
+  if (!/^(獨資|合夥)$/.test(String(org || '').trim())) return null;   // 有限合夥是公司那一類，不算
+  // 稅籍上組織別填獨資的財團法人、寺廟、教會、公寓大廈管委會不是要打的對象
+  if (/財團法人|社團法人|寺$|宮$|廟|教會|堂$|管理委員會|管委會|基金會|協會|公會|工會|學會|事務所$/.test(String(name || ''))) return null;
   if (String(headOffice || '').replace(/\D/g, '')) return null;   // 分公司
   const addr = halfWidth(addrRaw);
   if (cities.length && !cities.some((c) => addr.startsWith(c) || addr.startsWith(c.replace(/^臺/, '台')) || addr.startsWith(c.replace(/^台/, '臺')))) return null;
