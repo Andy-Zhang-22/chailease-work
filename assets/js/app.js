@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-205';
+  const APP_VERSION = '20260929-206';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -420,7 +420,7 @@
         ? `今天的新名單 ${fresh.length} 家${done ? `，處理了 ${done} 家` : ''}${done >= fresh.length ? '，都打完了' : ''}`
         : '今天還沒有新名單';
     const more = el('button', { className: 'btn btn-tiny btn-primary', id: 'feedMore', type: 'button', textContent: `再補 ${quota} 家`,
-      title: '照優先順序從登記清冊、動產擔保再挑一批進名單，排在今天' });
+      title: '照優先順序從登記清冊、動產擔保、商行／企業社再挑一批進名單，排在今天' });
     more.onclick = async () => { more.disabled = true; more.textContent = '挑選中…'; try { await dailyFeed({ more: true }); } finally { more.disabled = false; more.textContent = `再補 ${quota} 家`; render(); } };
     bar.append(el('span', { className: 'feed-text', textContent: text }), more);
     bar.hidden = false;
@@ -2324,9 +2324,10 @@
    * 使用者：「每日上限調整到 30 通、完全新的名單佔 10 通、主力名單佔 20 通」。
    * 上限是全部（30），其中留 10 個位子給「完全新的」——從新公司、動產擔保加進來、還沒打過的。
    * 每天早上自動從那兩頁挑 10 家補滿（dailyFeed）；手動加進來的也算在這 10 個位子裡。
+   * 後來加了商行／企業社那頁：「把這名單一樣向其他分頁一樣自動給我名單，調整為各 5 間，共 15 間」→ 三頁各 5，額度預設 15。
    */
   const DAILY_CAP_DEFAULT = 30;
-  const NEW_QUOTA_DEFAULT = 10;
+  const NEW_QUOTA_DEFAULT = 15;
   const dailyCap = () => {
     const n = Number(registryPref('daily-cap'));
     return Number.isFinite(n) && n > 0 ? Math.min(500, Math.round(n)) : DAILY_CAP_DEFAULT;
@@ -2337,8 +2338,8 @@
     const n = Number(raw);
     return Number.isFinite(n) && n >= 0 ? Math.min(dailyCap(), Math.round(n)) : Math.min(dailyCap(), NEW_QUOTA_DEFAULT);
   };
-  /** 「完全新的名單」：從新公司或動產擔保加進來、還沒打過。 */
-  const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|每日新名單)/;
+  /** 「完全新的名單」：從新公司、動產擔保或商行／企業社加進來、還沒打過。 */
+  const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|商行企業社|每日新名單)/;
   const isFreshLead = (v) => !v.lastDate && FRESH_SOURCE_RE.test(String(v.source || ''));
 
   /** 從今天起算的上班日（今天放假就從下一個上班日開始）。 */
@@ -2539,6 +2540,17 @@
    */
   let feeding = false;
   const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
+  /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
+  function splitEvenly(avail, need) {
+    const take = avail.map(() => 0);
+    let left = Math.max(0, need);
+    while (left > 0) {
+      let got = false;
+      for (let i = 0; i < avail.length && left > 0; i++) { if (take[i] < avail[i]) { take[i] += 1; left -= 1; got = true; } }
+      if (!got) break;
+    }
+    return take;
+  }
   /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
    * opts.more：再補一批（額度那麼多家），不管今天已經幾家——使用者：「當天我名單用完後，我會再要求你再補給我」。
@@ -2551,7 +2563,7 @@
     if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return;
     if (!force && !more && registryPref('daily-feed-on') === today) return;
     if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
-    if (!window.Chattel || !window.Leads) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
+    if (!window.Chattel || !window.Leads || !window.Biz) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
     /*
      * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
      * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
@@ -2574,9 +2586,10 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
-      const [chAll, leAll] = await Promise.all([
+      const [chAll, leAll, bzAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Biz.dailyCandidates().catch((e) => { console.error(e); return []; }),
       ]);
       /*
        * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
@@ -2595,16 +2608,17 @@
       };
       const ch = chAll.filter((r) => fresh(r.cust.name, r.cust.id));
       const le = leAll.filter((r) => fresh(r['公司名稱'], r['統一編號']));
-      // 兩頁各一半；一頁不夠另一頁補
-      let nc = Math.min(ch.length, Math.ceil(need / 2));
-      let nl = Math.min(le.length, need - nc);
-      nc = Math.min(ch.length, need - nl);
-      const pickC = ch.slice(0, nc);
-      const pickL = le.slice(0, nl);
-      if (!pickC.length && !pickL.length) { registryPref('daily-feed-on', today); if (force || more) toast('兩份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      const bz = bzAll.filter((r) => fresh(r.name, r.taxId));
+      // 三頁平分（15 家＝各 5）；一頁不夠另外兩頁補：輪流一家一家拿，拿到額度滿或都沒得拿
+      const take = splitEvenly([ch.length, le.length, bz.length], need);
+      const pickC = ch.slice(0, take[0]);
+      const pickL = le.slice(0, take[1]);
+      const pickB = bz.slice(0, take[2]);
+      if (!pickC.length && !pickL.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more) toast('三份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
       const parts = [];
       if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => day)));
       if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => day)));
+      if (pickB.length) parts.push(window.Biz.toStandardCsv(pickB, pickB.map(() => day)));
       // 兩份都是同一個標準表頭，接起來只留第一份的表頭
       const csv = parts.map((t, i) => (i ? t.replace(/^\uFEFF?[^\n]*\n/, '') : t)).join('');
       // 來源名稱一天一個；再補的另外取名——同名重匯是「更新」，會把早上那一批整批換掉
@@ -2613,7 +2627,7 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
-      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}`);
+      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
@@ -6824,6 +6838,7 @@ export default {
     window.openCustomer = (id) => openDetail(id);
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
+    window.splitEvenly = splitEvenly;   // 測試用
     window.importQuiet = (file) => importFiles([file]);
     $('#btnPick').onclick = () => $('#filePick').click();
     $('#filePick').onchange = (e) => {

@@ -261,8 +261,9 @@
 
   /* ---------------- 每日挑選（給 app.js 的每日新名單用） ---------------- */
 
-  const DAILY_PRIORITY = ['我的分公司', '設立 5 年內', '開發票', '資本額 100 萬以上'];
-  const dailyChecks = (r) => [r.branch.key === myBranch(), ageOf(r) === 'lt5', r.invoice, r.capital >= 1000000];
+  // 有商業登記排最前：只有稅籍登記的沒負責人、資本額是自填的，排最後補位
+  const DAILY_PRIORITY = ['有商業登記', '我的分公司', '設立 5 年內', '開發票', '資本額 100 萬以上'];
+  const dailyChecks = (r) => [!!r.reg, r.branch.key === myBranch(), ageOf(r) === 'lt5', r.invoice, r.capital >= 1000000];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) { if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1; }
     return b.capital - a.capital;
