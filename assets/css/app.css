@@ -444,6 +444,7 @@ button, input, select { font: inherit; color: inherit; }
 .remind-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px dashed var(--border); font-size: 13.5px; }
 .remind-time { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
 .remind-row.is-due .remind-time { color: var(--danger); }
+.remind-mates { margin-left: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .remind-row.is-today .remind-time { color: var(--primary); }
 .remind-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .remind-open { background: none; border: 0; padding: 0; color: var(--text); cursor: pointer; text-align: left; font: inherit; min-width: 0; }
