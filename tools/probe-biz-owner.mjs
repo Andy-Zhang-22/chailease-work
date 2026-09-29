@@ -1,40 +1,33 @@
-/** 探路第二輪：找有負責人姓名的「商業登記」整批開放資料（data.gov.tw、新北市政府開放資料）。看完連同 workflow 一起刪。 */
+/** 探路第三輪：哪裡有商業（商行、企業社）的負責人姓名整批資料。看完連同 workflow 一起刪。 */
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
-const get = async (url, init = {}) => { const r = await fetch(url, { ...init, headers: { 'User-Agent': UA, ...(init.headers || {}) }, signal: AbortSignal.timeout(90000), redirect: 'follow' }); return { status: r.status, type: r.headers.get('content-type'), len: r.headers.get('content-length'), text: init.method === 'HEAD' ? '' : await r.text() }; };
+const get = async (url, init = {}) => { const r = await fetch(url, { ...init, headers: { 'User-Agent': UA, ...(init.headers || {}) }, signal: AbortSignal.timeout(90000), redirect: 'follow' }); return { status: r.status, type: r.headers.get('content-type'), url: r.url, text: init.method === 'HEAD' ? '' : await r.text() }; };
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 const show = (t, s) => console.log(`\n=========== ${t} ===========\n${s}`);
+const strip = (h) => h.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
-// 1. data.gov.tw 搜尋：列出資料集編號與標題
-const seen = new Map();
-for (const q of ['商業登記', '商業登記 新北市', '商業登記 負責人', '商業登記資料']) {
-  const url = `https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=${encodeURIComponent(q)}`;
-  try { const r = await get(url); const hits = [...r.text.matchAll(/dataset\/(\d+)[^>]*>\s*([^<]{3,90}?)\s*</g)]; hits.forEach((m) => seen.set(m[1], m[2].trim())); show(`data.gov.tw 搜尋「${q}」`, `HTTP ${r.status}，${hits.length} 個`); } catch (e) { show(`搜尋 ${q}`, `✗ ${e.message}`); }
+// 1. data.gov.tw 的 API 搜尋（幾種可能的寫法都試）
+for (const url of [
+  'https://data.gov.tw/api/v2/rest/datasets?q=%E5%95%86%E6%A5%AD%E7%99%BB%E8%A8%98&size=20',
+  'https://data.gov.tw/api/front/dataset/list?q=%E5%95%86%E6%A5%AD%E7%99%BB%E8%A8%98',
+  'https://data.gov.tw/api/v1/rest/datasets?q=%E5%95%86%E6%A5%AD%E7%99%BB%E8%A8%98',
+]) {
+  try { const r = await get(url); show(url, `HTTP ${r.status} ${r.type} ${r.text.length} bytes\n${r.text.slice(0, 800)}`); } catch (e) { show(url, `✗ ${e.message}`); }
+  await nap(400);
+}
+// 2. 用搜尋引擎找 data.gov.tw 上的商業登記資料集
+for (const q of ['site:data.gov.tw 商業登記 負責人', 'site:data.gov.tw 商業登記資料 新北市', 'site:data.gov.tw 商業登記 縣市 負責人姓名']) {
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+  try { const r = await get(url); const links = [...new Set([...r.text.matchAll(/https?:\/\/data\.gov\.tw\/dataset\/\d+/g)].map((m) => m[0]))]; const titles = [...r.text.matchAll(/class="result__a"[^>]*>([^<]{3,120})</g)].map((m) => m[1].trim()); show(`duckduckgo ${q}`, `HTTP ${r.status}\n${links.slice(0, 10).join('\n')}\n${titles.slice(0, 10).join('\n')}`); } catch (e) { show(`duckduckgo ${q}`, `✗ ${e.message}`); }
+  await nap(800);
+}
+// 3. GCIS 入口網的商業清冊：從公司清冊那頁找有沒有商業的
+for (const url of ['https://serv.gcis.nat.gov.tw/pub/cmpy/reportCity.jsp', 'https://serv.gcis.nat.gov.tw/pub/busm/reportCity.jsp', 'https://serv.gcis.nat.gov.tw/pub/cmpy/busmReportCity.jsp', 'https://gcis.nat.gov.tw/mainNew/subclassNAction.do?method=getFile&pk=1', 'https://data.gcis.nat.gov.tw/od/datacategory']) {
+  try { const r = await get(url); const links = [...new Set([...r.text.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => /busm|bus|商業|report/i.test(h)))]; show(url, `HTTP ${r.status} → ${r.url} ${r.text.length} bytes\n${strip(r.text).slice(0, 500)}\n連結：${links.slice(0, 20).join('\n')}`); } catch (e) { show(url, `✗ ${e.message}`); }
   await nap(500);
 }
-console.log([...seen].map(([id, t]) => `${id} ${t}`).join('\n'));
-// 2. 標題像「商業登記」的，看它的下載連結與欄位說明
-const cands = [...seen].filter(([, t]) => /商業登記|商業名稱|營業人/.test(t)).slice(0, 12);
-for (const [id, title] of cands) {
-  try {
-    const r = await get(`https://data.gov.tw/api/v2/rest/dataset/${id}`);
-    let j = {}; try { j = JSON.parse(r.text); } catch (e) { /* 不是 JSON */ }
-    const dist = (j.distribution || []).map((d) => `${d.resourceFormat || ''} ${d.downloadURL || ''} ｜ ${String(d.resourceDescription || '').slice(0, 60)}`);
-    show(`${id} ${title}`, `欄位說明：${String(j.fieldDescription || j.notes || '').slice(0, 400)}\n${dist.join('\n')}`);
-  } catch (e) { show(`${id} ${title}`, `✗ ${e.message}`); }
-  await nap(500);
-}
-// 3. 新北市政府開放資料：搜尋商業登記
-for (const q of ['商業登記', '商業', '公司登記']) {
-  const url = `https://data.ntpc.gov.tw/datasets?q=${encodeURIComponent(q)}`;
-  try {
-    const r = await get(url);
-    const hits = [...new Set([...r.text.matchAll(/datasets\/([0-9a-f-]{36})[^>]*>\s*([^<]{2,80}?)\s*</g)].map((m) => `${m[1]} ${m[2].trim()}`))];
-    show(`data.ntpc.gov.tw 搜尋「${q}」`, `HTTP ${r.status} ${r.text.length} bytes，${hits.length} 個\n${hits.slice(0, 30).join('\n')}`);
-    for (const h of hits.filter((x) => /商業|營業|公司/.test(x)).slice(0, 6)) {
-      const id = h.slice(0, 36);
-      try { const s = await get(`https://data.ntpc.gov.tw/api/datasets/${id}/json?page=0&size=2`); console.log(`\n  --- ${h}\n  HTTP ${s.status} ${s.text.slice(0, 500).replace(/\s+/g, ' ')}`); } catch (e) { console.log(`\n  --- ${h}\n  ✗ ${e.message}`); }
-      await nap(500);
-    }
-  } catch (e) { show(`ntpc 搜尋 ${q}`, `✗ ${e.message}`); }
+// 4. 新北市政府開放資料：API 搜尋
+for (const url of ['https://data.ntpc.gov.tw/api/datasets?q=%E5%95%86%E6%A5%AD%E7%99%BB%E8%A8%98', 'https://data.ntpc.gov.tw/api/datasets?keyword=%E5%95%86%E6%A5%AD', 'https://data.ntpc.gov.tw/api/v1/rest/datalist?keyword=%E5%95%86%E6%A5%AD']) {
+  try { const r = await get(url); show(url, `HTTP ${r.status} ${r.type} ${r.text.length} bytes\n${r.text.slice(0, 800)}`); } catch (e) { show(url, `✗ ${e.message}`); }
+  await nap(400);
 }
 console.log('\n完成。');
