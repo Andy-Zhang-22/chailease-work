@@ -1,5 +1,105 @@
 {
  "periods": {
+  "11503": {
+   "generatedAt": "2026-09-29T15:45:27.039Z",
+   "period": "11503",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11503/新北市-change.csv",
+     "rows": 695,
+     "capitalUp": 31
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11503/新北市-setup.csv",
+     "rows": 875,
+     "capitalUp": 0
+    }
+   ]
+  },
+  "11504": {
+   "generatedAt": "2026-09-29T15:45:29.546Z",
+   "period": "11504",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11504/新北市-change.csv",
+     "rows": 616,
+     "capitalUp": 15
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11504/新北市-setup.csv",
+     "rows": 757,
+     "capitalUp": 0
+    }
+   ]
+  },
+  "11505": {
+   "generatedAt": "2026-09-29T15:45:31.833Z",
+   "period": "11505",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11505/新北市-change.csv",
+     "rows": 554,
+     "capitalUp": 21
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11505/新北市-setup.csv",
+     "rows": 727,
+     "capitalUp": 0
+    }
+   ]
+  },
+  "11506": {
+   "generatedAt": "2026-09-29T15:45:34.105Z",
+   "period": "11506",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11506/新北市-change.csv",
+     "rows": 596,
+     "capitalUp": 14
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11506/新北市-setup.csv",
+     "rows": 757,
+     "capitalUp": 0
+    }
+   ]
+  },
+  "11507": {
+   "generatedAt": "2026-09-29T15:45:36.482Z",
+   "period": "11507",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11507/新北市-change.csv",
+     "rows": 682,
+     "capitalUp": 18
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11507/新北市-setup.csv",
+     "rows": 784,
+     "capitalUp": 0
+    }
+   ]
+  },
   "11508": {
    "generatedAt": "2026-09-29T15:32:05.522Z",
    "period": "11508",
@@ -22,6 +122,6 @@
   }
  },
  "latest": "11508",
- "generatedAt": "2026-09-29T15:32:05.522Z",
+ "generatedAt": "2026-09-29T15:45:36.482Z",
  "kind": "bms"
 }
