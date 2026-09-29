@@ -63,6 +63,10 @@ test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、
   const out = w.Normalize.toRecords(rows, '商行企業社-2026-09-29-1家.csv', {});
   const rec = out.records[0];
   assert.equal(rec.company, '原味商行'); assert.equal(rec.taxId, '38965019'); assert.equal(rec.founded, '2022'); assert.equal(rec.capital, '1,000'); assert.equal(rec.owner, '王小明'); assert.equal(rec.industry, '豆類製品零售');
+  assert.equal(r.reg, true, '舊檔沒有商業登記欄：有負責人就當有商業登記');
+  const t = B.toRecord({ '統編': '98798418', '名稱': '永元水電行', '組織別': '獨資', '資本額': '60000000', '設立日期': '2003/08/01', '地址': '新北市永和區中正路368巷1弄67號1樓', '行業代號': '475', '行業': '居家修繕用品零售', '開發票': 'N', '負責人': '', '稅籍資本額': '60000000', '商業登記': 'N' }, TODAY);
+  assert.equal(t.reg, false); assert.match(B.noteFor(t), /只有稅籍登記/); assert.match(B.noteFor(t), /稅籍自填/);
+  assert.equal(B.toRecord({ '統編': '1', '名稱': 'x', '組織別': '獨資', '資本額': '1', '設立日期': '', '地址': '', '行業': '', '開發票': 'N', '負責人': '', '商業登記': 'Y' }, TODAY).reg, true, '清冊有這家但沒名字也算有商業登記');
   assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /商行／企業社（稅籍登記）：獨資，資本額 100 萬，設立 2022-04-13/);
   assert.equal(w.Normalize.parseNotes(B.noteFor(r)).length, 1, '備註裡的日期用 - 不會被當成通話');
 });

@@ -20,7 +20,8 @@
  *   - 資本額 ≥ --min-capital（預設 50 萬；商行大多 10 萬以下，那種給不了額度）
  *   - 分公司（總機構統編非空）不要，總機構才是打的對象
  *
- * 產出 leads/biz/biz.csv（統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人）、
+ * 產出 leads/biz/biz.csv（統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人,稅籍資本額,商業登記）
+ *   商業登記 Y＝清冊裡有這家；N＝只有稅籍登記、沒辦商業登記（小規模營業人可免辦），findbiz 查不到、負責人沒有、資本額是稅籍自填的。
  * owners.json（統編 → 負責人，清冊抓不到時沿用）、index.json（抓取時間、出檔日期、各區筆數、查到負責人幾家）。
  *
  * 用法：node tools/fetch-biz.mjs [--out leads/biz] [--cities 新北市] [--min-capital 500000]
@@ -40,7 +41,7 @@ const OWNER_SOURCE = 'https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-8
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const HEAD = ['統編', '名稱', '組織別', '資本額', '設立日期', '地址', '行業代號', '行業', '行業2', '行業3', '開發票', '負責人', '稅籍資本額'];
+const HEAD = ['統編', '名稱', '組織別', '資本額', '設立日期', '地址', '行業代號', '行業', '行業2', '行業3', '開發票', '負責人', '稅籍資本額', '商業登記'];
 
 /** 一列 CSV（自己寫的與財政部的都只有引號與逗號要處理） */
 function parseLine(line) {
@@ -134,7 +135,7 @@ async function writeOut(kept, fileDate, ow) {
   const owners = ow.owners;
   const byOrg = {}; const byDist = {};
   kept.forEach((r) => { byOrg[r.org] = (byOrg[r.org] || 0) + 1; const d = districtOf(r.address); byDist[d] = (byDist[d] || 0) + 1; });
-  const rows = [HEAD, ...kept.map((r) => [r.taxId, r.name, r.org, r.capital, r.setup, r.address, r.code, r.ind, r.ind2, r.ind3, r.invoice, (owners[r.taxId] && owners[r.taxId].name) || '', r.taxCapital == null ? r.capital : r.taxCapital])];
+  const rows = [HEAD, ...kept.map((r) => [r.taxId, r.name, r.org, r.capital, r.setup, r.address, r.code, r.ind, r.ind2, r.ind3, r.invoice, (owners[r.taxId] && owners[r.taxId].name) || '', r.taxCapital == null ? r.capital : r.taxCapital, owners[r.taxId] ? 'Y' : 'N'])];
   const mine = {}; kept.forEach((r) => { if (owners[r.taxId]) mine[r.taxId] = owners[r.taxId]; });
   await fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(mine)}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'biz.csv'), `﻿${rows.map((c) => c.map(csvCell).join(',')).join('\n')}\n`, 'utf8');
@@ -143,6 +144,7 @@ async function writeOut(kept, fileDate, ow) {
     total: kept.length, byOrg, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     withOwner: kept.filter((r) => owners[r.taxId] && owners[r.taxId].name).length, ownerSource: OWNER_SOURCE, ownerMonth: ow.month || '', ownerFresh: ow.fresh,
     capitalFromRegistry: kept.filter((r) => owners[r.taxId] && owners[r.taxId].funds > 0).length,
+    taxOnly: kept.filter((r) => !owners[r.taxId]).length,
     files: [{ path: 'biz.csv', rows: kept.length }],
   };
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
