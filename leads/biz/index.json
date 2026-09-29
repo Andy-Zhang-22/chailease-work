@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-29T13:58:27.750Z",
+ "generatedAt": "2026-09-29T14:16:48.536Z",
  "fileDate": "29-SEP-26",
  "source": "https://eip.fia.gov.tw/data/BGMOPEN1.csv",
  "cities": [
@@ -48,6 +48,7 @@
  "ownerMonth": "2026/06",
  "ownerFresh": true,
  "capitalFromRegistry": 4630,
+ "taxOnly": 491,
  "files": [
   {
    "path": "biz.csv",
