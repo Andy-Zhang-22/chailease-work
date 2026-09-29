@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-29T13:03:28.772Z",
+ "generatedAt": "2026-09-29T13:26:40.482Z",
  "fileDate": "29-SEP-26",
  "source": "https://eip.fia.gov.tw/data/BGMOPEN1.csv",
  "cities": [
@@ -43,8 +43,10 @@
   "石碇區": 5,
   "平溪區": 4
  },
- "withOwner": 0,
- "ownersLeft": 5147,
+ "withOwner": 4654,
+ "ownerSource": "https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-83cb-474d91b7f3fc/csv/file",
+ "ownerMonth": "2026/06",
+ "ownerFresh": true,
  "files": [
   {
    "path": "biz.csv",
