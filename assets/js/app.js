@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-199';
+  const APP_VERSION = '20260929-200';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2574,10 +2574,27 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
-      const [ch, le] = await Promise.all([
+      const [chAll, leAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
       ]);
+      /*
+       * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
+       *   - 以前刪掉的公司（公司墓碑；「整理未排定的名單」刪了一百多家）
+       *   - 兩份清冊裡同一家（登記清冊有變更、動保也有它）只算一次
+       */
+      let tombs = {};
+      try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
+      const buried = (company, taxId) => window.Normalize.companyKeys({ company, taxId }).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
+      const seen = new Set();
+      const fresh = (company, taxId) => {
+        const key = String(taxId || '').replace(/\D/g, '') || String(company || '').replace(/\s/g, '');
+        if (!key || seen.has(key) || buried(company, taxId)) return false;
+        seen.add(key);
+        return true;
+      };
+      const ch = chAll.filter((r) => fresh(r.cust.name, r.cust.id));
+      const le = leAll.filter((r) => fresh(r['公司名稱'], r['統一編號']));
       // 兩頁各一半；一頁不夠另一頁補
       let nc = Math.min(ch.length, Math.ceil(need / 2));
       let nl = Math.min(le.length, need - nc);
