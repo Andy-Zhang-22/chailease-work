@@ -13,8 +13,9 @@
  * 換行那一截在 -layout 裡的字元位置會跟主列對不上（中文字寬不均），照欄位字元數切
  * 會把地址的下半段接到代表人去。座標不會騙人：JasperReports 的欄位左緣整份文件固定。
  *
- * 用法：node tools/fetch-leads.mjs [--period 11508] [--cities 新北市,臺北市] [--types change,setup]
+ * 用法：node tools/fetch-leads.mjs [--kind cmpy|bms] [--period 11508] [--cities 新北市,臺北市] [--types change,setup]
  *       [--out leads] [--probe]
+ *   --kind bms 抓商業（商行、企業社）的清冊，預設只抓新北市、放 leads/biz/monthly/（商行／企業社分頁的「本月設立／變更」）。
  *   --probe 只印解析結果的樣本與統計，不寫檔。
  *   --prune N 只留最近 N 期（給排程用），其餘都不做。
  */
@@ -24,8 +25,18 @@ import path from 'node:path';
 import os from 'node:os';
 
 const UA = 'asaaaa-list-updater/1.0 (+https://github.com/Andy-Zhang-22/asaaaa)';
-const REPORT_PAGE = 'https://serv.gcis.nat.gov.tw/pub/cmpy/reportCity.jsp';
-const BASE = 'https://serv.gcis.nat.gov.tw/pub/cmpy/reportAction.do?method=report';
+const argv0 = process.argv.slice(2);
+const kindOpt = () => { const i = argv0.indexOf('--kind'); return i >= 0 && argv0[i + 1] ? argv0[i + 1] : 'cmpy'; };
+/*
+ * --kind cmpy（預設）＝公司清冊；--kind bms＝商業（獨資／合夥、商行、企業社）清冊。
+ * 商業的在「商業每月登記資料清冊下載」（/moeadsBF/bms/report.jsp），檔案走 /moeadsBF/cmpy/reportAction.do，
+ * reportClass=bmsItem（所營事業項目版，跟公司的 cmpyCityItem 一樣多「案由或變更事項」與「營業項目」）。
+ * 兩種是同一套 JasperReports 範本，欄位左緣差幾點，量得出來，解析共用。（探路 115/08 新北市：變更 130 頁、設立 136 頁）
+ */
+const KIND = kindOpt() === 'bms' ? 'bms' : 'cmpy';
+const REPORT_PAGE = KIND === 'bms' ? 'https://serv.gcis.nat.gov.tw/moeadsBF/bms/report.jsp' : 'https://serv.gcis.nat.gov.tw/pub/cmpy/reportCity.jsp';
+const BASE = KIND === 'bms' ? 'https://serv.gcis.nat.gov.tw/moeadsBF/cmpy/reportAction.do?method=report' : 'https://serv.gcis.nat.gov.tw/pub/cmpy/reportAction.do?method=report';
+const REPORT_CLASS = KIND === 'bms' ? 'bmsItem' : 'cmpyCityItem';
 // 預設抓服務範圍：新竹以北加宜蘭（跟網站的 SERVICE_CITIES 一致）
 const DEFAULT_CITIES = ['新北市', '臺北市', '桃園市', '基隆市', '新竹市', '新竹縣', '宜蘭縣'];
 const CITY_RE = /^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義市|嘉義縣|屏東縣|宜蘭縣|花蓮縣|臺東縣|台東縣|澎湖縣|金門縣|連江縣)/;
@@ -37,12 +48,12 @@ const MONEY_RE = /^\d{1,3}(,\d{3})*$|^\d+$/;
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : dflt; };
 const PROBE = args.includes('--probe');
-const OUT = opt('out', 'leads');
+const OUT = opt('out', KIND === 'bms' ? 'leads/biz/monthly' : 'leads');
 const TYPES = opt('types', 'change,setup').split(',');
-const CITIES = opt('cities', DEFAULT_CITIES.join(',')).split(',').map((c) => c.replace(/^台/, '臺'));
+const CITIES = opt('cities', KIND === 'bms' ? '新北市' : DEFAULT_CITIES.join(',')).split(',').map((c) => c.replace(/^台/, '臺'));
 
 async function fetchBuf(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: '*/*' }, redirect: 'follow', signal: AbortSignal.timeout(180000) });
+  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: '*/*', Referer: REPORT_PAGE }, redirect: 'follow', signal: AbortSignal.timeout(180000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
@@ -259,7 +270,7 @@ if (args.includes('--prune')) {
 const { periods, cities } = await discover();
 const period = opt('period', periods[0]);
 if (!period) throw new Error('查詢頁上找不到期別');
-console.log(`期別 ${period}（查詢頁最新 ${periods[0]}）；縣市代碼 ${Object.keys(cities).length} 個`);
+console.log(`${KIND === 'bms' ? '商業' : '公司'}清冊，期別 ${period}（查詢頁最新 ${periods[0]}）；縣市代碼 ${Object.keys(cities).length} 個`);
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'leads-'));
 const index = { generatedAt: new Date().toISOString(), period, files: [] };
@@ -268,7 +279,7 @@ for (const city of CITIES) {
   if (!code) { console.log(`跳過 ${city}：查詢頁上沒有這個縣市`); continue; }
   for (const type of TYPES) {
     const name = `${code}${type}${period}.pdf`;
-    const url = `${BASE}&reportClass=cmpyCityItem&subPath=${period}&fileName=${name}`;
+    const url = `${BASE}&reportClass=${REPORT_CLASS}&subPath=${period}&fileName=${name}`;
     const started = Date.now();
     let buf;
     try { buf = await fetchBuf(url); } catch (err) { console.log(`\n${city} ${type}：下載失敗 ${err.message}`); continue; }
@@ -316,6 +327,7 @@ if (!PROBE) {
   all.periods[period] = index;
   all.latest = Object.keys(all.periods).sort().pop();
   all.generatedAt = index.generatedAt;
+  all.kind = KIND;
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(all, null, 1)}\n`, 'utf8');
   console.log(`\n已寫入 ${OUT}/index.json，${index.files.length} 個檔案`);
 }
