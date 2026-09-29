@@ -72,6 +72,8 @@
       capital: Number(String(o['資本額'] || '').replace(/\D/g, '')) || 0, setup: parseYmd(o['設立日期']),
       address: o['地址'] || '', code: o['行業代號'] || '', inds: [o['行業'], o['行業2'], o['行業3']].filter(Boolean),
       invoice: o['開發票'] === 'Y', owner: o['負責人'] || '',
+      // 商業登記 N＝只有稅籍登記（沒辦商業登記）：findbiz 查不到、沒負責人、資本額是稅籍自填的。舊檔沒這欄就看有沒有負責人
+      reg: o['商業登記'] ? o['商業登記'] === 'Y' : !!o['負責人'],
     };
     r.years = r.setup ? yearsSince(r.setup, today) : null;
     r.branch = branchOf(r.address);
@@ -138,7 +140,7 @@
     const setupKey = (r) => (r.setup ? `${r.setup.y}${String(r.setup.m).padStart(2, '0')}${String(r.setup.d).padStart(2, '0')}` : '0');
     list.sort((a, b) => (sort === 'newest' ? setupKey(b).localeCompare(setupKey(a)) || b.capital - a.capital
       : sort === 'name' ? a.name.localeCompare(b.name, 'zh-Hant')
-        : b.capital - a.capital || setupKey(b).localeCompare(setupKey(a))));
+        : (b.reg ? 1 : 0) - (a.reg ? 1 : 0) || b.capital - a.capital || setupKey(b).localeCompare(setupKey(a))));   // 只有稅籍登記的資本額不可信，排後面
     return list;
   }
 
@@ -153,14 +155,15 @@
     const mine = mineOf(r, c.cm);
     const isHidden = hidden.has(r.key);
     const top = el('div', { className: 'card-top' }, [
-      el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name)]),
+      el('span', { className: 'card-name' }, [r.reg ? findbiz(r.taxId, r.name) : el('span', { textContent: r.name, title: '只有稅籍登記，商工登記查不到' })]),
       el('span', { className: 'badge badge-new', textContent: r.org }),
+      r.reg ? '' : el('span', { className: 'badge badge-own', textContent: '只有稅籍登記', title: '沒辦商業登記（小規模營業人可免辦）：商工登記查不到、沒有負責人，資本額是稅籍上自己填的' }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       r.invoice ? el('span', { className: 'badge badge-ind', textContent: '開發票' }) : '',
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
-      el('span', { textContent: `💰 資本額 ${money(r.capital)}` }),
+      el('span', { textContent: `💰 資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}` }),
       r.setup ? el('span', { textContent: `🎂 設立 ${r.setup.y}/${String(r.setup.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 設立不明' }),
       r.owner ? el('span', { textContent: `👤 負責人 ${r.owner}` }) : '',
       r.inds.length ? el('span', { textContent: `🏭 ${r.inds.join('、')}` }) : '',
@@ -232,8 +235,8 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`商行／企業社（稅籍登記）：${r.org}`, `資本額 ${money(r.capital)}`, r.setup ? `設立 ${r.setup.y}-${String(r.setup.m).padStart(2, '0')}-${String(r.setup.d).padStart(2, '0')}` : '',
-      r.inds.length ? `行業 ${r.inds.join('、')}` : '', r.invoice ? '開統一發票' : '免用統一發票', r.owner ? '' : '負責人稅籍資料沒有，打前查商工登記'].filter(Boolean).join('，');
+    return [`商行／企業社（稅籍登記）：${r.org}`, `資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}`, r.setup ? `設立 ${r.setup.y}-${String(r.setup.m).padStart(2, '0')}-${String(r.setup.d).padStart(2, '0')}` : '',
+      r.inds.length ? `行業 ${r.inds.join('、')}` : '', r.invoice ? '開統一發票' : '免用統一發票', !r.reg ? '只有稅籍登記、沒辦商業登記，資本額是稅籍自填的' : (r.owner ? '' : '負責人清冊還沒有，打前查商工登記')].filter(Boolean).join('，');
   }
   const thousands = (yuan) => (yuan ? Math.round(yuan / 1000).toLocaleString() : '');
   function toStandardCsv(list, dates) {
@@ -323,7 +326,7 @@
       el('div', { className: 'empty', id: 'biz-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'biz-more', type: 'button', textContent: '載入更多', hidden: true })]),
       el('div', { className: 'chattel-legend' }, [el('span', {}, [el('i', { className: 'swatch is-up' }), ' 在我的分公司轄區'])]),
-      el('p', { className: 'muted leads-foot', textContent: '資料來源：財政部財政資訊中心「全國營業（稅籍）登記資料」（每月更新），只留新北市、獨資或合夥、資本額 50 萬以上、非分公司；GitHub Actions 每月抓。稅籍資料沒有負責人與電話，負責人有查到商業登記的才有。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
+      el('p', { className: 'muted leads-foot', textContent: '資料來源：財政部財政資訊中心「全國營業（稅籍）登記資料」（每月更新），只留新北市、獨資或合夥、資本額 50 萬以上、非分公司；GitHub Actions 每月抓。負責人與正式資本額來自新北市商業登記清冊；「只有稅籍登記」的是沒辦商業登記的（小規模營業人可免辦），商工登記查不到、資本額是自填的。電話一律沒有。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
     );
   }
 
