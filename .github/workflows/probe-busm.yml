@@ -9,6 +9,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: sudo apt-get install -y -qq poppler-utils >/dev/null
       - run: node tools/probe-busm.mjs 2>&1 | tee probe.txt
       - run: |
           { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
