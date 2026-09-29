@@ -384,7 +384,7 @@
       x.founded ? `投資公司設立 ${dash(x.founded).slice(0, 10)}` : ''].filter(Boolean).join('，');
   }
   function toStandardCsv(items, dates) {
-    const lines = [CSV_HEAD, ...items.map(({ x, r }, i) => [x.name, x.taxId, '', x.founded ? String(x.founded).slice(0, 4) : '', x.capital || '', '', x.owner || r.chairman, '', '投資控股', (dates && dates[i]) || '', '', noteFor(x, r), x.address || '', '', ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...items.map(({ x, r }, i) => [x.name, x.taxId, '', x.founded ? String(x.founded).slice(0, 4) : '', x.capital || '', '', x.owner || r.chairman, '', '投資控股', (dates && dates[i]) || '', '', noteFor(x, r), x.address || '', todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };

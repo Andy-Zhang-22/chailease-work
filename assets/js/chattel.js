@@ -339,7 +339,7 @@
 
   /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容、下次聯絡日」，不會當成登記清冊再問一次條件。 */
   function toCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, '', ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `\uFEFF${lines.join('\n')}\n`;
   }
   const toStandardCsv = toCsv;

@@ -494,9 +494,12 @@
     list.forEach((r, i) => { if (dates && dates[i]) dateOf.set(r['統一編號'] || r['公司名稱'], dates[i]); });
     const iTax = head.indexOf('統編');
     const iName = head.indexOf('公司名稱');
+    const iAdded = head.indexOf('名單新增日期');
+    const t = new Date(); const addedToday = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     rows.slice(1).forEach((row) => {
       const d = dateOf.get(row[iTax]) || dateOf.get(row[iName]) || '';
       if (iNext >= 0 && d) row[iNext] = d;
+      if (iAdded >= 0) row[iAdded] = addedToday;   // 名單新增日期＝加進名單這天，「今天新增」才篩得到
       // 從哪一期、什麼案由來的寫進去，之後在名單上看得出這家是怎麼來的
       const src = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
       if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), src._why ? `每日新名單，${src._why}` : '', row[iNote] || ''].filter(Boolean).join('\n');
