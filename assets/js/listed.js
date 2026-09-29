@@ -125,8 +125,15 @@
     r.news = ((dyn.news && dyn.news[r.code]) || []).map((n) => ({ ...n, kind: newsKind(n.s) }));
     r.rev = (dyn.revenue && dyn.revenue[r.code]) || null;
     r.changes = (dyn.changes && dyn.changes[r.code]) || [];
+    // 董監持股與設質（使用者：「能加入個別的董監事設質比嗎」）：董事長本人與每位有設質的董監
+    r.pledge = (dyn.pledge && dyn.pledge[r.code]) || null;
+    r.chairPledge = r.pledge ? (r.pledge.people || []).find((x) => /^董事長/.test(x.t)) || null : null;
     const newsFloor = daysAgoIso(t, NEWS_DAYS); const changeFloor = daysAgoIso(t, CHANGE_DAYS);
     const keys = new Set();
+    if (r.pledge && r.pledge.pledgers > 0) keys.add('pledge');
+    if (r.chairPledge && r.chairPledge.p > 0) keys.add('pledge-chair');
+    if (r.pledge && (r.pledge.people || []).some((x) => (x.r || 0) >= 50)) keys.add('pledge-50');
+    if (r.pledge && r.pledge.pct >= 30) keys.add('pledge-total');
     r.news.forEach((n) => { if (n.d >= newsFloor) { keys.add('news'); keys.add(n.kind); } });
     if (r.rev && r.rev.yoy != null) { if (r.rev.yoy >= 20) keys.add('rev-up'); if (r.rev.yoy <= -20) keys.add('rev-down'); }
     if (r.changes.some((c) => c.d >= changeFloor)) keys.add('basic');
@@ -167,7 +174,8 @@
   let showHidden = false;
   const expanded = new Set();   // 哪幾張卡片的投資公司清單展開了
   const newsOpen = new Set();   // 哪幾張卡片的重大訊息全部展開了
-  const f = { markets: new Set(), inds: new Set(), branches: new Set(), invest: new Set(), mine: new Set(), dyn: new Set(), q: '' };
+  const pledgeOpen = new Set(); // 哪幾張卡片的董監設質名單全部展開了
+  const f = { markets: new Set(), inds: new Set(), branches: new Set(), invest: new Set(), mine: new Set(), dyn: new Set(), pledge: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -197,6 +205,7 @@
       && (except === 'invest' || !f.invest.size || [...f.invest].some((k) => investKeys(r, c.cm).has(k)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (except === 'dyn' || !f.dyn.size || [...f.dyn].some((k) => r.dynKeys && r.dynKeys.has(k)))
+      && (except === 'pledge' || !f.pledge.size || [...f.pledge].some((k) => r.dynKeys && r.dynKeys.has(k)))
       && r.capital >= c.min && r.capital <= c.max
       && (!c.hideBig || r.capital < BIG_CAPITAL)
       && (showHidden || !hidden.has(r.key))
@@ -301,6 +310,26 @@
         r.rev.cumPct != null ? el('span', { className: 'muted', textContent: `累計 ${pctLabel(r.rev.cumPct)}` }) : '',
       ]));
     }
+    if (r.pledge && r.pledge.pledgers > 0) {
+      const open = pledgeOpen.has(r.key);
+      const list = r.pledge.people.filter((x) => x.p > 0);
+      const shown = open ? list : list.slice(0, 3);
+      const cp = r.chairPledge;
+      lines.push(el('div', { className: 'dyn-line dyn-pledge' }, [
+        el('span', { textContent: `🔒 ${ymLabel(r.pledge.ym)} 董監設質 ${r.pledge.pledgers} 人，合計 ${pctLabel(r.pledge.pct).replace('+', '')}` }),
+        cp ? el('span', { className: cp.p > 0 ? 'dyn-pct is-down' : 'muted', textContent: cp.p > 0 ? `董事長本人設質 ${pctLabel(cp.r).replace('+', '')}` : '董事長本人沒設質' }) : '',
+      ]));
+      lines.push(el('div', { className: 'dyn-people' }, [
+        ...shown.map((x) => el('div', { className: 'dyn-item dyn-person' }, [
+          el('span', { className: 'dyn-date', textContent: pctLabel(x.r).replace('+', '') }),
+          el('span', { className: `tag${/^董事長/.test(x.t) ? ' tag-people' : ''}`, textContent: x.t }),
+          el('span', { className: 'dyn-subj', textContent: `${x.n}　持股 ${x.s.toLocaleString()} 股，設質 ${x.p.toLocaleString()} 股` }),
+        ])),
+        list.length > 3 ? el('button', { className: 'btn btn-tiny btn-ghost dyn-more', type: 'button', textContent: open ? '收起' : `還有 ${list.length - 3} 人…`, onclick: () => { if (open) pledgeOpen.delete(r.key); else pledgeOpen.add(r.key); render(); } }) : '',
+      ]));
+    } else if (r.pledge && r.chairPledge) {
+      lines.push(el('div', { className: 'dyn-line muted' }, [el('span', { textContent: `🔒 ${ymLabel(r.pledge.ym)} 董監都沒設質（董事長本人持股 ${r.chairPledge.s.toLocaleString()} 股）` })]));
+    }
     r.changes.slice(0, 4).forEach((ch) => {
       const what = ch.field === '新掛牌' ? `新掛牌（${ch.to}）` : ch.field === '下市櫃' ? `下市櫃（原${ch.from}）`
         : ch.field === '實收資本額' ? `實收資本額 ${money(ch.from)} → ${money(ch.to)}` : `${ch.field} ${ch.from} → ${ch.to}`;
@@ -343,6 +372,8 @@
     chips($('#listed-fBranch'), bkeys.map((k) => [k, k, bc.get(k) || 0]), f.branches);
     chips($('#listed-fInvest'), [['has', '有投資公司'], ['same', '與上市公司同址'], ['in', '投資公司已在我的名單'], ['none', '沒查到投資公司']]
       .map(([k, label]) => [k, label, facet('invest', (r) => investKeys(r, c.cm).has(k))]), f.invest);
+    chips($('#listed-fPledge'), [['pledge', '董監有設質'], ['pledge-chair', '董事長本人有設質'], ['pledge-50', '有人設質 50% 以上'], ['pledge-total', '董監合計設質 30% 以上']]
+      .map(([k, label]) => [k, label, facet('pledge', (r) => r.dynKeys && r.dynKeys.has(k))]), f.pledge);
     chips($('#listed-fDyn'), [['news', `近 ${NEWS_DAYS} 天有重大訊息`], ['asset', '資產設備'], ['fund', '籌資'], ['deal', '投資併購'], ['people', '人事異動'], ['rename', '更名'], ['rev-up', '營收年增 20% 以上'], ['rev-down', '營收年減 20% 以上'], ['basic', `近 ${CHANGE_DAYS} 天基本資料異動`]]
       .map(([k, label]) => [k, label, facet('dyn', (r) => r.dynKeys && r.dynKeys.has(k))]), f.dyn);
     chips($('#listed-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
@@ -416,6 +447,7 @@
       group('市場別', el('div', { className: 'chips', id: 'listed-fMarket' })),
       group('名下投資公司', el('div', { className: 'chips', id: 'listed-fInvest' })),
       group('動態（重大訊息、營收、基本資料異動）', el('div', { className: 'chips', id: 'listed-fDyn' })),
+      group('董監事設質（股票拿去質押＝需要資金）', el('div', { className: 'chips', id: 'listed-fPledge' })),
       group('歸屬分公司（依上市櫃公司地址，同「規則」的劃分表）', el('div', { className: 'chips', id: 'listed-fBranch' })),
       group('產業別', el('div', { className: 'chips', id: 'listed-fInd' })),
       group('上市櫃公司本身跟我的名單比對', el('div', { className: 'chips', id: 'listed-fMine' })),
@@ -461,11 +493,11 @@
   }
 
   /** 三個動態檔 → 依公司代號分好（都是新的在前） */
-  function groupDyn(newsJ, revJ, chJ) {
+  function groupDyn(newsJ, revJ, chJ, plJ) {
     const news = {}; const changes = {};
     ((newsJ && newsJ.items) || []).forEach((n) => { if (n && n.code) (news[n.code] = news[n.code] || []).push(n); });
     ((chJ && chJ.items) || []).forEach((c) => { if (c && c.code) (changes[c.code] = changes[c.code] || []).push(c); });
-    return { news, revenue: (revJ && revJ.by) || {}, changes };
+    return { news, revenue: (revJ && revJ.by) || {}, changes, pledge: (plJ && plJ.by) || {} };
   }
 
   async function start() {
@@ -481,21 +513,22 @@
       $('#listed-empty').textContent = '還沒有抓好的資料。GitHub Actions 每天早上會自動抓，也可以到 repo 的 Actions 頁手動執行「每日上市櫃公司」。';
       return;
     }
-    $('#listed-sub').textContent = `上市 ${(index.markets || {})['上市'] || 0}、上櫃 ${(index.markets || {})['上櫃'] || 0}、興櫃 ${(index.markets || {})['興櫃'] || 0} 家　·　名下有投資公司的 ${index.withInvest || 0} 家（投資公司 ${index.investCompanies || 0} 家）　·　上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.chairmenLeft ? `　·　還有 ${index.chairmenLeft} 位董事長沒查完` : ''}${index.dailyAt ? `　·　動態更新 ${String(index.dailyAt).slice(0, 10).replace(/-/g, '/')}（重大訊息到 ${String(index.newsAt || '').slice(5).replace(/-/g, '/') || '—'}、營收到 ${ymLabel(index.revenueYm) || '—'}）` : ''}`;
+    $('#listed-sub').textContent = `上市 ${(index.markets || {})['上市'] || 0}、上櫃 ${(index.markets || {})['上櫃'] || 0}、興櫃 ${(index.markets || {})['興櫃'] || 0} 家　·　名下有投資公司的 ${index.withInvest || 0} 家（投資公司 ${index.investCompanies || 0} 家）　·　上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.chairmenLeft ? `　·　還有 ${index.chairmenLeft} 位董事長沒查完` : ''}${index.dailyAt ? `　·　動態更新 ${String(index.dailyAt).slice(0, 10).replace(/-/g, '/')}（重大訊息到 ${String(index.newsAt || '').slice(5).replace(/-/g, '/') || '—'}、營收到 ${ymLabel(index.revenueYm) || '—'}${index.pledgeYm ? `、董監設質到 ${ymLabel(index.pledgeYm)}` : ''}）` : ''}`;
     $('#listed-loading').hidden = false;
     $('#listed-loading').textContent = '下載資料…';
     try {
       const optional = (file, key) => fetch(`${DATA_BASE}${file}?t=${key}`, { cache: 'force-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      const [csvRes, ownRes, newsJ, revJ, chJ] = await Promise.all([
+      const [csvRes, ownRes, newsJ, revJ, chJ, plJ] = await Promise.all([
         fetch(`${DATA_BASE}companies.csv?t=${index.generatedAt}`, { cache: 'force-cache' }),
         fetch(`${DATA_BASE}owners.json?t=${index.generatedAt}`, { cache: 'force-cache' }),
         optional('news.json', index.dailyAt || index.generatedAt),
         optional('revenue.json', index.dailyAt || index.generatedAt),
         optional('changes.json', index.generatedAt),
+        optional('pledge.json', index.dailyAt || index.generatedAt),
       ]);
       if (!csvRes.ok) throw new Error(`companies.csv：HTTP ${csvRes.status}`);
       owners = ownRes.ok ? await ownRes.json() : {};
-      dyn = groupDyn(newsJ, revJ, chJ);
+      dyn = groupDyn(newsJ, revJ, chJ, plJ);
       const table = parseCsv(await csvRes.text());
       const head = table[0] || [];
       table.slice(1).forEach((cells) => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ''; }); rows.push(attachDyn(toRecord(o, owners), dyn)); });
@@ -516,7 +549,7 @@
     $('#listed-more').onclick = () => { limit += PAGE; render(); };
     $('#listed-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#listed-reset').onclick = () => {
-      f.markets.clear(); f.inds.clear(); f.branches.clear(); f.invest.clear(); f.mine.clear(); f.dyn.clear(); f.q = '';
+      f.markets.clear(); f.inds.clear(); f.branches.clear(); f.invest.clear(); f.mine.clear(); f.dyn.clear(); f.pledge.clear(); f.q = '';
       $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-hideBig').checked = true; $('#listed-sort').value = 'invest'; showHidden = false;
       rerender();
     };
