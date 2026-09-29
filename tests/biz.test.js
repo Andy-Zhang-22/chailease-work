@@ -25,6 +25,28 @@ test('抓資料腳本：財政部那一列 → 我們的一列；全形轉半形
   assert.equal(m.halfWidth('３７１號－１'), '371號-1'); assert.equal(m.rocDate('0400711'), '1951/07/11'); assert.equal(m.rocDate('1040413'), '2015/04/13'); assert.equal(m.rocDate(''), '');
 });
 
+test('抓資料腳本：負責人從新北市商業登記清冊對（只留名單裡的統編；同統編留營業中、最新設立的）', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-biz.mjs'));
+  const http = require('node:http');
+  const body = ['\uFEFFaddress_code,ban_no,buss_name,buss_addr_comb,register_funds,org_code,res_name,set_app_date,close_app_date,yyymmroc',
+    '新北市,19501383,盛品禮品文具店," ",0,06獨資,沈保元,0850216,0880703,11506',
+    '新北市,19501383,盛品禮品文具店,新北市板橋區x路1號,100000,06獨資,沈小華,1000101,,11506',
+    '新北市,38965019,原味商行,新北市新莊區中正路371號,1000000,06獨資,王小明,1110413,,11506',
+    '新北市,38965019,原味商行,新北市新莊區中正路371號,1000000,06獨資,王大明,1050413,,11506',
+    '新北市,11111111,別家商行,,0,06獨資,路人甲,1050413,,11506',
+    '新北市,22222222,沒負責人商行,,0,06獨資,,1050413,,11506'].join('\n');
+  const srv = http.createServer((req, res) => { if (req.url !== '/csv/file') { res.statusCode = 404; res.end('nope'); return; } res.setHeader('content-type', 'text/csv;charset=UTF-8'); res.end(body); });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  try {
+    const { owners, month } = await m.loadOwners(new Set(['19501383', '38965019', '22222222']), `http://127.0.0.1:${srv.address().port}/csv/file`);
+    assert.equal(month, '2026/06');
+    assert.deepEqual(Object.keys(owners).sort(), ['19501383', '38965019']);
+    assert.equal(owners['19501383'].name, '沈小華', '歇業那筆不要，留營業中的');
+    assert.equal(owners['38965019'].name, '王小明', '兩筆都營業中，留設立日期新的');
+    await assert.rejects(() => m.loadOwners(new Set(['1']), `http://127.0.0.1:${srv.address().port}/nope`), /HTTP 404/, '抓不到要丟錯，讓呼叫端沿用上次的');
+  } finally { srv.close(); }
+});
+
 test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、加入名單的 CSV', () => {
   const r = B.toRecord({ '統編': '38965019', '名稱': '原味商行', '組織別': '獨資', '資本額': '1000000', '設立日期': '2022/04/13', '地址': '新北市新莊區中正路371號一樓', '行業代號': '472927', '行業': '豆類製品零售', '行業2': '雜貨店', '行業3': '', '開發票': 'Y', '負責人': '王小明' }, TODAY);
   assert.equal(r.branch.key, '新莊分公司'); assert.equal(r.district, '新莊區'); assert.equal(r.years, 4); assert.equal(B.ageOf(r), 'lt5');
@@ -38,4 +60,14 @@ test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、
   assert.equal(rec.company, '原味商行'); assert.equal(rec.taxId, '38965019'); assert.equal(rec.founded, '2022'); assert.equal(rec.capital, '1,000'); assert.equal(rec.owner, '王小明'); assert.equal(rec.industry, '豆類製品零售');
   assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /商行／企業社（稅籍登記）：獨資，資本額 100 萬，設立 2022-04-13/);
   assert.equal(w.Normalize.parseNotes(B.noteFor(r)).length, 1, '備註裡的日期用 - 不會被當成通話');
+});
+
+test('抓資料腳本：有限合夥、財團法人、寺廟、管委會不算商行', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-biz.mjs'));
+  const mk = (name, org) => m.parseLine(`"新北市新莊區x路1號",12345678,,"${name}",1000000,1040413,${org},Y,1,a,,,,,,`);
+  assert.equal(m.normalize(mk('奇跡資本有限合夥', '有限合夥'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.equal(m.normalize(mk('財團法人下文山清水祖師', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.equal(m.normalize(mk('祭祀公業法人新北市廖仁記', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.equal(m.normalize(mk('某某大廈管理委員會', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
+  assert.ok(m.normalize(mk('躍祥精密工業社', '獨資'), { cities: ['新北市'], minCapital: 0 }));
 });
