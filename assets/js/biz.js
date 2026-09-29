@@ -63,7 +63,7 @@
       : b.kind === 'common' ? `${b.branches.join('／')}共同區`
       : b.kind === 'shared' ? '全公司共同區域'
       : (city ? '不在劃分表上' : '無地址');
-    return { key, label: b.label || key, kind: b.kind, city, district };
+    return { key, label: b.label || key, kind: b.kind, city, district, b };
   }
   /** biz.csv 一列 → 卡片資料 */
   function toRecord(o, today) {
@@ -262,12 +262,26 @@
   /* ---------------- 每日挑選（給 app.js 的每日新名單用） ---------------- */
 
   // 有商業登記排最前：只有稅籍登記的沒負責人、資本額是自填的，排最後補位
+  // 分公司是遠近（Rules.branchRank：我的 0 → 共同區 1 → 鄰近 2… → 其他 9），新莊挑完就接新北，不是門檻
   const DAILY_PRIORITY = ['有商業登記', '我的分公司', '設立 5 年內', '開發票', '資本額 100 萬以上'];
-  const dailyChecks = (r) => [!!r.reg, r.branch.key === myBranch(), ageOf(r) === 'lt5', r.invoice, r.capital >= 1000000];
+  const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
+  const dailyChecks = (r) => [!!r.reg, branchRank(r), ageOf(r) === 'lt5', r.invoice, r.capital >= 1000000];
   function dailyCompare(a, b) {
-    for (let i = 0; i < a._checks.length; i++) { if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1; }
+    for (let i = 0; i < a._checks.length; i++) {
+      const x = a._checks[i]; const y = b._checks[i];
+      if (x === y) continue;
+      if (typeof x === 'number') return x - y;
+      return x ? -1 : 1;
+    }
     return b.capital - a.capital;
   }
+  /** 「符合：…」那串；分公司放寬到鄰近的也寫出來 */
+  const whyOf = (r, hitAt) => {
+    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i));
+    const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
+    const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
+    return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
+  };
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneBiz');
     if (!root) return [];
@@ -275,7 +289,7 @@
     if (!ready) return [];
     const cm = customerMap();
     return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
-      .map((r) => { r._checks = dailyChecks(r); const hit = DAILY_PRIORITY.filter((_, i) => r._checks[i]); r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位'; return r; })
+      .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
       .sort(dailyCompare);
   }
 

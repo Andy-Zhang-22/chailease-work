@@ -97,3 +97,16 @@ test('門檻常數跟規範一致', () => {
   assert.equal(Rules.LARGE_CAPITAL_LIMIT, 500000);
   assert.equal(Rules.MICRO_CREDIT_LIMIT, 7000);
 });
+
+test('branchRank：我的分公司 0、共用的共同區 1、鄰近照順序、其他 9、對不到 10（新莊挑完接新北）', () => {
+  const rk = (city, d, me) => Rules.branchRank(Rules.branchOf(city, d), me);
+  assert.equal(rk('新北市', '新莊區', '新莊'), 0);
+  assert.equal(rk('新北市', '淡水區', '新莊'), 0, '城北、新莊共同區：跟我共用的算我的');
+  assert.equal(rk('新北市', '板橋區', '新莊'), 2, '新北分公司是新莊的第一個鄰居');
+  assert.equal(rk('臺北市', '士林區', '新莊'), 3, '城北第二');
+  assert.equal(rk('新北市', '板橋區', '新莊分公司'), 2, '帶「分公司」也可以');
+  assert.ok(rk('高雄市', '岡山區', '新莊') === 9, '不相鄰的分公司 9');
+  assert.equal(rk('', '', '新莊'), 10, '沒地址 10');
+  assert.equal(rk('新北市', '板橋區', '新北'), 0);
+  assert.equal(rk('新北市', '新莊區', '新北'), 2);
+});

@@ -237,7 +237,7 @@
       : b.kind === 'common' ? `${b.branches.join('／')}共同區`
       : b.kind === 'shared' ? '全公司共同區域'
       : (city ? '不在劃分表上' : '無登記地址');
-    return { key, label: b.label || key, kind: b.kind };
+    return { key, label: b.label || key, kind: b.kind, b };
   }
 
   /** 正規的 CSV 解析：欄位裡有逗號、引號、換行都吃得下。 */
@@ -543,12 +543,16 @@
     r.rk === 'up',
     r.classes.some((k) => 'CE'.includes(k)) && !r.holding,
     r.capital >= 5000000 && r.capital <= 60000000,
-    r.branch.key === myBranch(),
+    branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
     ageOf(r) === 'ge5',
   ];
+  const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
-      if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1;
+      const x = a._checks[i]; const y = b._checks[i];
+      if (x === y) continue;
+      if (typeof x === 'number') return x - y;
+      return x ? -1 : 1;
     }
     return b.capital - a.capital || (a['公司名稱'] || '').localeCompare(b['公司名稱'] || '', 'zh-Hant');
   }
@@ -566,8 +570,9 @@
     return rows.filter((r) => r.type === 'change' && !mineOf(r, cm) && !hidden.has(keyOf(r)))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
-        const hit = DAILY_PRIORITY.filter((_, i) => r._checks[i]);
-        r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
+        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
+        const rk = r._checks[4];
+        r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
       })
       .sort(dailyCompare);

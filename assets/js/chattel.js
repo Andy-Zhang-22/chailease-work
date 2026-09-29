@@ -141,7 +141,7 @@
       : b.kind === 'common' ? `${b.branches.join('／')}共同區`
       : b.kind === 'shared' ? '全公司共同區域'
       : (city ? '不在劃分表上' : '無地址');
-    return { key, label: b.label || key, kind: b.kind, district: city ? `${city}${district}` : '' };
+    return { key, label: b.label || key, kind: b.kind, district: city ? `${city}${district}` : '', b };
   }
 
   /** CSV 的一列 → 畫面用的物件。today 可傳進來，測試才好固定。 */
@@ -392,9 +392,10 @@
     ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
     r.family !== 'chailease' && !r.custIsFin,
-    r.branch.key === myBranch(),
+    branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
     r.amount >= 1000000,
   ];
+  const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -413,8 +414,9 @@
     return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
       .map((r) => {
         r._checks = dailyChecks(r);
-        const hit = DAILY_PRIORITY.filter((_, i) => (i === 1 ? r._checks[1] === 0 : r._checks[i]));
-        r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
+        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
+        const rk = r._checks[3];
+        r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
       })
       .sort(dailyCompare);

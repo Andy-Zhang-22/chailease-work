@@ -817,6 +817,31 @@
     return { kind: '', label: '' };
   }
 
+  /*
+   * 分公司遠近（每日新名單挑的時候用）。使用者：「一頁不足就放寬該頁的挑選門檻，比如新莊分公司沒有就挑新北分公司」。
+   * 我的分公司排 0；跟我共用的共同區 1；鄰近分公司照 NEAR 的順序 2、3…；全公司共同區域 8；其他分公司 9；對不到的 10。
+   * NEAR 是地理上挨著的（新莊挨著新北、城北），有需要再加。
+   */
+  const NEAR = {
+    新莊: ['新北', '城北', '桃園'],
+    新北: ['新莊', '城北', '城東'],
+    城北: ['新莊', '新北', '城東', '城中'],
+    城東: ['城北', '城中', '新北'],
+    城中: ['城東', '城北'],
+    桃園: ['新竹', '新莊'],
+    新竹: ['桃園'],
+  };
+  function branchRank(b, mine) {
+    const me = String(mine || '新莊').replace(/分公司$/, '');
+    if (!b || !b.kind) return 10;
+    if (b.kind === 'shared') return 8;
+    const bs = b.branches || [];
+    if (bs.includes(me)) return 0;
+    if (b.kind === 'common') { const i = Math.min(...bs.map((x) => (NEAR[me] || []).indexOf(x)).filter((x) => x >= 0)); return Number.isFinite(i) ? i + 2 : 9; }
+    const i = (NEAR[me] || []).indexOf(bs[0]);
+    return i >= 0 ? i + 2 : 9;
+  }
+
   /* ---------------- 規則之間怎麼串起來（分析） ---------------- */
 
   const ANALYSIS = {
@@ -897,7 +922,7 @@
 
   global.Rules = {
     RULES, ANALYSIS, evaluate, assessControl, buildCheckpoints, parseSchedule, fmt,
-    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, BRANCH_AREAS, COMMON_AREAS,
+    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, branchRank, NEAR, BRANCH_AREAS, COMMON_AREAS,
     checkDeal, parseBalance, HANDOVER_MIN_LEASE, PASSIVE_MIN_YIELD,
     EXCLUDING, CONTROLLED_COLLATERAL, IRREGULAR_METHODS,
     MICRO_CAPITAL_LIMIT, LARGE_CAPITAL_LIMIT, MICRO_CREDIT_LIMIT, MICRO_SHARE_CAP, MICRO_MIN_SPREAD,
