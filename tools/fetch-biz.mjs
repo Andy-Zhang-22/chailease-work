@@ -40,7 +40,7 @@ const OWNER_SOURCE = 'https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-8
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const HEAD = ['統編', '名稱', '組織別', '資本額', '設立日期', '地址', '行業代號', '行業', '行業2', '行業3', '開發票', '負責人'];
+const HEAD = ['統編', '名稱', '組織別', '資本額', '設立日期', '地址', '行業代號', '行業', '行業2', '行業3', '開發票', '負責人', '稅籍資本額'];
 
 /** 一列 CSV（自己寫的與財政部的都只有引號與逗號要處理） */
 function parseLine(line) {
@@ -95,7 +95,7 @@ async function loadOwners(taxIds, source = OWNER_SOURCE) {
     if (!month && /^\d{5}$/.test(row.yyymmroc || '')) month = `${Number(row.yyymmroc.slice(0, 3)) + 1911}/${row.yyymmroc.slice(3)}`;
     const tax = (row.ban_no || '').replace(/\D/g, '');
     if (tax.length !== 8 || !taxIds.has(tax) || !row.res_name) continue;
-    const cur = { name: row.res_name, closed: !!(row.close_app_date || '').replace(/\D/g, ''), setup: (row.set_app_date || '').replace(/\D/g, '') };
+    const cur = { name: row.res_name, closed: !!(row.close_app_date || '').replace(/\D/g, ''), setup: (row.set_app_date || '').replace(/\D/g, ''), funds: Number(String(row.register_funds || '').replace(/\D/g, '')) || 0 };
     const old = owners[tax];
     if (!old || (old.closed && !cur.closed) || (old.closed === cur.closed && cur.setup > old.setup)) owners[tax] = cur;
   }
@@ -104,7 +104,8 @@ async function loadOwners(taxIds, source = OWNER_SOURCE) {
   return { owners, month };
 }
 
-/** 對負責人：清冊抓得到就整批換新（順便寫 owners.json）；抓不到就沿用上次的 owners.json */
+/** 對負責人與登記資本額：清冊抓得到就整批換新；抓不到就沿用上次的 owners.json（那裡面也有登記資本額）。
+ *  回 { owners: 統編 → { at, name, month, funds }, month, fresh }；owners.json 由呼叫端篩完再寫，免得存十幾萬筆。 */
 async function fillOwners(kept) {
   let cached = {};
   try { cached = JSON.parse(await fs.readFile(path.join(OUT, 'owners.json'), 'utf8')); } catch (e) { cached = {}; }
@@ -114,8 +115,7 @@ async function fillOwners(kept) {
     const { owners, month } = await loadOwners(taxIds);
     const at = new Date().toISOString().slice(0, 10);
     const merged = {};
-    kept.forEach((r) => { const o = owners[r.taxId]; if (o) merged[r.taxId] = { at, name: o.name, month }; else if (cached[r.taxId]) merged[r.taxId] = cached[r.taxId]; });
-    await fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(merged)}\n`, 'utf8');
+    kept.forEach((r) => { const o = owners[r.taxId]; if (o) merged[r.taxId] = { at, name: o.name, month, funds: o.funds || 0 }; else if (cached[r.taxId]) merged[r.taxId] = cached[r.taxId]; });
     return { owners: merged, month, fresh: true };
   } catch (e) {
     console.log(`✗ 商業登記清冊抓不到（${e.message}），負責人沿用上次的 ${Object.keys(cached).length} 家`);
@@ -123,16 +123,26 @@ async function fillOwners(kept) {
   }
 }
 
+/** 資本額以商業登記為準（稅籍檔那欄是營業人自己填的，有 20 萬填成 2 億的）；清冊沒有這家或登記資本額是 0 才用稅籍的 */
+function applyFunds(kept, owners) {
+  let n = 0;
+  kept.forEach((r) => { r.taxCapital = r.capital; const o = owners[r.taxId]; if (o && o.funds > 0) { r.capital = o.funds; n += 1; } });
+  return n;
+}
+
 async function writeOut(kept, fileDate, ow) {
   const owners = ow.owners;
   const byOrg = {}; const byDist = {};
   kept.forEach((r) => { byOrg[r.org] = (byOrg[r.org] || 0) + 1; const d = districtOf(r.address); byDist[d] = (byDist[d] || 0) + 1; });
-  const rows = [HEAD, ...kept.map((r) => [r.taxId, r.name, r.org, r.capital, r.setup, r.address, r.code, r.ind, r.ind2, r.ind3, r.invoice, (owners[r.taxId] && owners[r.taxId].name) || ''])];
+  const rows = [HEAD, ...kept.map((r) => [r.taxId, r.name, r.org, r.capital, r.setup, r.address, r.code, r.ind, r.ind2, r.ind3, r.invoice, (owners[r.taxId] && owners[r.taxId].name) || '', r.taxCapital == null ? r.capital : r.taxCapital])];
+  const mine = {}; kept.forEach((r) => { if (owners[r.taxId]) mine[r.taxId] = owners[r.taxId]; });
+  await fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(mine)}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'biz.csv'), `﻿${rows.map((c) => c.map(csvCell).join(',')).join('\n')}\n`, 'utf8');
   const index = {
     generatedAt: new Date().toISOString(), fileDate, source: SOURCE, cities: CITIES, minCapital: MIN_CAPITAL,
     total: kept.length, byOrg, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     withOwner: kept.filter((r) => owners[r.taxId] && owners[r.taxId].name).length, ownerSource: OWNER_SOURCE, ownerMonth: ow.month || '', ownerFresh: ow.fresh,
+    capitalFromRegistry: kept.filter((r) => owners[r.taxId] && owners[r.taxId].funds > 0).length,
     files: [{ path: 'biz.csv', rows: kept.length }],
   };
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
@@ -142,7 +152,7 @@ async function writeOut(kept, fileDate, ow) {
 
 async function main() {
   await fs.mkdir(OUT, { recursive: true });
-  console.log(`下載 ${SOURCE}（串流，只留 ${CITIES.join('、')} 的獨資／合夥、資本額 ≥ ${MIN_CAPITAL.toLocaleString()}）`);
+  console.log(`下載 ${SOURCE}（串流，只留 ${CITIES.join('、')} 的獨資／合夥；資本額對完商業登記清冊再篩 ≥ ${MIN_CAPITAL.toLocaleString()}）`);
   const res = await fetch(SOURCE, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20 * 60000) });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
   const rl = readline.createInterface({ input: Readable.fromWeb(res.body) });
@@ -152,18 +162,22 @@ async function main() {
     if (n === 1) continue;   // 表頭
     const cells = parseLine(line);
     if (n === 2 && cells[0] && !cells[1]) { fileDate = cells[0]; continue; }   // 出檔日期那列
-    const r = normalize(cells);
+    const r = normalize(cells, { minCapital: 0 });   // 門檻等對完登記資本額再套
     if (r) kept.push(r);
     if (n % 200000 === 0) console.log(`  …讀到第 ${n.toLocaleString()} 列，留 ${kept.length.toLocaleString()} 筆`);
   }
   console.log(`讀完 ${n.toLocaleString()} 列（出檔 ${fileDate || '?'}），留 ${kept.length.toLocaleString()} 筆`);
   if (!kept.length) throw new Error('一筆都沒留下，篩選條件或欄位對不上');
-  kept.sort((a, b) => b.capital - a.capital || (b.setup || '').localeCompare(a.setup || ''));
   const ow = await fillOwners(kept);
-  await writeOut(kept, fileDate, ow);
+  const fromReg = applyFunds(kept, ow.owners);
+  const list = kept.filter((r) => r.capital >= MIN_CAPITAL);
+  console.log(`登記資本額對到 ${fromReg.toLocaleString()} 家；資本額 ≥ ${MIN_CAPITAL.toLocaleString()} 的 ${list.length.toLocaleString()} 筆（其中稅籍資本額與登記不同的 ${list.filter((r) => r.taxCapital !== r.capital).length.toLocaleString()} 筆）`);
+  if (!list.length) throw new Error('篩完一筆都沒有');
+  list.sort((a, b) => b.capital - a.capital || (b.setup || '').localeCompare(a.setup || ''));
+  await writeOut(list, fileDate, ow);
 }
 
-export { normalize, parseLine, halfWidth, rocDate, districtOf, loadOwners, HEAD };
+export { normalize, parseLine, halfWidth, rocDate, districtOf, loadOwners, applyFunds, HEAD };
 
 if (process.argv[1] && /fetch-biz\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
