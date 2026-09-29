@@ -1,0 +1,79 @@
+# 每月抓財政部「全國營業（稅籍）登記資料」，篩出新北市的商行、企業社（獨資、合夥）放進 leads/biz/，
+# 網站的「商行／企業社」分頁讀這裡。
+#
+# 使用者：「我想找商行或企業社的老闆做企金推廣，可以怎麼找名單」。
+# 為什麼在 GitHub Actions：檔案 322 MB、開發環境連不上政府網站；只有 Actions 出得去。財政部每月初換新檔。
+name: 每月商行／企業社
+
+on:
+  schedule:
+    - cron: '0 20 6 * *'   # 每月 7 日台灣 04:00
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: '留哪些縣市（逗號分隔）'
+        required: false
+        default: '新北市'
+      min_capital:
+        description: '資本額下限（元）'
+        required: false
+        default: '500000'
+      owners:
+        description: '查負責人最多跑幾分鐘（查不完會自己再排一輪）'
+        required: false
+        default: '40'
+      skip_fetch:
+        description: '只補負責人，不重抓稅籍檔（再排一輪時自動帶 true）'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: monthly-biz
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 抓稅籍登記、篩商行／企業社、查負責人
+        id: biz
+        env:
+          CITIES: ${{ inputs.cities || '新北市' }}
+          MIN_CAPITAL: ${{ inputs.min_capital || '500000' }}
+          OWNERS: ${{ inputs.owners || '40' }}
+          SKIP: ${{ inputs.skip_fetch || 'false' }}
+        run: |
+          extra=""; if [ "$SKIP" = "true" ]; then extra="--skip-fetch"; fi
+          node tools/fetch-biz.mjs --cities "$CITIES" --min-capital "$MIN_CAPITAL" --owners "$OWNERS" $extra | tee fetch-biz.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-biz.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/biz
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "商行／企業社名單：$(date -u +%Y-%m-%d)"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: 負責人還沒查完，再排一輪
+        if: steps.biz.outputs.timeout == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CITIES: ${{ inputs.cities || '新北市' }}
+          MIN_CAPITAL: ${{ inputs.min_capital || '500000' }}
+          OWNERS: ${{ inputs.owners || '40' }}
+        run: |
+          echo "還剩 ${{ steps.biz.outputs.remaining }} 家沒查負責人，再排一輪"
+          gh workflow run monthly-biz.yml --ref "$GITHUB_REF_NAME" -f cities="$CITIES" -f min_capital="$MIN_CAPITAL" -f owners="$OWNERS" -f skip_fetch=true

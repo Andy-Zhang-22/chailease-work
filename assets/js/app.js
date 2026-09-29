@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-202';
+  const APP_VERSION = '20260929-203';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3498,8 +3498,9 @@
     $('#paneLeads').hidden = tab !== 'leads';
     $('#paneChattel').hidden = tab !== 'chattel';
     $('#paneListed').hidden = tab !== 'listed';
+    $('#paneBiz').hidden = tab !== 'biz';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed';
+    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
@@ -3517,6 +3518,8 @@
       if (window.Chattel) window.Chattel.show();
     } else if (tab === 'listed') {
       if (window.Listed) window.Listed.show();
+    } else if (tab === 'biz') {
+      if (window.Biz) window.Biz.show();
     } else { renderList(); renderRemindBar(); }
   }
 
@@ -6713,6 +6716,7 @@ export default {
     leads: { input: '#leads-q', placeholder: '搜尋登記清冊：公司、統編、代表人、地址、營業項目' },
     chattel: { input: '#chattel-q', placeholder: '搜尋動產擔保名單：公司、統編、金主、地址、登記編號' },
     listed: { input: '#listed-q', placeholder: '搜尋上市櫃公司：公司、代號、統編、董事長、地址、投資公司名稱' },
+    biz: { input: '#biz-q', placeholder: '搜尋商行／企業社：名稱、統編、負責人、地址、行業' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {
@@ -6750,7 +6754,7 @@ export default {
       if (cfg && cfg.input && e.target && e.target.matches && e.target.matches(cfg.input) && $('#search').value !== e.target.value) $('#search').value = e.target.value;
     });
     document.addEventListener('click', (e) => {
-      if (e.target && e.target.matches && e.target.matches('#leads-reset, #chattel-reset, #listed-reset')) setTimeout(syncSearchBox, 0);
+      if (e.target && e.target.matches && e.target.matches('#leads-reset, #chattel-reset, #listed-reset, #biz-reset')) setTimeout(syncSearchBox, 0);
     });
     // 下拉的預設值跟 state 對齊，不然畫面顯示第一個選項、實際卻是另一種排序
     $('#sortBy').value = state.sort;
@@ -7070,7 +7074,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'leads' || want === 'chattel' || want === 'listed') {
+    if (want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz') {
       $('#importer').hidden = true;
       switchTab(want);
     }
