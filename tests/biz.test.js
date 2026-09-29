@@ -43,6 +43,11 @@ test('抓資料腳本：負責人從新北市商業登記清冊對（只留名�
     assert.deepEqual(Object.keys(owners).sort(), ['19501383', '38965019']);
     assert.equal(owners['19501383'].name, '沈小華', '歇業那筆不要，留營業中的');
     assert.equal(owners['38965019'].name, '王小明', '兩筆都營業中，留設立日期新的');
+    assert.equal(owners['38965019'].funds, 1000000); assert.equal(owners['19501383'].funds, 100000);
+    // 資本額以登記為準：稅籍 2 億、登記 20 萬 → 20 萬（門檻之後再套）；清冊沒有或登記 0 的用稅籍的
+    const kept = [{ taxId: '38965019', capital: 200000000 }, { taxId: '19501383', capital: 800000 }, { taxId: '33333333', capital: 600000 }];
+    assert.equal(m.applyFunds(kept, { 38965019: { name: '王小明', funds: 200000 }, 19501383: { name: '沈小華', funds: 0 } }), 1);
+    assert.deepEqual(kept.map((r) => [r.capital, r.taxCapital]), [[200000, 200000000], [800000, 800000], [600000, 600000]]);
     await assert.rejects(() => m.loadOwners(new Set(['1']), `http://127.0.0.1:${srv.address().port}/nope`), /HTTP 404/, '抓不到要丟錯，讓呼叫端沿用上次的');
   } finally { srv.close(); }
 });
