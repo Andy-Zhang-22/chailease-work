@@ -2,12 +2,13 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 const UA = 'asaaaa-list-updater/1.0 (+https://github.com/Andy-Zhang-22/asaaaa)';
-const BASE = 'https://serv.gcis.nat.gov.tw/pub/cmpy/reportAction.do?method=report';
+// 商業清冊頁的連結是 ../cmpy/reportAction.do（相對 /moeadsBF/bms/），落在 /moeadsBF/cmpy/，不是公司的 /pub/cmpy/
+const BASE = 'https://serv.gcis.nat.gov.tw/moeadsBF/cmpy/reportAction.do?method=report';
 for (const [cls, kind] of [['bmsItem', 'change'], ['bms', 'change'], ['bmsItem', 'setup']]) {
   const name = `376410000A${kind}11508.pdf`;
   const url = `${BASE}&reportClass=${cls}&subPath=11508&fileName=${name}`;
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(120000) });
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Referer: 'https://serv.gcis.nat.gov.tw/moeadsBF/bms/report.jsp' }, signal: AbortSignal.timeout(120000) });
     const buf = Buffer.from(await r.arrayBuffer());
     const file = `/tmp/${cls}-${kind}.pdf`;
     await fs.writeFile(file, buf);
