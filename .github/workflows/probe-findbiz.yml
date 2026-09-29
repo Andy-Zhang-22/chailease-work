@@ -10,4 +10,5 @@ jobs:
         with:
           node-version: '22'
       - run: node tools/probe-findbiz.mjs 2>&1 | tee probe.txt
-      - run: { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - run: |
+          { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
