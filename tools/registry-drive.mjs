@@ -54,9 +54,14 @@ const listValue = (key, r) => { const v = String((r && r[key]) || '').trim(); if
 /** 名單上這筆現在的樣子＝原始資料蓋上使用者（或上次登記更新）的編輯 */
 const viewOf = (rec, st) => (st && st.edits ? { ...rec, ...st.edits } : rec);
 
-/** 登記查到的跟名單不一樣的欄位 { key: { from, to } }；查到有值才算 */
+const regDateMs = (v) => { const m = String(v || '').match(/(\d{2,4})[/\-.](\d{1,2})[/\-.](\d{1,2})/); if (!m) return 0; const y = +m[1] < 1911 ? +m[1] + 1911 : +m[1]; return Date.UTC(y, +m[2] - 1, +m[3]); };
+/** 查到的核准變更日期比名單上的舊：備援來源的舊快照，整筆不套用（跟 app.js staleRegistry 同一條規則） */
+const staleRegistry = (r, data) => { const mine = regDateMs(listValue('regChanged', r)); const got = regDateMs(registryValue('regChanged', data)); return !!(mine && got && got < mine); };
+
+/** 登記查到的跟名單不一樣的欄位 { key: { from, to } }；查到有值才算；資料比名單舊就回空的 */
 function diffFields(r, data) {
   const changes = {};
+  if (staleRegistry(r, data)) return changes;
   REGISTRY_FIELDS.forEach(([key]) => {
     const now = listValue(key, r); const next = registryValue(key, data);
     if (next && next !== now) changes[key] = { from: now, to: next };
@@ -264,7 +269,7 @@ async function writeSummary(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
 }
 
-export { diffFields, classify, applyResults, viewOf, buildReport, REGISTRY_FIELDS };
+export { diffFields, classify, applyResults, viewOf, buildReport, staleRegistry, regDateMs, REGISTRY_FIELDS };
 
 if (process.argv[1] && /registry-drive\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
