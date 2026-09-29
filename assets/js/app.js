@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260928-193';
+  const APP_VERSION = '20260929-194';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2518,6 +2518,21 @@
     if (!force && !more && registryPref('daily-feed-on') === today) return;
     if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
     if (!window.Chattel || !window.Leads) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
+    /*
+     * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
+     * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
+     * 自動的那條就等同步成功（每分鐘會再看）；使用者自己按的先同步一次，失敗就先不補。
+     */
+    if (window.DriveSync && window.DriveSync.isConfigured()) {
+      let last = 0;
+      try { last = Number(await window.Store.getMeta('lastSyncAt')) || 0; } catch (e) { last = 0; }
+      const syncedToday = last && new Date(last).toDateString() === new Date().toDateString();
+      if (!syncedToday) {
+        if (!force && !more) return;
+        const ok = await runSync({ quiet: true });
+        if (!ok) { toast('先同步雲端再挑新名單，不然會跟另一台裝置挑到重複的；請按上面的 ⟳ 同步'); return; }
+      }
+    }
     feeding = true;
     try {
       // 假日按「再補」：排到下一個上班日，不要把名單排在放假那天（使用者：「避開台灣的假日及連續假日」）
