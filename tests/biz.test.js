@@ -1,0 +1,41 @@
+'use strict';
+/*
+ * 商行／企業社分頁：抓資料腳本的篩選與欄位轉換、畫面的卡片資料、加入名單的 CSV。
+ */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { loadModules, ROOT } = require('./load');
+
+const w = loadModules(['normalize', 'holidays', 'rules', 'leads', 'biz']);
+const B = w.Biz;
+const TODAY = new Date(2026, 8, 29);
+
+test('抓資料腳本：財政部那一列 → 我們的一列；全形轉半形、民國日期、只留獨資合夥與資本額門檻、分公司不要', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-biz.mjs'));
+  const row = m.parseLine('"新北市新莊區中正路３７１號一樓",38965019,,"原味商行",1000000,1040413,獨資,Y,472927,豆類製品零售,471913,雜貨店,,,,');
+  assert.equal(row.length, 16);
+  const r = m.normalize(row, { cities: ['新北市'], minCapital: 500000 });
+  assert.deepEqual(r, { taxId: '38965019', name: '原味商行', org: '獨資', capital: 1000000, setup: '2015/04/13', address: '新北市新莊區中正路371號一樓', code: '472927', ind: '豆類製品零售', ind2: '雜貨店', ind3: '', invoice: 'Y' });
+  assert.equal(m.normalize(m.parseLine('"臺北市中山區x路1號",12345678,,"甲商行",1000000,1040413,獨資,Y,1,a,,,,,,'), { cities: ['新北市'], minCapital: 500000 }), null, '不在縣市裡');
+  assert.equal(m.normalize(m.parseLine('"新北市新莊區x路1號",12345678,,"甲商行",100000,1040413,獨資,Y,1,a,,,,,,'), { cities: ['新北市'], minCapital: 500000 }), null, '資本額不到');
+  assert.equal(m.normalize(m.parseLine('"新北市新莊區x路1號",12345678,,"甲股份有限公司",1000000,1040413,股份有限公司,Y,1,a,,,,,,'), { cities: ['新北市'], minCapital: 500000 }), null, '公司不是商業');
+  assert.equal(m.normalize(m.parseLine('"新北市新莊區x路1號",12345678,87654321,"甲商行新莊分行",1000000,1040413,獨資,Y,1,a,,,,,,'), { cities: ['新北市'], minCapital: 500000 }), null, '分公司不要');
+  assert.equal(m.normalize(m.parseLine('29-SEP-26,,,,,,,,,,,,,,,'), {}), null, '出檔日期那列');
+  assert.equal(m.halfWidth('３７１號－１'), '371號-1'); assert.equal(m.rocDate('0400711'), '1951/07/11'); assert.equal(m.rocDate('1040413'), '2015/04/13'); assert.equal(m.rocDate(''), '');
+});
+
+test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、加入名單的 CSV', () => {
+  const r = B.toRecord({ '統編': '38965019', '名稱': '原味商行', '組織別': '獨資', '資本額': '1000000', '設立日期': '2022/04/13', '地址': '新北市新莊區中正路371號一樓', '行業代號': '472927', '行業': '豆類製品零售', '行業2': '雜貨店', '行業3': '', '開發票': 'Y', '負責人': '王小明' }, TODAY);
+  assert.equal(r.branch.key, '新莊分公司'); assert.equal(r.district, '新莊區'); assert.equal(r.years, 4); assert.equal(B.ageOf(r), 'lt5');
+  assert.deepEqual(r.inds, ['豆類製品零售', '雜貨店']); assert.equal(r.invoice, true);
+  assert.equal(B.money(1000000), '100 萬'); assert.equal(B.money(150000000), '1.5 億');
+  const csv = B.toStandardCsv([r], ['2026-10-06']);
+  const rows = w.Normalize.parseCsv(csv);
+  assert.equal(rows[0].join(','), '公司名稱,統編,分級,成立,資本額,電話,負責人,KEYMAN,產業別,下次聯絡日,最近聯絡日,訪談內容,地址,名單新增日期,國家');
+  const out = w.Normalize.toRecords(rows, '商行企業社-2026-09-29-1家.csv', {});
+  const rec = out.records[0];
+  assert.equal(rec.company, '原味商行'); assert.equal(rec.taxId, '38965019'); assert.equal(rec.founded, '2022'); assert.equal(rec.capital, '1,000'); assert.equal(rec.owner, '王小明'); assert.equal(rec.industry, '豆類製品零售');
+  assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /商行／企業社（稅籍登記）：獨資，資本額 100 萬，設立 2022-04-13/);
+  assert.equal(w.Normalize.parseNotes(B.noteFor(r)).length, 1, '備註裡的日期用 - 不會被當成通話');
+});
