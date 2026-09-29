@@ -7,10 +7,12 @@
  *   欄位：營業地址,統一編號,總機構統一編號,營業人名稱,資本額,設立日期,組織別名稱,使用統一發票,行業代號,名稱,行業代號1,名稱1,行業代號2,名稱2,行業代號3,名稱3
  *   第一列資料是出檔日期（29-SEP-26,,,,…），設立日期是民國七碼（1040413），地址用全形數字（３７１號）。
  *   全台 171 萬筆；新北市獨資／合夥 114,661 筆，資本額 50 萬以上 5,172 筆（探路統計）。
- *   **沒有負責人**——拿統編查經濟部「商業登記基本資料-應用一」（GCIS swagger 探路：
- *   /7E6AFA72-AD6A-46D3-8681-ED77951D912D，OData，$filter=Business_Accounting_NO eq 統編；回來的欄位第一次跑會印出來，
- *   負責人欄位用名字比對 Responsible／負責人）。一家一家查，有 --owners 分鐘的預算，查過的留在 owners.json，
- *   下個月只查新的；查不完 workflow 會自己再排一輪（--skip-fetch 只補負責人）。
+ *   **沒有負責人**——負責人從新北市政府經濟發展局「新北市商業登記清冊」補（data.gov.tw 資料集 125322，探路確認）：
+ *   https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-83cb-474d91b7f3fc/csv/file（約 35 萬列，全新北市歷年商業登記）
+ *   欄位：address_code,ban_no,buss_name,buss_addr_comb,register_funds,org_code,res_name,set_app_date,close_app_date,yyymmroc
+ *   整份串流讀、只留名單裡的統編，用 ban_no 對 res_name。這份不定期更新（yyymmroc 是蒐集年月），
+ *   剛設立幾個月的可能還沒有；抓不到清冊就沿用上次的 owners.json。
+ *   （經濟部 GCIS 開放 API 的商業登記幾條都不給負責人，探路試過三輪。）
  *
  * 整份放不進網頁；這裡串流讀、只留：
  *   - 縣市在 --cities（預設新北市，新莊分公司的轄區都在新北）
@@ -19,9 +21,9 @@
  *   - 分公司（總機構統編非空）不要，總機構才是打的對象
  *
  * 產出 leads/biz/biz.csv（統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人）、
- * owners.json（統編 → 負責人）、index.json（抓取時間、出檔日期、各區筆數、查到負責人幾家）。
+ * owners.json（統編 → 負責人，清冊抓不到時沿用）、index.json（抓取時間、出檔日期、各區筆數、查到負責人幾家）。
  *
- * 用法：node tools/fetch-biz.mjs [--out leads/biz] [--cities 新北市] [--min-capital 500000] [--owners 分鐘] [--skip-fetch]
+ * 用法：node tools/fetch-biz.mjs [--out leads/biz] [--cities 新北市] [--min-capital 500000]
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -33,10 +35,8 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[
 const OUT = opt('out', 'leads/biz');
 const CITIES = opt('cities', '新北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const MIN_CAPITAL = Number(opt('min-capital', '500000')) || 0;
-const OWNER_MINUTES = Number(opt('owners', '0')) || 0;
-const SKIP_FETCH = args.includes('--skip-fetch');
 const SOURCE = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
-const OWNER_API = 'https://data.gcis.nat.gov.tw/od/data/api/7E6AFA72-AD6A-46D3-8681-ED77951D912D';
+const OWNER_SOURCE = 'https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-83cb-474d91b7f3fc/csv/file';   // 新北市商業登記清冊
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -79,48 +79,52 @@ function normalize(cells, { cities = CITIES, minCapital = MIN_CAPITAL } = {}) {
   return { taxId: tax, name: halfWidth(name), org: org.trim(), capital, setup: rocDate(setup), address: addr.replace(/^臺/, '台'), code: String(code1 || '').trim(), ind: String(ind1 || '').trim(), ind2: String(ind2 || '').trim(), ind3: String(ind3 || '').trim(), invoice: String(invoice || '').trim() === 'Y' ? 'Y' : 'N' };
 }
 
-/** 商業登記查負責人：回 { name, status }；查無回 { name: '' }；連不上回 null */
-let shownKeys = false;
-async function ownerOf(taxId) {
-  const url = `${OWNER_API}?$format=json&$filter=Business_Accounting_NO%20eq%20${taxId}&$skip=0&$top=1`;
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(45000) });
-    const text = await res.text();
-    if (res.status !== 200) return null;
-    if (!text.trim().startsWith('[')) return { name: '', status: '' };   // 「查無資料」是一段文字
-    const row = JSON.parse(text)[0];
-    if (!row) return { name: '', status: '' };
-    if (!shownKeys) { shownKeys = true; console.log('商業登記回來的欄位：', Object.keys(row).join(' | ')); console.log('第一筆：', JSON.stringify(row).slice(0, 400)); }
-    const key = Object.keys(row).find((k) => /Responsible|負責人/i.test(k));
-    const statusKey = Object.keys(row).find((k) => /Status|狀態/i.test(k));
-    return { name: key ? String(row[key] || '').trim() : '', status: statusKey ? String(row[statusKey] || '').trim() : '' };
-  } catch (e) { return null; }
-}
-
-/** 沒查過的一家一家查，資本額大的先；時間到就停，下一輪接著 */
-async function fillOwners(kept, owners, minutes) {
-  const todo = kept.filter((r) => !owners[r.taxId]);
-  if (!minutes) return { done: 0, left: todo.length, timeout: false };
-  const deadline = Date.now() + minutes * 60000;
-  let done = 0; let fails = 0; let stopped = '';
-  const save = () => fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(owners)}\n`, 'utf8');
-  for (const r of todo) {
-    if (Date.now() > deadline) { stopped = `時間到（${minutes} 分鐘）`; break; }
-    const got = await ownerOf(r.taxId);
-    if (got == null) { fails += 1; if (fails >= 15) { stopped = '連續 15 次連不上'; break; } await nap(2000); continue; }
-    fails = 0;
-    owners[r.taxId] = { at: new Date().toISOString().slice(0, 10), name: got.name, status: got.status };
-    done += 1;
-    if (done % 100 === 0) { console.log(`  …負責人查了 ${done} 家`); await save(); }
-    await nap(300);
+/** 新北市商業登記清冊：整份串流讀，只留名單裡的統編 → { name, closed }；同一統編有幾筆時留還在營業的、最新設立的。
+ *  回 { owners, month }（month 是清冊的蒐集年月，如 2026/06）；抓不到就丟錯，由呼叫端沿用上次的。 */
+async function loadOwners(taxIds, source = OWNER_SOURCE) {
+  const res = await fetch(source, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10 * 60000) });
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+  const rl = readline.createInterface({ input: Readable.fromWeb(res.body) });
+  let head = null; let n = 0; let month = ''; const owners = {};
+  for await (const raw of rl) {
+    const line = raw.replace(/^\uFEFF/, '');
+    if (!head) { head = parseLine(line).map((h) => h.trim().toLowerCase()); if (!head.includes('ban_no') || !head.includes('res_name')) throw new Error(`清冊表頭對不上：${line.slice(0, 200)}`); continue; }
+    n++;
+    const cells = parseLine(line);
+    const row = {}; head.forEach((h, i) => { row[h] = (cells[i] || '').trim(); });
+    if (!month && /^\d{5}$/.test(row.yyymmroc || '')) month = `${Number(row.yyymmroc.slice(0, 3)) + 1911}/${row.yyymmroc.slice(3)}`;
+    const tax = (row.ban_no || '').replace(/\D/g, '');
+    if (tax.length !== 8 || !taxIds.has(tax) || !row.res_name) continue;
+    const cur = { name: row.res_name, closed: !!(row.close_app_date || '').replace(/\D/g, ''), setup: (row.set_app_date || '').replace(/\D/g, '') };
+    const old = owners[tax];
+    if (!old || (old.closed && !cur.closed) || (old.closed === cur.closed && cur.setup > old.setup)) owners[tax] = cur;
   }
-  await save();
-  const left = kept.filter((r) => !owners[r.taxId]).length;
-  console.log(`負責人：這次查了 ${done} 家，還有 ${left} 家沒查${stopped ? `（${stopped}）` : ''}`);
-  return { done, left, timeout: /^時間到/.test(stopped) && left > 0 };
+  if (!n) throw new Error('清冊是空的');
+  console.log(`新北市商業登記清冊 ${n.toLocaleString()} 列（蒐集年月 ${month || '?'}），對到名單裡 ${Object.keys(owners).length.toLocaleString()} 家的負責人`);
+  return { owners, month };
 }
 
-async function writeOut(kept, owners, fileDate, st) {
+/** 對負責人：清冊抓得到就整批換新（順便寫 owners.json）；抓不到就沿用上次的 owners.json */
+async function fillOwners(kept) {
+  let cached = {};
+  try { cached = JSON.parse(await fs.readFile(path.join(OUT, 'owners.json'), 'utf8')); } catch (e) { cached = {}; }
+  Object.keys(cached).forEach((k) => { if (!cached[k] || !cached[k].name) delete cached[k]; });
+  const taxIds = new Set(kept.map((r) => r.taxId));
+  try {
+    const { owners, month } = await loadOwners(taxIds);
+    const at = new Date().toISOString().slice(0, 10);
+    const merged = {};
+    kept.forEach((r) => { const o = owners[r.taxId]; if (o) merged[r.taxId] = { at, name: o.name, month }; else if (cached[r.taxId]) merged[r.taxId] = cached[r.taxId]; });
+    await fs.writeFile(path.join(OUT, 'owners.json'), `${JSON.stringify(merged)}\n`, 'utf8');
+    return { owners: merged, month, fresh: true };
+  } catch (e) {
+    console.log(`✗ 商業登記清冊抓不到（${e.message}），負責人沿用上次的 ${Object.keys(cached).length} 家`);
+    return { owners: cached, month: '', fresh: false };
+  }
+}
+
+async function writeOut(kept, fileDate, ow) {
+  const owners = ow.owners;
   const byOrg = {}; const byDist = {};
   kept.forEach((r) => { byOrg[r.org] = (byOrg[r.org] || 0) + 1; const d = districtOf(r.address); byDist[d] = (byDist[d] || 0) + 1; });
   const rows = [HEAD, ...kept.map((r) => [r.taxId, r.name, r.org, r.capital, r.setup, r.address, r.code, r.ind, r.ind2, r.ind3, r.invoice, (owners[r.taxId] && owners[r.taxId].name) || ''])];
@@ -128,35 +132,16 @@ async function writeOut(kept, owners, fileDate, st) {
   const index = {
     generatedAt: new Date().toISOString(), fileDate, source: SOURCE, cities: CITIES, minCapital: MIN_CAPITAL,
     total: kept.length, byOrg, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
-    withOwner: kept.filter((r) => owners[r.taxId] && owners[r.taxId].name).length, ownersLeft: st.left,
+    withOwner: kept.filter((r) => owners[r.taxId] && owners[r.taxId].name).length, ownerSource: OWNER_SOURCE, ownerMonth: ow.month || '', ownerFresh: ow.fresh,
     files: [{ path: 'biz.csv', rows: kept.length }],
   };
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
   console.log(`寫入 biz.csv（${kept.length.toLocaleString()} 筆）：${Object.entries(byOrg).map(([k, v]) => `${k} ${v}`).join('、')}；各區 ${Object.entries(index.byDist).slice(0, 8).map(([k, v]) => `${k} ${v}`).join('、')}；查到負責人 ${index.withOwner} 家`);
-  if (process.env.GITHUB_OUTPUT) await fs.appendFile(process.env.GITHUB_OUTPUT, `remaining=${st.left}\ntimeout=${st.timeout}\n`);
-  console.log(st.timeout ? '\n負責人沒查完，下一輪接著查。' : '\n完成');
+  console.log('\n完成');
 }
 
 async function main() {
   await fs.mkdir(OUT, { recursive: true });
-  let owners = {};
-  try { owners = JSON.parse(await fs.readFile(path.join(OUT, 'owners.json'), 'utf8')); } catch (e) { owners = {}; }
-  // 第一次跑的查法不對，整批記成空的；空的不算查過，之後有對的來源再補
-  Object.keys(owners).forEach((k) => { if (!owners[k] || !owners[k].name) delete owners[k]; });
-
-  if (SKIP_FETCH) {
-    // 再排一輪：稅籍檔上一輪已經抓好，只補負責人再重寫 CSV
-    const table = (await fs.readFile(path.join(OUT, 'biz.csv'), 'utf8')).replace(/^﻿/, '').split(/\r?\n/).filter(Boolean).map(parseLine);
-    const head = table[0];
-    const kept = table.slice(1).map((c) => { const o = {}; head.forEach((h, i) => { o[h] = c[i] || ''; }); return { taxId: o['統編'], name: o['名稱'], org: o['組織別'], capital: Number(o['資本額']) || 0, setup: o['設立日期'], address: o['地址'], code: o['行業代號'], ind: o['行業'], ind2: o['行業2'], ind3: o['行業3'], invoice: o['開發票'] }; });
-    let fileDate = '';
-    try { fileDate = JSON.parse(await fs.readFile(path.join(OUT, 'index.json'), 'utf8')).fileDate || ''; } catch (e) { /* 沒有就空 */ }
-    console.log(`只補負責人：biz.csv 有 ${kept.length.toLocaleString()} 筆`);
-    const st = await fillOwners(kept, owners, OWNER_MINUTES);
-    await writeOut(kept, owners, fileDate, st);
-    return;
-  }
-
   console.log(`下載 ${SOURCE}（串流，只留 ${CITIES.join('、')} 的獨資／合夥、資本額 ≥ ${MIN_CAPITAL.toLocaleString()}）`);
   const res = await fetch(SOURCE, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20 * 60000) });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -174,11 +159,11 @@ async function main() {
   console.log(`讀完 ${n.toLocaleString()} 列（出檔 ${fileDate || '?'}），留 ${kept.length.toLocaleString()} 筆`);
   if (!kept.length) throw new Error('一筆都沒留下，篩選條件或欄位對不上');
   kept.sort((a, b) => b.capital - a.capital || (b.setup || '').localeCompare(a.setup || ''));
-  const st = await fillOwners(kept, owners, OWNER_MINUTES);
-  await writeOut(kept, owners, fileDate, st);
+  const ow = await fillOwners(kept);
+  await writeOut(kept, fileDate, ow);
 }
 
-export { normalize, parseLine, halfWidth, rocDate, districtOf, HEAD };
+export { normalize, parseLine, halfWidth, rocDate, districtOf, loadOwners, HEAD };
 
 if (process.argv[1] && /fetch-biz\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
