@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-196';
+  const APP_VERSION = '20260929-197';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3725,8 +3725,8 @@
          * 只留最後一次的時候，10/8 查到變更地址就把 9/16 的增資蓋掉了，
          * 看的人以為這家從來沒增過資。變更是一件一件發生的，就一件一件記。
          */
-        const ol = el('ol', { className: 'reg-history' });
-        r.regChanges.forEach((c) => {
+        // 使用者：「僅顯示最新的就好」——先只列最新一次，其餘收在「還有 N 次」裡點開看
+        const item = (c) => {
           const li = el('li', {}, [
             el('b', { textContent: `${dateLabel(c.date)}　${(c.kinds || []).map((k) => REG_KIND_LABEL[k]).join('、')}` }),
           ]);
@@ -3734,15 +3734,17 @@
             const label = (REGISTRY_FIELDS.find(([k]) => k === key) || [, key])[1];
             li.append(el('div', { className: 'muted', textContent: `${label}：${ch.from || '（空）'} → ${ch.to}` }));
           });
-          ol.append(li);
-        });
+          return li;
+        };
+        const ol = el('ol', { className: 'reg-history' }, [item(r.regChanges[0])]);
         dd.append(ol);
-        dd.append(el('div', {
-          className: 'muted',
-          textContent: r.regChanges.length > 1
-            ? `共 ${r.regChanges.length} 次，都已依登記更新上面的欄位。`
-            : '已依登記更新上面的欄位。',
-        }));
+        if (r.regChanges.length > 1) {
+          dd.append(el('details', { className: 'reg-history-more' }, [
+            el('summary', { textContent: `還有 ${r.regChanges.length - 1} 次較早的變更` }),
+            el('ol', { className: 'reg-history' }, r.regChanges.slice(1).map(item)),
+          ]));
+        }
+        dd.append(el('div', { className: 'muted', textContent: '已依登記更新上面的欄位。' }));
       } else {
         if (r.regError) {
           dd.append(document.createTextNode('未查核：查不到'));
@@ -5379,6 +5381,12 @@ export default {
     if (registryJob.running) return;   // 手動那輪還在跑，先不要搶，下一分鐘再看
     const today = todayISO();
     if (registryPref('registry-auto-last') === today) return;
+    // 有開雲端同步：今天先同步成功過才查，不然另一台昨天套用的地址還沒進來，這台又查到同一件變更再記一次
+    if (window.DriveSync && window.DriveSync.isConfigured()) {
+      let last = 0;
+      try { last = Number(await window.Store.getMeta('lastSyncAt')) || 0; } catch (e) { last = 0; }
+      if (!last || new Date(last).toDateString() !== new Date().toDateString()) return;   // 同步成功後 runSync 會再叫一次
+    }
     registryPref('registry-auto-last', today);   // 先記，避免同一天多個分頁重複跑
     await runRegistryJob({
       targets: state.records.map((rec) => ({ rec, r: view(rec) })),
@@ -6563,6 +6571,7 @@ export default {
       await reload();
       render();
       await showSyncTime();
+      autoRegistryTick();   // 今天的自動查核等同步成功才跑（見 maybeAutoRegistry）
       if (!quiet) {
         const g = result.gained;
         const gained = [

@@ -52,14 +52,16 @@
   function mergeRegChanges(left, right) {
     const seen = new Set();
     const out = [];
-    [...(left || []), ...(right || [])].forEach((e) => {
-      if (!e || !e.date || !(e.kinds || []).length) return;
-      const key = `${e.date}|${e.kinds.join(',')}`;
-      if (seen.has(key)) return;
-      seen.add(key);
+    const all = [...(left || []), ...(right || [])].filter((e) => e && e.date && (e.kinds || []).length);
+    // 新的先看，同一天同種類、或內容一模一樣的（兩台裝置各查到一次同一件事）只留最新那次
+    all.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    all.forEach((e) => {
+      const content = JSON.stringify(Object.keys(e.changes || {}).sort().map((k) => [k, e.changes[k].from, e.changes[k].to]));
+      const keys = [`${e.date}|${e.kinds.join(',')}`, `${e.kinds.join(',')}|${content}`];
+      if (keys.some((k) => seen.has(k))) return;
+      keys.forEach((k) => seen.add(k));
       out.push(e);
     });
-    out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return out.slice(0, REG_HISTORY_MAX);
   }
   /**
