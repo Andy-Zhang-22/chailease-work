@@ -16,7 +16,7 @@
  * 重大訊息的 API 每次只給「昨天」發的，所以要天天抓、自己累積：留最近 NEWS_DAYS 天，
  * 只存主旨不存說明（說明動輒上千字，兩千家公司一個月會撐爆頁面）。營收只留最新一期。
  *
- * 產出 leads/listed/news.json、revenue.json，並把 index.json 的 dailyAt／newsAt／revenueYm 更新
+ * 產出 leads/listed/news.json、revenue.json、pledge.json（董監持股與設質），並把 index.json 的 dailyAt／newsAt／revenueYm／pledgeYm 更新
  * （分頁用 dailyAt 當這兩個檔的快取鍵）。基本資料（董事長、資本額、地址）的異動不在這裡：
  * fetch-listed.mjs 每天重抓基本資料時跟前一天比，寫 changes.json。
  *
@@ -35,6 +35,15 @@ const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 const NEWS_SOURCES = [
   { market: '上市', url: 'https://openapi.twse.com.tw/v1/opendata/t187ap04_L' },
   { market: '上櫃', url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O' },
+];
+/*
+ * 董監事持股餘額明細（每月）：每位董監的目前持股、設質股數、設質比。使用者：「能加入個別的董監事設質比嗎」。
+ * 做租賃業務的看法：董事長把股票拿去質押＝需要資金，設質比高的是好線索。
+ * 上市那支探路確認過（27,475 列）；上櫃照櫃買的命名規則猜 mopsfin_t187ap11_O，抓不到就記一筆、其他照常。
+ */
+const PLEDGE_SOURCES = [
+  { market: '上市', url: 'https://openapi.twse.com.tw/v1/opendata/t187ap11_L' },
+  { market: '上櫃', url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap11_O' },
 ];
 const REVENUE_SOURCES = [
   { market: '上市', url: 'https://openapi.twse.com.tw/v1/opendata/t187ap05_L' },
@@ -109,6 +118,39 @@ function normRevenue(row, market) {
   };
 }
 
+/** API 的一列董監持股 → { code, ym, t 職稱, n 姓名, s 目前持股, p 設質股數, r 設質比% } */
+function normPledge(row) {
+  const code = clean(field(row, '公司代號', 'SecuritiesCompanyCode'));
+  const ym = rocYm(field(row, '資料年月'));
+  if (!code || !ym) return null;
+  const s = num(field(row, '目前持股')); const p = num(field(row, '設質股數'));
+  const rRaw = String(field(row, '設質股數佔持股比例') || '').replace(/[%,\s]/g, '');
+  const r = rRaw !== '' && Number.isFinite(Number(rRaw)) ? Math.round(Number(rRaw) * 10) / 10 : (s && p != null ? Math.round((p / s) * 1000) / 10 : null);
+  return { code, ym, t: clean(field(row, '職稱')), n: clean(field(row, '姓名')), s: s || 0, p: p || 0, r };
+}
+const CHAIR_RE = /^董事長/;
+/**
+ * 一家公司的董監持股 → 存的樣子：只留董事長本人與有設質的人（全部存兩千家會撐爆頁面），
+ * 另外算整組合計：董監持股合計、設質合計、合計設質比、有設質的人數。
+ */
+function pledgeOf(rows) {
+  const shares = rows.reduce((a, x) => a + (x.s || 0), 0);
+  const pledged = rows.reduce((a, x) => a + (x.p || 0), 0);
+  // 同一個法人股東佔好幾席（董事長本人、董事本人、董事本人…）API 會列好幾列，同名同持股的併成一列、職稱串起來
+  const merged = new Map();
+  rows.filter((x) => x.p > 0 || CHAIR_RE.test(x.t)).forEach((x) => {
+    const key = `${x.n}|${x.s}|${x.p}`;
+    const seen = merged.get(key);
+    if (seen) { if (!seen.titles.includes(x.t)) seen.titles.push(x.t); }
+    else merged.set(key, { t: x.t, n: x.n, s: x.s, p: x.p, r: x.r, titles: [x.t] });
+  });
+  const people = [...merged.values()]
+    .map(({ titles, ...x }) => ({ ...x, t: titles.sort((a, b) => (CHAIR_RE.test(b) ? 1 : 0) - (CHAIR_RE.test(a) ? 1 : 0)).join('、') }))
+    .sort((a, b) => (CHAIR_RE.test(b.t) ? 1 : 0) - (CHAIR_RE.test(a.t) ? 1 : 0) || (b.r || 0) - (a.r || 0));
+  // 人數算併過席次之後的（同一個法人佔三席算一個人）
+  return { ym: rows[0].ym, n: rows.length, shares, pledged, pct: shares ? Math.round((pledged / shares) * 1000) / 10 : 0, pledgers: people.filter((x) => x.p > 0).length, people };
+}
+
 async function getJson(url) {
   const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(90000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -160,20 +202,39 @@ async function main() {
   await fs.writeFile(revFile, `${JSON.stringify({ generatedAt: new Date().toISOString(), ym, by })}\n`, 'utf8');
   console.log(`revenue.json：${Object.keys(by).length} 家，資料年月 ${ym || '—'}`);
 
+  // 董監事持股與設質：每月一期，整份換新
+  const pledgeFile = path.join(OUT, 'pledge.json');
+  const oldPledge = await readJson(pledgeFile, { by: {} });
+  const pledgeBy = { ...(oldPledge.by || {}) };
+  let pledgeYm = oldPledge.ym || '';
+  for (const src of PLEDGE_SOURCES) {
+    try {
+      const rows = await getJson(src.url);
+      const groups = new Map();
+      rows.forEach((r) => { const v = normPledge(r); if (v) { if (!groups.has(v.code)) groups.set(v.code, []); groups.get(v.code).push(v); } });
+      groups.forEach((list, code) => { pledgeBy[code] = pledgeOf(list); if (list[0].ym > pledgeYm) pledgeYm = list[0].ym; });
+      console.log(`${src.market} 董監持股：${rows.length} 列、${groups.size} 家`);
+    } catch (err) { failed.push(`${src.market}董監持股`); console.log(`${src.market} 董監持股抓不到：${err.message}`); }
+    await nap(800);
+  }
+  await fs.writeFile(pledgeFile, `${JSON.stringify({ generatedAt: new Date().toISOString(), ym: pledgeYm, by: pledgeBy })}\n`, 'utf8');
+  const withPledge = Object.values(pledgeBy).filter((x) => x.pledgers > 0).length;
+  console.log(`pledge.json：${Object.keys(pledgeBy).length} 家，資料年月 ${pledgeYm || '—'}，有董監設質的 ${withPledge} 家`);
+
   // index.json 記動態更新到哪（分頁用 dailyAt 當快取鍵）
   const index = await readJson(indexFile, null);
   if (index) {
     index.dailyAt = new Date().toISOString();
-    index.newsAt = newsAt; index.newsCount = items.length; index.revenueYm = ym;
-    index.files = [...(index.files || []).filter((f) => !/^(news|revenue)\.json$/.test(f.path)), { path: 'news.json', rows: items.length }, { path: 'revenue.json', rows: Object.keys(by).length }];
+    index.newsAt = newsAt; index.newsCount = items.length; index.revenueYm = ym; index.pledgeYm = pledgeYm; index.withPledge = withPledge;
+    index.files = [...(index.files || []).filter((f) => !/^(news|revenue|pledge)\.json$/.test(f.path)), { path: 'news.json', rows: items.length }, { path: 'revenue.json', rows: Object.keys(by).length }, { path: 'pledge.json', rows: Object.keys(pledgeBy).length }];
     await fs.writeFile(indexFile, `${JSON.stringify(index, null, 1)}\n`, 'utf8');
   } else console.log('還沒有 index.json（先跑 fetch-listed.mjs），這次不更新 dailyAt');
 
-  if (failed.length === NEWS_SOURCES.length + REVENUE_SOURCES.length) throw new Error('四個來源都抓不到');
+  if (failed.length === NEWS_SOURCES.length + REVENUE_SOURCES.length + PLEDGE_SOURCES.length) throw new Error('每個來源都抓不到');
   console.log(failed.length ? `\n完成，但 ${failed.join('、')} 這次沒抓到，明天再補。` : '\n完成');
 }
 
-export { rocDate, rocYm, hhmm, normNews, normRevenue, mergeNews, newsKey };
+export { rocDate, rocYm, hhmm, normNews, normRevenue, normPledge, pledgeOf, mergeNews, newsKey };
 
 if (process.argv[1] && /fetch-listed-daily\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(err); process.exit(1); });

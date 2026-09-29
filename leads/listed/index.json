@@ -1,7 +1,7 @@
 {
- "dailyAt": "2026-09-28T22:40:24.362Z",
+ "dailyAt": "2026-09-29T11:36:44.792Z",
  "newsAt": "2026-09-28",
- "newsCount": 21,
+ "newsCount": 28,
  "revenueYm": "2026-08",
  "generatedAt": "2026-09-28T22:40:17.946Z",
  "total": 2348,
@@ -28,11 +28,17 @@
   },
   {
    "path": "news.json",
-   "rows": 21
+   "rows": 28
   },
   {
    "path": "revenue.json",
    "rows": 1978
+  },
+  {
+   "path": "pledge.json",
+   "rows": 1975
   }
- ]
+ ],
+ "pledgeYm": "2026-08",
+ "withPledge": 726
 }

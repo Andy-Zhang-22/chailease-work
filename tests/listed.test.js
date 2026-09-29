@@ -124,3 +124,33 @@ test('基本資料跟前一天比：董事長換人、新掛牌、下市櫃；�
   assert.equal(merged.length, 1, '過期丟掉、同一天同公司同欄位只留一筆');
   assert.deepEqual(m.parseCsv('﻿a,b\n1,"x,""y"\n'), [['a', 'b'], ['1', 'x,"y']]);
 });
+
+test('董監事設質：董事長本人與有設質的人、合計設質比、篩選鍵', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-listed-daily.mjs'));
+  const rows = [
+    { '資料年月': '11508', '公司代號': '1101', '職稱': '董事長本人', '姓名': '甲', '目前持股': '1000000', '設質股數': '400000', '設質股數佔持股比例': '40.00%' },
+    { '資料年月': '11508', '公司代號': '1101', '職稱': '董事本人', '姓名': '乙', '目前持股': '500000', '設質股數': '300000', '設質股數佔持股比例': '60.00%' },
+    { '資料年月': '11508', '公司代號': '1101', '職稱': '監察人本人', '姓名': '丙', '目前持股': '500000', '設質股數': '0', '設質股數佔持股比例': '0.00%' },
+  ].map((r) => m.normPledge(r));
+  const p = m.pledgeOf(rows);
+  assert.equal(p.ym, '2026-08'); assert.equal(p.n, 3); assert.equal(p.pledgers, 2); assert.equal(p.pct, 35);
+  assert.deepEqual(p.people.map((x) => x.n), ['甲', '乙'], '董事長排第一，沒設質的監察人不存');
+  const dyn = L.groupDyn(null, null, null, { by: { 1101: p } });
+  const r = L.attachDyn(L.toRecord({ '市場別': '上市', '公司代號': '1101', '公司名稱': '台泥', '實收資本額': '1' }, {}, TODAY), dyn, TODAY);
+  assert.equal(r.chairPledge.r, 40);
+  assert.deepEqual([...r.dynKeys].sort(), ['pledge', 'pledge-50', 'pledge-chair', 'pledge-total']);
+});
+
+test('董監事設質：同一個法人股東佔好幾席併成一列，職稱串起來、董事長排前', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-listed-daily.mjs'));
+  const rows = [
+    { '資料年月': '11508', '公司代號': '8927', '職稱': '董事本人', '姓名': '高雄汽車客運股份有限公司', '目前持股': '91712913', '設質股數': '59260000', '設質股數佔持股比例': '64.61%' },
+    { '資料年月': '11508', '公司代號': '8927', '職稱': '董事長本人', '姓名': '高雄汽車客運股份有限公司', '目前持股': '91712913', '設質股數': '59260000', '設質股數佔持股比例': '64.61%' },
+    { '資料年月': '11508', '公司代號': '8927', '職稱': '董事本人', '姓名': '高雄汽車客運股份有限公司', '目前持股': '91712913', '設質股數': '59260000', '設質股數佔持股比例': '64.61%' },
+    { '資料年月': '11508', '公司代號': '8927', '職稱': '董事本人', '姓名': '某某', '目前持股': '1000', '設質股數': '500', '設質股數佔持股比例': '50.00%' },
+  ].map((r) => m.normPledge(r));
+  const p = m.pledgeOf(rows);
+  assert.equal(p.people.length, 2);
+  assert.equal(p.people[0].t, '董事長本人、董事本人'); assert.equal(p.people[0].r, 64.6);
+  assert.equal(p.pledgers, 2, '人數算併過席次之後的');
+});

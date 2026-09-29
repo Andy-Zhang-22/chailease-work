@@ -963,3 +963,7 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .registry-drive-report { margin: 6px 0 10px; font-size: 13px; }
 .registry-drive-report summary { cursor: pointer; color: var(--primary); }
 .registry-report-text { white-space: pre-wrap; font: inherit; font-size: 12.5px; line-height: 1.6; max-height: 320px; overflow: auto; background: var(--surface-2); padding: 8px 10px; border-radius: 8px; margin: 6px 0 0; }
+
+/* 上市櫃公司：董監事設質 */
+.dyn-people { display: grid; gap: 3px; }
+.dyn-person .dyn-date { color: var(--danger, #b91c1c); font-weight: 600; }
