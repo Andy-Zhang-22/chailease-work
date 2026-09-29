@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-198';
+  const APP_VERSION = '20260929-199';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -755,8 +755,16 @@
      * 不要再跳回今日提醒了」）。有通話紀錄、或狀態記過最近聯絡日，就只看使用者自己記的。
      */
     const talked = !!(lastLog || (mine && mine.lastDate));
+    /*
+     * 名單新增日期：檔案沒填的，用進名單那天補（每日新名單看檔名的日期，其他看匯入時間）。
+     * 使用者：「今天加進來的名單，為什麼沒有出現在今天新增的選項內」——每日新名單的 CSV
+     * 以前這欄空著，篩選一律算「未填」。
+     */
+    const fromSource = (String(base.source || '').match(/^每日新名單-(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+    const fromImport = base.importedAt > 1e12 ? (() => { const d = new Date(base.importedAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
     const out = {
       ...base,
+      addedDate: base.addedDate || fromSource || fromImport || null,
       nextDate: (mine && mine.nextDate) || (talked ? null : fileNext),
       lastDate: (mine && mine.lastDate) || (lastLog && lastLog.date) || base.lastDate,
       // 洽談狀態每次都從訪談內容重新判讀，不用匯入時存下來的那份：
