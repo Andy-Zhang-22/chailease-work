@@ -1,5 +1,6 @@
 # 每月抓財政部「全國營業（稅籍）登記資料」，篩出新北市的商行、企業社（獨資、合夥），再拿新北市政府的
 # 「新北市商業登記清冊」對出負責人，放進 leads/biz/；網站的「商行／企業社」分頁讀這裡。
+# 也順便抓經濟部的商業每月設立／變更清冊（PDF）放 leads/biz/monthly/（分頁的「本月設立／變更」）。
 #
 # 使用者：「我想找商行或企業社的老闆做企金推廣，可以怎麼找名單」。
 # 為什麼在 GitHub Actions：檔案 322 MB、開發環境連不上政府網站；只有 Actions 出得去。財政部每月初換新檔。
@@ -7,7 +8,7 @@ name: 每月商行／企業社
 
 on:
   schedule:
-    - cron: '0 20 6 * *'   # 每月 7 日台灣 04:00
+    - cron: '0 20 7 * *'   # 每月 8 日台灣 04:00（財政部月初換檔；經濟部的商業清冊次月 5 日左右產製）
   workflow_dispatch:
     inputs:
       cities:
@@ -43,6 +44,19 @@ jobs:
         run: |
           node tools/fetch-biz.mjs --cities "$CITIES" --min-capital "$MIN_CAPITAL" | tee fetch-biz.log
           printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-biz.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      # 商業每月設立／變更清冊（經濟部，PDF），跟公司清冊同一支解析；分頁的「本月設立／變更」讀 leads/biz/monthly/
+      - name: 安裝 pdftotext
+        run: which pdftotext >/dev/null 2>&1 || sudo apt-get install -y -q poppler-utils
+
+      - name: 抓商業每月設立／變更清冊
+        continue-on-error: true
+        env:
+          CITIES: ${{ inputs.cities || '新北市' }}
+        run: |
+          node tools/fetch-leads.mjs --kind bms --cities "$CITIES" | tee fetch-bms.log
+          node tools/fetch-leads.mjs --kind bms --prune 6
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-bms.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: 存回 repo
         run: |

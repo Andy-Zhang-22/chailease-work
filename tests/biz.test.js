@@ -80,3 +80,21 @@ test('抓資料腳本：有限合夥、財團法人、寺廟、管委會不算�
   assert.equal(m.normalize(mk('某某大廈管理委員會', '獨資'), { cities: ['新北市'], minCapital: 0 }), null);
   assert.ok(m.normalize(mk('躍祥精密工業社', '獨資'), { cities: ['新北市'], minCapital: 0 }));
 });
+
+test('本月設立／變更：清冊一列 → 卡片資料（民國日期、營業項目拆開、案由分類）', () => {
+  const o = { '統一編號': '01894203', '公司名稱': '德縉企業社', '公司所在地': '新北市土城區裕生路21巷6弄33號8樓', '代表人': '石明輝', '資本額': '45000', '核准設立日期': '', '核准變更日期': '115/08/17', '案由或變更事項': '所在地變更', '營業項目': 'CD01040 機車及其零件製造業；CA02010 金屬結構及建築組件製造業；ZZ99999 除許可業務外，得經營法令非禁止或限制之業務', '縣市': '新北市', '清冊': '變更', '期別': '11508' };
+  const r = B.toMonthlyRecord(o, TODAY);
+  assert.equal(r.taxId, '01894203'); assert.equal(r.name, '德縉企業社'); assert.equal(r.owner, '石明輝'); assert.equal(r.capital, 45000);
+  assert.deepEqual(r.changed, { y: 2026, m: 8, d: 17 }); assert.equal(r.setup, null); assert.equal(B.ageOf(r), 'unknown');
+  assert.equal(r.kind, '變更'); assert.equal(r.rk, 'move'); assert.equal(r.reg, true); assert.equal(r.monthly, true); assert.equal(r.period, '11508');
+  assert.deepEqual(r.inds, ['機車及其零件製造業', '金屬結構及建築組件製造業'], 'ZZ99999 那條不算行業');
+  assert.equal(r.branch.key, '新北分公司'); assert.equal(r.district, '土城區');
+  assert.match(B.noteFor(r), /2026\/08 商業變更登記清冊：所在地變更/); assert.match(B.noteFor(r), /核准變更 2026\/08\/17/); assert.doesNotMatch(B.noteFor(r), /統一發票/);
+  const s = B.toMonthlyRecord({ ...o, '清冊': '設立', '核准設立日期': '115/08/11', '核准變更日期': '', '案由或變更事項': '' }, TODAY);
+  assert.equal(s.kind, '設立'); assert.deepEqual(s.setup, { y: 2026, m: 8, d: 11 }); assert.equal(s.years, 0); assert.equal(B.ageOf(s), 'lt5'); assert.equal(s.rk, '');
+  assert.equal(B.periodLabel('11508'), '2026/08'); assert.deepEqual(B.parseAnyDate('2026/08/11'), { y: 2026, m: 8, d: 11 }); assert.equal(B.parseAnyDate('115/13/01'), null);
+  assert.equal(B.reasonKind('合夥人變更'), 'owner'); assert.equal(B.reasonKind('轉讓登記'), 'owner'); assert.equal(B.reasonKind('繼承登記'), 'owner'); assert.equal(B.reasonKind('外縣市遷入'), 'move'); assert.equal(B.reasonKind('增資變更'), 'up'); assert.equal(B.reasonKind('出資額變更'), 'capital'); assert.equal(B.reasonKind('名稱變更'), 'name'); assert.equal(B.reasonKind('所營業務變更'), 'items'); assert.equal(B.reasonKind('組織變更'), 'org'); assert.equal(B.reasonKind('復業'), 'resume');
+  assert.equal(B.reasonKind('負責人改名'), 'other', '改名不是換老闆'); assert.equal(B.reasonKind('負責人住居所變更'), 'other'); assert.equal(B.reasonKind('所在地門牌整改編'), 'other', '門牌整編不是搬家'); assert.equal(B.reasonKind('更正'), 'other');
+  const rec = B.toStandardCsv([r]).split('\n')[1];
+  assert.match(rec, /^德縉企業社,01894203,,,45,,石明輝,,機車及其零件製造業,/);
+});

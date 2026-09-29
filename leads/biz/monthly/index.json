@@ -1,0 +1,27 @@
+{
+ "periods": {
+  "11508": {
+   "generatedAt": "2026-09-29T15:32:05.522Z",
+   "period": "11508",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11508/新北市-change.csv",
+     "rows": 572,
+     "capitalUp": 34
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11508/新北市-setup.csv",
+     "rows": 668,
+     "capitalUp": 0
+    }
+   ]
+  }
+ },
+ "latest": "11508",
+ "generatedAt": "2026-09-29T15:32:05.522Z",
+ "kind": "bms"
+}

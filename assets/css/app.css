@@ -967,3 +967,9 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 /* 上市櫃公司：董監事設質 */
 .dyn-people { display: grid; gap: 3px; }
 .dyn-person .dyn-date { color: var(--danger, #b91c1c); font-weight: 600; }
+
+/* 商行／企業社：名單／本月新設立／本月變更 的模式切換 */
+.biz-modes { align-items: center; gap: 10px; margin: 6px 0 8px; }
+.biz-modes .chips { margin: 0; }
+.biz-modes .chip[aria-pressed="true"] { font-weight: 600; }
+.biz-dyn { color: var(--primary); font-weight: 600; }
