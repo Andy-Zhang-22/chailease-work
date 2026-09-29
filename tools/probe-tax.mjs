@@ -1,49 +1,55 @@
 /**
- * 探路：財政部「全國營業（稅籍）登記資料」在哪裡、能不能下載、欄位長怎樣。一次性的，看完連同 workflow 一起刪。
- * 不猜網址：先從 data.gov.tw 的搜尋與資料集頁面把下載連結挖出來，再對每一個試 HEAD 與前 2MB。
+ * 探路第二輪：
+ *  1. 把 BGMOPEN1.csv 整份串流讀完，算新北市獨資／合夥有幾筆、資本額與設立年的分佈、開發票的比例——決定分頁怎麼篩
+ *  2. 經濟部 GCIS 的 swagger 裡有沒有「商業登記」查負責人的 API（用統編查）
  */
+import readline from 'node:readline';
+import { Readable } from 'node:stream';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
-const get = (url, init = {}) => fetch(url, { ...init, headers: { 'User-Agent': UA, ...(init.headers || {}) }, signal: AbortSignal.timeout(90000), redirect: 'follow' });
-const show = (label, text) => console.log(`\n=========== ${label} ===========\n${text}`);
-const found = new Set();
-const harvest = (html, base) => {
-  const re = /https?:\/\/[^\s"'<>]+/g; let m;
-  while ((m = re.exec(html))) { const u = m[0].replace(/&amp;/g, '&'); if (/\.(csv|zip|json|xml|txt)(\?|$)/i.test(u) || /fia\.gov\.tw|download|Download/.test(u)) found.add(u); }
-  const rel = /href="(\/[^"]+)"/g; while ((m = rel.exec(html))) { if (/dataset\/\d+/.test(m[1])) found.add(new URL(m[1], base).href); }
-};
-// 1. data.gov.tw 搜尋
-for (const q of ['營業(稅籍)登記', '營業稅籍登記資料集', '全國營業 稅籍 登記']) {
-  const url = `https://data.gov.tw/datasets/search?p=1&size=10&s=_score_desc&q=${encodeURIComponent(q)}`;
-  try { const r = await get(url); const t = await r.text(); show(`搜尋 ${q}`, `HTTP ${r.status} ${t.length} bytes`); harvest(t, url);
-    const titles = [...t.matchAll(/dataset\/(\d+)[^>]*>([^<]{4,80})</g)].slice(0, 15).map((x) => `${x[1]} ${x[2].trim()}`); console.log(titles.join('\n')); }
-  catch (e) { show(`搜尋 ${q}`, `✗ ${e.message}`); }
+const get = (url, init = {}) => fetch(url, { ...init, headers: { 'User-Agent': UA, ...(init.headers || {}) }, signal: AbortSignal.timeout(600000) });
+
+console.log('=========== GCIS swagger 裡跟商業登記有關的路徑 ===========');
+try {
+  const r = await get('https://data.gcis.nat.gov.tw/resources/swagger/swagger.json');
+  const j = JSON.parse(await r.text());
+  Object.entries(j.paths || {}).forEach(([p, v]) => {
+    const g = v.get || {}; const txt = `${g.summary || ''} ${g.description || ''} ${(g.tags || []).join(' ')}`;
+    if (/商業|負責人|Business/i.test(txt) || /商業/.test(p)) {
+      console.log(p, '—', (g.summary || '').slice(0, 80), '| params:', (g.parameters || []).map((x) => x.name).join(','));
+    }
+  });
+} catch (e) { console.log('✗', e.message); }
+
+console.log('\n=========== BGMOPEN1.csv 整份統計 ===========');
+const r = await get('https://eip.fia.gov.tw/data/BGMOPEN1.csv');
+const rl = readline.createInterface({ input: Readable.fromWeb(r.body) });
+const parse = (line) => { const out = []; let cur = ''; let q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; };
+let n = 0; let head = null;
+const stat = { total: 0, ntpc: 0, ntpcSole: 0, byOrg: {}, byDist: {}, capBucket: {}, yearBucket: {}, invoice: { Y: 0, N: 0 }, sample: [] };
+const capB = (v) => (v < 100000 ? '<10萬' : v < 500000 ? '10-50萬' : v < 1000000 ? '50-100萬' : v < 5000000 ? '100-500萬' : '≥500萬');
+const nowY = 2026;
+for await (const line of rl) {
+  n++;
+  if (n === 1) { head = parse(line); continue; }
+  const c = parse(line);
+  if (c.length < 10 || !c[1]) continue;
+  stat.total++;
+  const addr = c[0]; const org = c[6];
+  if (!/^新北市/.test(addr)) continue;
+  stat.ntpc++;
+  stat.byOrg[org] = (stat.byOrg[org] || 0) + 1;
+  if (!/獨資|合夥/.test(org)) continue;
+  stat.ntpcSole++;
+  const dist = (addr.match(/^新北市([^\s]{1,3}[區])/) || [])[1] || '?';
+  stat.byDist[dist] = (stat.byDist[dist] || 0) + 1;
+  const cap = Number(c[4]) || 0; stat.capBucket[capB(cap)] = (stat.capBucket[capB(cap)] || 0) + 1;
+  const y = c[5] && c[5].length === 7 ? Number(c[5].slice(0, 3)) + 1911 : 0;
+  const yb = !y ? '?' : nowY - y <= 5 ? '5年內' : nowY - y <= 10 ? '5-10年' : '>10年';
+  stat.yearBucket[yb] = (stat.yearBucket[yb] || 0) + 1;
+  stat.invoice[c[7] === 'Y' ? 'Y' : 'N']++;
+  if (stat.sample.length < 5 && /新莊區/.test(addr) && cap >= 1000000 && nowY - y <= 5) stat.sample.push(line.slice(0, 200));
 }
-// 2. 資料集頁面（9400 是印象中的編號，不對也沒關係，上面搜尋會補）
-for (const id of [9400, ...[...found].map((u) => (u.match(/dataset\/(\d+)/) || [])[1]).filter(Boolean)].slice(0, 6)) {
-  for (const url of [`https://data.gov.tw/api/v2/rest/dataset/${id}`, `https://data.gov.tw/dataset/${id}`]) {
-    try { const r = await get(url); const t = await r.text(); show(url, `HTTP ${r.status} ${t.length} bytes`);
-      if (/api\/v2/.test(url)) { try { const j = JSON.parse(t); console.log(JSON.stringify({ title: j.title, org: j.providerAttribute, dist: (j.distribution || []).map((d) => ({ desc: d.resourceDescription, url: d.downloadURL, fmt: d.resourceFormat })) }, null, 1).slice(0, 3000)); (j.distribution || []).forEach((d) => d.downloadURL && found.add(d.downloadURL)); } catch (e) { console.log(t.slice(0, 500)); } }
-      else { harvest(t, url); const title = (t.match(/<title>([^<]+)</) || [])[1]; console.log('title:', title); }
-    } catch (e) { show(url, `✗ ${e.message}`); }
-  }
-}
-// 3. 對每個看起來像檔案的連結試 HEAD 與前 2MB
-const files = [...found].filter((u) => /fia\.gov\.tw|\.(csv|zip)(\?|$)/i.test(u));
-show('候選下載連結', files.join('\n') || '（沒有）');
-for (const u of files.slice(0, 8)) {
-  try {
-    const h = await get(u, { method: 'HEAD' });
-    console.log(`\n--- ${u}\nHEAD ${h.status} type=${h.headers.get('content-type')} length=${h.headers.get('content-length')} ranges=${h.headers.get('accept-ranges')}`);
-    if (/\.zip(\?|$)/i.test(u)) continue;
-    const r = await get(u, { headers: { Range: 'bytes=0-2000000' } });
-    const buf = Buffer.from(await r.arrayBuffer());
-    console.log(`GET ${r.status} got ${buf.length} bytes`);
-    let text = buf.toString('utf8'); let enc = 'utf8';
-    if ((text.match(/�/g) || []).length > 20) { try { text = new TextDecoder('big5').decode(buf); enc = 'big5'; } catch (e) { /* 沒有 big5 */ } }
-    const lines = text.split(/\r?\n/);
-    console.log(`encoding=${enc} 前 2MB 約 ${lines.length} 列`);
-    console.log('表頭：', lines[0].slice(0, 500));
-    lines.slice(1, 4).forEach((l) => console.log('列：', l.slice(0, 300)));
-  } catch (e) { console.log(`\n--- ${u}\n✗ ${e.message}`); }
-}
+console.log('表頭：', head && head.join(' | '));
+console.log(JSON.stringify(stat, null, 1));
+// 新莊分公司轄區（新莊、泰山、五股、林口、三重、蘆洲、八里 大概）、獨資合夥、開發票、資本額≥50萬、設立10年內 大概幾筆
 console.log('\n完成。');
