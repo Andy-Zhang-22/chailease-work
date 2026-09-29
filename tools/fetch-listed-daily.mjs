@@ -136,10 +136,19 @@ const CHAIR_RE = /^董事長/;
 function pledgeOf(rows) {
   const shares = rows.reduce((a, x) => a + (x.s || 0), 0);
   const pledged = rows.reduce((a, x) => a + (x.p || 0), 0);
-  const people = rows.filter((x) => x.p > 0 || CHAIR_RE.test(x.t))
-    .sort((a, b) => (CHAIR_RE.test(b.t) ? 1 : 0) - (CHAIR_RE.test(a.t) ? 1 : 0) || (b.r || 0) - (a.r || 0))
-    .map(({ t, n, s, p, r }) => ({ t, n, s, p, r }));
-  return { ym: rows[0].ym, n: rows.length, shares, pledged, pct: shares ? Math.round((pledged / shares) * 1000) / 10 : 0, pledgers: rows.filter((x) => x.p > 0).length, people };
+  // 同一個法人股東佔好幾席（董事長本人、董事本人、董事本人…）API 會列好幾列，同名同持股的併成一列、職稱串起來
+  const merged = new Map();
+  rows.filter((x) => x.p > 0 || CHAIR_RE.test(x.t)).forEach((x) => {
+    const key = `${x.n}|${x.s}|${x.p}`;
+    const seen = merged.get(key);
+    if (seen) { if (!seen.titles.includes(x.t)) seen.titles.push(x.t); }
+    else merged.set(key, { t: x.t, n: x.n, s: x.s, p: x.p, r: x.r, titles: [x.t] });
+  });
+  const people = [...merged.values()]
+    .map(({ titles, ...x }) => ({ ...x, t: titles.sort((a, b) => (CHAIR_RE.test(b) ? 1 : 0) - (CHAIR_RE.test(a) ? 1 : 0)).join('、') }))
+    .sort((a, b) => (CHAIR_RE.test(b.t) ? 1 : 0) - (CHAIR_RE.test(a.t) ? 1 : 0) || (b.r || 0) - (a.r || 0));
+  // 人數算併過席次之後的（同一個法人佔三席算一個人）
+  return { ym: rows[0].ym, n: rows.length, shares, pledged, pct: shares ? Math.round((pledged / shares) * 1000) / 10 : 0, pledgers: people.filter((x) => x.p > 0).length, people };
 }
 
 async function getJson(url) {
