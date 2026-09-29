@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-197';
+  const APP_VERSION = '20260929-198';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -409,8 +409,9 @@
     bar.textContent = '';
     if (!state.records.length) { bar.hidden = true; return; }
     const today = todayISO();
-    const fresh = allViews().filter((v) => isFreshLead(v) && v.nextDate === today);
-    const done = fresh.filter((v) => v.dueDoneOn === today).length;
+    // 今天的新名單：排在今天的，加上今天已經打過（記了通話）的——打完不能從「今天的新名單」裡消失
+    const fresh = allViews().filter((v) => FRESH_SOURCE_RE.test(String(v.source || '')) && (v.nextDate === today || v.lastDate === today));
+    const done = fresh.filter((v) => v.dueDoneOn === today || v.lastDate === today).length;
     const quota = Math.max(1, newQuota());
     const off = window.Holidays && !window.Holidays.isWorkday(today);
     const text = off
@@ -745,9 +746,18 @@
     // 意思是那次沒有約下一次；照字面收會讓 19 筆沒約的客戶掛著逾期好幾個月。
     // 只套在檔案帶進來的值，使用者自己在網站上記的下次聯絡日照原樣。
     const fileNext = base.nextDate && base.nextDate === base.lastDate ? null : base.nextDate;
+    /*
+     * 在網站上記過這家的通話之後，檔案帶進來的下次聯絡日就不再算數。
+     *
+     * 每日新名單匯進來時下次聯絡日＝今天；使用者打完記了通話、沒約下次（或約了別天），
+     * 狀態的 nextDate 是 null，原本會退回檔案的「今天」，那家就一直掛在「今天要打」
+     * （使用者：「只要我在訪談紀錄有新增今天的對話內容後，就依照我的下次聯絡日去做更動，
+     * 不要再跳回今日提醒了」）。有通話紀錄、或狀態記過最近聯絡日，就只看使用者自己記的。
+     */
+    const talked = !!(lastLog || (mine && mine.lastDate));
     const out = {
       ...base,
-      nextDate: (mine && mine.nextDate) || fileNext,
+      nextDate: (mine && mine.nextDate) || (talked ? null : fileNext),
       lastDate: (mine && mine.lastDate) || (lastLog && lastLog.date) || base.lastDate,
       // 洽談狀態每次都從訪談內容重新判讀，不用匯入時存下來的那份：
       // 判讀規則會改（例如「最上面沒日期＝未撥打」），改了要對已經在名單上的
@@ -2320,7 +2330,8 @@
     return Number.isFinite(n) && n >= 0 ? Math.min(dailyCap(), Math.round(n)) : Math.min(dailyCap(), NEW_QUOTA_DEFAULT);
   };
   /** 「完全新的名單」：從新公司或動產擔保加進來、還沒打過。 */
-  const isFreshLead = (v) => !v.lastDate && /^(登記清冊|動產擔保名單|每日新名單)/.test(String(v.source || ''));
+  const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|每日新名單)/;
+  const isFreshLead = (v) => !v.lastDate && FRESH_SOURCE_RE.test(String(v.source || ''));
 
   /** 從今天起算的上班日（今天放假就從下一個上班日開始）。 */
   function workdaysFromToday(count) {
