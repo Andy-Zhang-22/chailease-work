@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-194';
+  const APP_VERSION = '20260929-195';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -382,7 +382,21 @@
     dueToday().forEach((r) => { if (!seen.has(r.id)) items.push({ r, kind: 'date', at: 0, due: false }); });
     // 到期的排最前，再來有時間的照時間，最後是只有日期的
     items.sort((x, y) => (Number(y.due) - Number(x.due)) || ((x.at || Infinity) - (y.at || Infinity)) || x.r.company.localeCompare(y.r.company, 'zh-Hant'));
-    return items;
+    /*
+     * 同老闆連結的關係企業只列一家（使用者：「同個連結的公司，撥打提醒都只顯示一間就好」）：
+     * 一通電話談的是整組。排最前的那家代表整組，其他家收在它底下寫「＋N 家關係企業」，
+     * 按「完成」整組一起完成。
+     */
+    const byGroup = new Map();
+    const out = [];
+    items.forEach((it) => {
+      const g = it.r.group;
+      if (!g) { out.push(it); return; }
+      const head = byGroup.get(g);
+      if (head) head.mates.push(it);
+      else { it.mates = []; byGroup.set(g, it); out.push(it); }
+    });
+    return out;
   }
   /*
    * 名單頁最上面那一條「今天的新名單」：幾家、處理了幾家、以及「再補 N 家」。
@@ -451,11 +465,11 @@
     if (!open) return;
 
     const list = el('div', { className: 'remind-list' });
-    items.forEach(({ r, kind, due }) => {
+    items.forEach(({ r, kind, due, mates = [] }) => {
       const row = el('div', { className: `remind-row ${due ? 'is-due' : ''} ${kind === 'date' ? 'is-today' : ''}` });
       const time = el('b', { className: 'remind-time', textContent: kind === 'timed' ? whenLabel(r.remindAt) : '今天' });
-      const openBtn = el('button', { className: 'remind-open', type: 'button' }, [
-        el('span', { className: 'remind-name', textContent: r.company }),
+      const openBtn = el('button', { className: 'remind-open', type: 'button', title: mates.length ? `同一組關係企業：${mates.map((m) => m.r.company).join('、')}` : '' }, [
+        el('span', { className: 'remind-name' }, [document.createTextNode(r.company), mates.length ? el('span', { className: 'remind-mates', textContent: `＋${mates.length} 家關係企業` }) : '']),
         el('span', { className: 'remind-meta', textContent: [r.remindNote, r.keyman].filter(Boolean).join('　') }),
       ]);
       openBtn.onclick = () => openDetail(r.id);
@@ -472,10 +486,11 @@
        * 下次聯絡日本身不動：那是使用者自己排的計畫，卡片上照樣看得到。
        */
       const doneToday = async () => {
-        const patch = { dueDoneOn: todayISO() };
-        if (kind === 'timed') Object.assign(patch, { remindAt: null, remindNote: '', remindSetAt: Date.now() });
+        const patchFor = (k) => ({ dueDoneOn: todayISO(), ...(k === 'timed' ? { remindAt: null, remindNote: '', remindSetAt: Date.now() } : {}) });
         try {
-          await saveState(r.id, patch);
+          await saveState(r.id, patchFor(kind));
+          // 收在底下的關係企業一起完成，不然按掉一家下一家又跳出來
+          for (const m of mates) await saveState(m.r.id, patchFor(m.kind));
         } catch (err) {
           console.error('完成提醒失敗', err);
           toast(`存不進去：${err && err.message ? err.message : err}。請重新整理再試一次。`);
@@ -483,9 +498,9 @@
         }
         scheduleSync();
         render();
-        toast(`「${r.company}」今天不再提醒`);
+        toast(`「${r.company}」${mates.length ? `與 ${mates.length} 家關係企業` : ''}今天不再提醒`);
       };
-      const done = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '完成', title: '今天不再提醒這一家（下次聯絡日不變）' });
+      const done = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '完成', title: mates.length ? '今天不再提醒這一組關係企業（下次聯絡日不變）' : '今天不再提醒這一家（下次聯絡日不變）' });
       done.onclick = doneToday;
       actions.append(done);
       if (kind === 'timed') {
