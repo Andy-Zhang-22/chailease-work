@@ -93,7 +93,8 @@ test('本月設立／變更：清冊一列 → 卡片資料（民國日期、營
   const s = B.toMonthlyRecord({ ...o, '清冊': '設立', '核准設立日期': '115/08/11', '核准變更日期': '', '案由或變更事項': '' }, TODAY);
   assert.equal(s.kind, '設立'); assert.deepEqual(s.setup, { y: 2026, m: 8, d: 11 }); assert.equal(s.years, 0); assert.equal(B.ageOf(s), 'lt5'); assert.equal(s.rk, '');
   assert.equal(B.periodLabel('11508'), '2026/08'); assert.deepEqual(B.parseAnyDate('2026/08/11'), { y: 2026, m: 8, d: 11 }); assert.equal(B.parseAnyDate('115/13/01'), null);
-  assert.equal(B.reasonKind('合夥人變更'), 'owner'); assert.equal(B.reasonKind('轉讓登記'), 'owner'); assert.equal(B.reasonKind('外縣市遷入'), 'move'); assert.equal(B.reasonKind('增資'), 'up'); assert.equal(B.reasonKind('資本額變更'), 'capital'); assert.equal(B.reasonKind('名稱變更'), 'name'); assert.equal(B.reasonKind('營業項目變更'), 'items'); assert.equal(B.reasonKind('其他'), 'other');
+  assert.equal(B.reasonKind('合夥人變更'), 'owner'); assert.equal(B.reasonKind('轉讓登記'), 'owner'); assert.equal(B.reasonKind('繼承登記'), 'owner'); assert.equal(B.reasonKind('外縣市遷入'), 'move'); assert.equal(B.reasonKind('增資變更'), 'up'); assert.equal(B.reasonKind('出資額變更'), 'capital'); assert.equal(B.reasonKind('名稱變更'), 'name'); assert.equal(B.reasonKind('所營業務變更'), 'items'); assert.equal(B.reasonKind('組織變更'), 'org'); assert.equal(B.reasonKind('復業'), 'resume');
+  assert.equal(B.reasonKind('負責人改名'), 'other', '改名不是換老闆'); assert.equal(B.reasonKind('負責人住居所變更'), 'other'); assert.equal(B.reasonKind('所在地門牌整改編'), 'other', '門牌整編不是搬家'); assert.equal(B.reasonKind('更正'), 'other');
   const rec = B.toStandardCsv([r]).split('\n')[1];
   assert.match(rec, /^德縉企業社,01894203,,,45,,石明輝,,機車及其零件製造業,/);
 });
