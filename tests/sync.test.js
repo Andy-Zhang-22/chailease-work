@@ -116,3 +116,22 @@ test('diffSummary：這次同步多了幾筆', () => {
   assert.deepEqual(DriveSync.diffSummary({ records: [1], logs: [], states: [] }, { records: [1, 2], logs: [1], states: [] }), { records: 1, logs: 1, states: 0 });
   assert.deepEqual(DriveSync.diffSummary(null, null), { records: 0, logs: 0, states: 0 });
 });
+
+test('mergeDumps：同統編的兩筆收成一筆，留最早匯入的，另一筆的通話紀錄與狀態搬過來', () => {
+  const { DriveSync } = loadModules(['sync']);
+  const old = { id: 'old', source: '每日新名單-2026-09-27.csv', company: '鑫廷織品開發股份有限公司', taxId: '12660104', importedAt: 100 };
+  const dup = { id: 'dup', source: '每日新名單-2026-09-29.csv', company: '鑫廷織品開發股份有限公司', taxId: '12660104', importedAt: 200 };
+  const other = { id: 'x', source: 'A', company: '同名不同統編', taxId: '11111111', importedAt: 50 };
+  const other2 = { id: 'y', source: 'B', company: '同名不同統編', taxId: '22222222', importedAt: 60 };
+  const a = { records: [old, other], logs: [{ uid: 'l1', recordId: 'old', createdAt: 150, note: '打過' }], states: [{ recordId: 'old', updatedAt: 150, edits: { phoneRaw: '02 2995 5188' }, editsAt: 150 }], tombstones: {}, settings: {} };
+  const b = { records: [dup, other2], logs: [{ uid: 'l2', recordId: 'dup', createdAt: 250, note: '另一台打的' }], states: [{ recordId: 'dup', updatedAt: 260, nextDate: '2026-10-01' }], tombstones: {}, settings: {} };
+  const ab = DriveSync.mergeDumps(a, b);
+  const ba = DriveSync.mergeDumps(b, a);
+  assert.deepEqual(ab.records.map((r) => r.id).sort(), ['old', 'x', 'y'], '同統編留最早的；同名不同統編是兩家，都留');
+  assert.deepEqual(ba.records.map((r) => r.id).sort(), ['old', 'x', 'y'], '順序對調結果一樣');
+  assert.deepEqual(ab.logs.map((l) => `${l.uid}:${l.recordId}`).sort(), ['l1:old', 'l2:old'], '另一筆的通話紀錄搬到留下的那筆');
+  const st = ab.states.find((s) => s.recordId === 'old');
+  assert.equal(ab.states.length, 1);
+  assert.equal(st.nextDate, '2026-10-01', '狀態合併：比較新的下次聯絡日');
+  assert.deepEqual(st.edits, { phoneRaw: '02 2995 5188' }, '編輯過的電話留著');
+});

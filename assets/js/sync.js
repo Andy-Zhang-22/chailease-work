@@ -153,6 +153,34 @@
       if (selfKilled && selfKilled > (r.importedAt || 0)) records.delete(id);
     }
 
+    /*
+     * 同一家公司只留一筆（使用者：「只要是重複的名單就不要匯入」）。
+     *
+     * 匯入時已經擋重複，但兩台裝置各自匯入、還沒同步時擋不到：手機週日按「再補」挑了六家，
+     * 電腦週一早上同步失敗（token 過期）就直接挑今天的，同樣六家又進來一次，之後一同步兩邊
+     * 都變成兩筆。這裡在合併時把同統編的收成一筆：留最早匯入的那筆（打過的紀錄、找來的
+     * 電話多半在它身上），另一筆的通話紀錄與追蹤狀態搬過來再合併，記錄本身丟掉。
+     * 兩邊算出來的結果一樣（照 importedAt、id 排），所以哪台先合併都收斂到同一份。
+     * 只認統編：同名不同統編是兩家公司；沒統編的靠匯入時的名稱比對就夠了。
+     */
+    const alias = new Map();   // 被收掉的 id → 留下的 id
+    {
+      const byTax = new Map();
+      records.forEach((r) => {
+        const tax = String(r.taxId || '').replace(/\D/g, '');
+        if (!tax) return;
+        if (!byTax.has(tax)) byTax.set(tax, []);
+        byTax.get(tax).push(r);
+      });
+      byTax.forEach((group) => {
+        if (group.length < 2) return;
+        group.sort((x, y) => (x.importedAt || 0) - (y.importedAt || 0) || String(x.id).localeCompare(String(y.id)));
+        const keep = group[0];
+        group.slice(1).forEach((r) => { alias.set(r.id, keep.id); records.delete(r.id); });
+      });
+    }
+    const realId = (id) => alias.get(id) || id;
+
     // 通話紀錄：兩邊聯集，靠 uid 去重；被刪掉的不要救回來。
     //
     // 同一個 uid 出現在兩邊時要取「改得比較新」的那一份，不能先到先贏——
@@ -160,9 +188,10 @@
     // 而且是完全無聲的：畫面上看起來存好了，同步一次就變回去。
     const logs = new Map();
     const logStamp = (l) => Math.max(l.updatedAt || 0, l.createdAt || 0);
-    [...(left.logs || []), ...(right.logs || [])].forEach((l) => {
-      if (!l) return;
-      const uid = l.uid || `${l.recordId}|${l.createdAt}`;
+    [...(left.logs || []), ...(right.logs || [])].forEach((raw) => {
+      if (!raw) return;
+      const l = alias.has(raw.recordId) ? { ...raw, recordId: realId(raw.recordId) } : raw;
+      const uid = raw.uid || `${raw.recordId}|${raw.createdAt}`;
       if (tombstones.logs[uid]) return;
       const seen = logs.get(uid);
       if (!seen || logStamp(l) > logStamp(seen)) logs.set(uid, { ...l, uid });
@@ -196,8 +225,10 @@
       return !!(selfKilled && selfKilled > stamp);
     };
     const states = new Map();
-    [...(left.states || []), ...(right.states || [])].forEach((st) => {
-      if (!st || !st.recordId || stateDead(st)) return;
+    [...(left.states || []), ...(right.states || [])].forEach((raw) => {
+      if (!raw || !raw.recordId) return;
+      const st = alias.has(raw.recordId) ? { ...raw, recordId: realId(raw.recordId) } : raw;
+      if (stateDead(st)) return;
       const seen = states.get(st.recordId);
       states.set(st.recordId, seen ? mergeState(seen, st) : st);
     });
