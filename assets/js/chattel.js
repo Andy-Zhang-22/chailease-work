@@ -380,18 +380,27 @@
    * 照順序比，全部一樣就快到期的先。全符合的先挑，不夠就往下補。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['3 個月內到期', '同業', '我的分公司', '100 萬以上'];
+  /*
+   * 每日挑選的優先順序（使用者：「這個挑選標準不是定式，是優先順序而已」、
+   * 「我只要成立 5 年內的公司」、「以上挑選的條件都不是寫死的，只要找不到都可以再挑選其他條件的名單」）：
+   * 成立 5 年內排最前面，但不是門檻——5 年內的挑完了就往下挑 5 年以上、成立年不明的。
+   * 每一項：布林值 true 在前；數字越小越好（到期等級）。
+   */
+  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '我的分公司', '100 萬以上'];
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
+    ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
     r.family !== 'chailease' && !r.custIsFin,
     r.branch.key === myBranch(),
     r.amount >= 1000000,
   ];
   function dailyCompare(a, b) {
-    if (a._checks[0] !== b._checks[0]) return a._checks[0] - b._checks[0];
-    for (let i = 1; i < a._checks.length; i++) {
-      if (a._checks[i] !== b._checks[i]) return a._checks[i] ? -1 : 1;
+    for (let i = 0; i < a._checks.length; i++) {
+      const x = a._checks[i]; const y = b._checks[i];
+      if (x === y) continue;
+      if (typeof x === 'number') return x - y;
+      return x ? -1 : 1;
     }
     return (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days);
   }
@@ -401,11 +410,10 @@
     await start();
     if (!ready) return [];
     const cm = customerMap();
-    // 使用者：「我只要成立 5 年內的公司」——這是硬條件，不是優先順序；成立年不明的也不挑
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && ageOf(r) === 'lt5')
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
       .map((r) => {
         r._checks = dailyChecks(r);
-        const hit = DAILY_PRIORITY.filter((_, i) => (i === 0 ? r._checks[0] === 0 : r._checks[i]));
+        const hit = DAILY_PRIORITY.filter((_, i) => (i === 1 ? r._checks[1] === 0 : r._checks[i]));
         r._why = hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位';
         return r;
       })
