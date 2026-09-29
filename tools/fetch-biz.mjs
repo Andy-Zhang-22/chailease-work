@@ -141,6 +141,8 @@ async function main() {
   await fs.mkdir(OUT, { recursive: true });
   let owners = {};
   try { owners = JSON.parse(await fs.readFile(path.join(OUT, 'owners.json'), 'utf8')); } catch (e) { owners = {}; }
+  // 第一次跑的查法不對，整批記成空的；空的不算查過，之後有對的來源再補
+  Object.keys(owners).forEach((k) => { if (!owners[k] || !owners[k].name) delete owners[k]; });
 
   if (SKIP_FETCH) {
     // 再排一輪：稅籍檔上一輪已經抓好，只補負責人再重寫 CSV
