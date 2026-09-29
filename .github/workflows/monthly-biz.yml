@@ -19,6 +19,15 @@ on:
         description: '資本額下限（元）'
         required: false
         default: '500000'
+      bms_periods:
+        description: '商業清冊要抓哪幾期（民國年月，逗號分隔；留空＝最新一期）'
+        required: false
+        default: ''
+      only_bms:
+        description: '只抓商業清冊，不重抓稅籍檔（補舊期別時用）'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -38,6 +47,7 @@ jobs:
           node-version: '22'
 
       - name: 抓稅籍登記、篩商行／企業社、對負責人
+        if: inputs.only_bms != true
         env:
           CITIES: ${{ inputs.cities || '新北市' }}
           MIN_CAPITAL: ${{ inputs.min_capital || '500000' }}
@@ -53,8 +63,13 @@ jobs:
         continue-on-error: true
         env:
           CITIES: ${{ inputs.cities || '新北市' }}
+          PERIODS: ${{ inputs.bms_periods }}
         run: |
-          node tools/fetch-leads.mjs --kind bms --cities "$CITIES" | tee fetch-bms.log
+          if [ -n "$PERIODS" ]; then
+            for p in $(echo "$PERIODS" | tr ',，' '  '); do node tools/fetch-leads.mjs --kind bms --cities "$CITIES" --period "$p" | tee -a fetch-bms.log; done
+          else
+            node tools/fetch-leads.mjs --kind bms --cities "$CITIES" | tee fetch-bms.log
+          fi
           node tools/fetch-leads.mjs --kind bms --prune 6
           printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-bms.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
 
