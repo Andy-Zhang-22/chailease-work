@@ -401,7 +401,8 @@
     await start();
     if (!ready) return [];
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+    // 使用者：「我只要成立 5 年內的公司」——這是硬條件，不是優先順序；成立年不明的也不挑
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && ageOf(r) === 'lt5')
       .map((r) => {
         r._checks = dailyChecks(r);
         const hit = DAILY_PRIORITY.filter((_, i) => (i === 0 ? r._checks[0] === 0 : r._checks[i]));

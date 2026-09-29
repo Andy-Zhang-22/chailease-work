@@ -135,3 +135,14 @@ test('mergeDumps：同統編的兩筆收成一筆，留最早匯入的，另一�
   assert.equal(st.nextDate, '2026-10-01', '狀態合併：比較新的下次聯絡日');
   assert.deepEqual(st.edits, { phoneRaw: '02 2995 5188' }, '編輯過的電話留著');
 });
+
+test('mergeRegChanges：兩天各查到一模一樣的變更（另一台沒同步到）只留最新那次；不同內容都留', () => {
+  const { DriveSync } = loadModules(['sync']);
+  const same = { address: { from: '新北市三重區仁賢街20號5樓', to: '新北市新店區寶興路45巷2弄20號8樓' } };
+  const a = [{ date: '2026-09-28', kinds: ['address'], changes: same }];
+  const b = [{ date: '2026-09-29', kinds: ['address'], changes: same }, { date: '2026-03-01', kinds: ['capitalUp'], changes: { capital: { from: '1,000', to: '2,000' } } }];
+  const out = DriveSync.mergeRegChanges(a, b);
+  assert.deepEqual(out.map((e) => e.date), ['2026-09-29', '2026-03-01']);
+  const back = [{ date: '2026-09-30', kinds: ['address'], changes: { address: { from: '新北市新店區寶興路45巷2弄20號8樓', to: '新北市三重區仁賢街20號5樓' } } }];
+  assert.equal(DriveSync.mergeRegChanges(out, back).length, 3, '搬回去是另一件事，要留');
+});
