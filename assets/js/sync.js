@@ -116,6 +116,27 @@
       out.remindSetAt = older.remindSetAt;
     }
     if (!out.remindAt) { delete out.remindAt; delete out.remindNote; }
+    /*
+     * 其餘欄位各自看 fieldAt（saveState 每改一個欄位就記一次時間）。
+     *
+     * 沒有 fieldAt 的舊資料照上面「整筆取較新」；某一邊有記、另一邊沒記的，拿記的那個時間跟另一邊的 updatedAt 比。
+     * 這樣手機按的「完成」（dueDoneOn）、改的下次聯絡日，不會因為電腦那份 updatedAt 比較新（背景查商工登記寫了 regAt）
+     * 就整筆被蓋掉。上面已經各自處理的欄位不在這裡再比一次。
+     */
+    const SPECIAL = new Set(['recordId', 'updatedAt', 'fieldAt', 'edits', 'editsAt', 'group', 'groupIds', 'groupAt', 'regAt', 'regError', 'regChanges', 'regChange', 'chance', 'chanceAt', 'remindAt', 'remindNote', 'remindSetAt']);
+    const fa = a.fieldAt || {}; const fb = b.fieldAt || {};
+    // 有 fieldAt 的那份（新版寫的）沒記某個欄位＝它沒動過那個欄位，算 0；整筆連 fieldAt 都沒有的是舊版寫的，只能拿 updatedAt 當時間
+    const stampOf = (side, k) => (side.fieldAt ? (side.fieldAt[k] != null ? side.fieldAt[k] : 0) : (side.updatedAt || 0));
+    const outAt = { ...(older.fieldAt || {}), ...(newer.fieldAt || {}) };
+    new Set([...Object.keys(a), ...Object.keys(b), ...Object.keys(fa), ...Object.keys(fb)]).forEach((k) => {
+      if (SPECIAL.has(k)) return;
+      if (fa[k] == null && fb[k] == null) return;   // 兩邊都沒記過這個欄位的時間，照整筆的結果
+      const ta = stampOf(a, k); const tb = stampOf(b, k);
+      const win = tb > ta ? b : ta > tb ? a : newer;
+      if (win[k] === undefined) delete out[k]; else out[k] = win[k];
+      outAt[k] = Math.max(ta, tb);
+    });
+    if (Object.keys(outAt).length) out.fieldAt = outAt;
     return out;
   }
 
