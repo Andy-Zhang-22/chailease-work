@@ -25,7 +25,10 @@
  * 不寫回去——兩支 workflow 各自 commit 自己的檔，才不會在 main 上互相衝突。
  * 查的順序照契約迄日，快到期的先查：時間到了沒查完，先有的也是最要緊的那幾家。
  *
- * 用法：node tools/fill-founded.mjs [--source leads|chattel] [--out leads] [--minutes 240]
+ * 出進口廠商也用（--source trade）：leads/trade/trade.csv 的「統編」查成立日期，填進「成立日期」欄，快取 leads/trade/founded.json，
+ * 同樣只讀 leads/founded.json 當種子（使用者：「出進口廠商能補上成立年嗎」）。
+ *
+ * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade] [--out leads] [--minutes 240]
  *                                   [--concurrency 6] [--limit N] [--dry]
  */
 import { createRequire } from 'node:module';
@@ -44,8 +47,10 @@ const CONC = Math.max(1, Math.min(12, Number(opt('concurrency', '6')) || 6));
 const LIMIT = Number(opt('limit', '0')) || 0;
 const DRY = args.includes('--dry');
 const CHATTEL = SOURCE === 'chattel';
-const CACHE = CHATTEL ? path.join(OUT, 'chattel', 'founded.json') : path.join(OUT, 'founded.json');
-const SEED = CHATTEL ? path.join(OUT, 'founded.json') : '';   // 只讀、不寫回
+const TRADE = SOURCE === 'trade';
+const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : '';   // 自己的資料夾（快取、index 都在那裡）
+const CACHE = SUB ? path.join(OUT, SUB, 'founded.json') : path.join(OUT, 'founded.json');
+const SEED = SUB ? path.join(OUT, 'founded.json') : '';   // 只讀、不寫回
 const DEADLINE = Date.now() + MINUTES * 60000;
 
 // 政府網站對沒有瀏覽器 UA 的請求有時直接回空白，跟每週健檢用同一個
@@ -107,10 +112,14 @@ if (SEED) {
 // 每種來源：哪些檔、統編／名稱在哪一欄、填哪一欄、查的先後
 const COLS = CHATTEL
   ? { tax: '客戶統編', name: '客戶名稱', fill: '成立日期', order: '契約迄', label: '動產擔保名單' }
-  : { tax: '統一編號', name: '公司名稱', fill: '核准設立日期', order: '', label: '變更清冊' };
+  : TRADE
+    ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: '出進口廠商' }   // 檔案本來就是最新登記在前，照檔案順序查
+    : { tax: '統一編號', name: '公司名稱', fill: '核准設立日期', order: '', label: '變更清冊' };
 const files = [];
 if (CHATTEL) {
   files.push(path.join(OUT, 'chattel', 'ntpc.csv'));
+} else if (TRADE) {
+  files.push(path.join(OUT, 'trade', 'trade.csv'));
 } else {
   for (const period of (await fs.readdir(OUT, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
     for (const name of (await fs.readdir(path.join(OUT, period))).filter((f) => f.endsWith('-change.csv'))) {
@@ -132,7 +141,7 @@ for (const file of files) {
   let iSetup = head.indexOf(COLS.fill);
   const iOrder = COLS.order ? head.indexOf(COLS.order) : -1;
   if (iTax < 0) { console.log(`跳過 ${file}：欄位對不上`); continue; }
-  // 動產擔保名單的「成立日期」是這支加上去的欄，清冊剛抓下來時沒有
+  // 動產擔保名單、出進口廠商的「成立日期」是這支加上去的欄，剛抓下來時沒有
   if (iSetup < 0) { head.push(COLS.fill); iSetup = head.length - 1; rows.forEach((r, i) => { if (i) r[iSetup] = ''; }); }
   parsed.push({ file, rows, iTax, iName, iSetup });
   for (let i = 1; i < rows.length; i++) {
@@ -231,7 +240,7 @@ console.log(`填了 ${filled.toLocaleString()} 列的${COLS.fill}，動到 ${tou
  * 用以前存下來的舊 CSV，成立年填了也看不到（使用者：「沒看到成立年」）。
  */
 if (touched) {
-  const indexPath = CHATTEL ? path.join(OUT, 'chattel', 'index.json') : path.join(OUT, 'index.json');
+  const indexPath = SUB ? path.join(OUT, SUB, 'index.json') : path.join(OUT, 'index.json');
   try {
     const idx = JSON.parse(await fs.readFile(indexPath, 'utf8'));
     idx.generatedAt = new Date().toISOString();
