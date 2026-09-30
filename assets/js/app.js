@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-209';
+  const APP_VERSION = '20260930-210';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1562,7 +1562,18 @@
     } catch (e) { /* 讀不到就用記憶體那份，至少別讓存檔整個失敗 */ }
     // updatedAt 要在這裡明確蓋掉：舊狀態本身就帶著上一次的 updatedAt，
     // 展開之後它會蓋過 Store.setState 補的 Date.now()，時間戳永遠停在第一次。
-    const merged = { ...base, ...patch, recordId, updatedAt: Date.now() };
+    /*
+     * 每個欄位各自記改動時間（fieldAt）。
+     *
+     * 同步合併原本整筆看 updatedAt 誰新誰贏，只有編輯、連結、提醒幾個欄位另外看自己的時間戳。
+     * 手機在提醒列按「完成」（dueDoneOn）存進本機，幾秒後同步拉到電腦那份——電腦背景的商工登記更新
+     * 每筆都會寫 regAt、updatedAt 變成更新的——整筆被電腦那份蓋回來，「完成」就不見了，使用者得按兩三次
+     * （「每次我要調整今日提醒的部分，都需要按個兩三次系統才會紀錄」）。有了 fieldAt，合併時每個欄位各自比。
+     */
+    const now = Date.now();
+    const fieldAt = { ...(base.fieldAt || {}) };
+    Object.keys(patch).forEach((k) => { fieldAt[k] = now; });
+    const merged = { ...base, ...patch, recordId, updatedAt: now, fieldAt };
     await window.Store.setState(merged);
     state.userStates.set(recordId, merged);
     touch();

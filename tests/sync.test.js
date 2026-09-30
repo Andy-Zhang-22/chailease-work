@@ -54,6 +54,29 @@ test('mergeState：整體取較新，但編輯內容、連結、提醒各看自�
   assert.equal(restored.editsAt, 30);
 });
 
+test('mergeState：每個欄位各自看 fieldAt——手機按的「完成」不會被電腦背景寫的 regAt 整筆蓋掉', () => {
+  // 手機 10 點按完成；電腦 10 點 5 分背景查商工登記寫了 regAt（updatedAt 比較新，但沒有 dueDoneOn）
+  const phone = { recordId: 'r', updatedAt: 1000, dueDoneOn: '2026-09-30', nextDate: '2026-10-03', fieldAt: { dueDoneOn: 1000, nextDate: 900 } };
+  const pc = { recordId: 'r', updatedAt: 1300, regAt: 1300, nextDate: '2026-10-01', fieldAt: { nextDate: 1200 } };
+  const out = DriveSync.mergeState(phone, pc);
+  assert.equal(out.dueDoneOn, '2026-09-30', '完成要留著');
+  assert.equal(out.nextDate, '2026-10-01', '下次聯絡日電腦改得比較晚，用電腦的');
+  assert.equal(out.regAt, 1300);
+  assert.equal(out.updatedAt, 1300);
+  assert.deepEqual(out.fieldAt, { dueDoneOn: 1000, nextDate: 1200 });
+  assert.deepEqual(DriveSync.mergeState(pc, phone), out, '順序對調結果一樣');
+  // 一邊有 fieldAt、另一邊是舊版沒記：拿記的時間跟另一邊的 updatedAt 比
+  const old = { recordId: 'r', updatedAt: 1500, dueDoneOn: '' };
+  assert.equal(DriveSync.mergeState(phone, old).dueDoneOn, '', '舊版整筆 1500 比手機 1000 新，照舊版');
+  assert.equal(DriveSync.mergeState(phone, { recordId: 'r', updatedAt: 500, dueDoneOn: '' }).dueDoneOn, '2026-09-30');
+  // 清掉欄位也算一次改動：fieldAt 比較新、值是 undefined → 合併後沒有
+  const cleared = DriveSync.mergeState(phone, { recordId: 'r', updatedAt: 800, fieldAt: { dueDoneOn: 2000 } });
+  assert.equal(cleared.dueDoneOn, undefined);
+  // 沒有 fieldAt 的舊資料：照整筆取較新
+  const legacy = DriveSync.mergeState({ recordId: 'r', updatedAt: 10, outcome: 'x' }, { recordId: 'r', updatedAt: 20, outcome: 'y' });
+  assert.equal(legacy.outcome, 'y'); assert.equal(legacy.fieldAt, undefined);
+});
+
 test('mergeDumps：兩邊順序對調結果一樣；紀錄靠 uid 去重、改得比較新的贏', () => {
   const a = {
     records: [{ id: 'r1', source: 's', importedAt: 100 }],
