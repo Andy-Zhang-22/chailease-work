@@ -77,6 +77,25 @@ test('mergeState：每個欄位各自看 fieldAt——手機按的「完成」�
   assert.equal(legacy.outcome, 'y'); assert.equal(legacy.fieldAt, undefined);
 });
 
+test('mergeDumps：找回某天的資料——備份之後、還原之前的刪除不算，之後的刪除照常', () => {
+  // 備份時間 100；200 刪了 r1 與整份名單 s2；還原在 300；350 又刪了 r3
+  const backup = { records: [{ id: 'r1', source: 's', importedAt: 50 }, { id: 'r2', source: 's2', importedAt: 50 }, { id: 'r3', source: 's', importedAt: 50 }], logs: [], states: [], tombstones: {}, settings: {} };
+  const local = {
+    records: [{ id: 'r3', source: 's', importedAt: 50 }], logs: [], states: [],
+    tombstones: { records: { r1: 200, r3: 350 }, sources: { s2: 200 }, logs: {}, companies: { 'tax:1': { at: 200 }, 'tax:9': { at: 40 } } },
+    settings: { 'restore-window': { v: [{ from: 100, to: 300 }], at: 300 } },
+  };
+  const out = DriveSync.mergeDumps(local, backup);
+  const ids = out.records.map((r) => r.id).sort();
+  assert.deepEqual(ids, ['r1', 'r2'], 'r1、s2 回來；r3 是還原之後刪的，照刪');
+  assert.equal(out.tombstones.records.r1, undefined);
+  assert.equal(out.tombstones.sources.s2, undefined);
+  assert.equal(out.tombstones.records.r3, 350);
+  assert.equal(out.tombstones.companies['tax:1'], undefined, '窗口內刪的公司可以再匯入');
+  assert.deepEqual(out.tombstones.companies['tax:9'], { at: 40 }, '備份之前就刪的公司照擋');
+  assert.deepEqual(DriveSync.mergeDumps(backup, local).records.map((r) => r.id).sort(), ids, '順序對調結果一樣');
+});
+
 test('mergeDumps：兩邊順序對調結果一樣；紀錄靠 uid 去重、改得比較新的贏', () => {
   const a = {
     records: [{ id: 'r1', source: 's', importedAt: 100 }],

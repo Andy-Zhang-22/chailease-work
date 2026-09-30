@@ -157,6 +157,19 @@
         if (!settings[key] || (entry.at || 0) > (settings[key].at || 0)) settings[key] = entry;
       });
     });
+    /*
+     * 找回某天的資料（restoreBackup）：備份那天之後、按下還原之前的刪除一律不算（墓碑拿掉），
+     * 被刪的才回得來；還原之後才刪的照常有效。窗口記在同步設定裡，別台同步進來也照這個規則。
+     */
+    const windows = (settings['restore-window'] && Array.isArray(settings['restore-window'].v)) ? settings['restore-window'].v : [];
+    if (windows.length) {
+      ['logs', 'sources', 'records', 'companies'].forEach((kind) => {
+        Object.keys(tombstones[kind]).forEach((k) => {
+          const at = tombAt(tombstones[kind][k]);
+          if (windows.some((w) => at > (w.from || 0) && at <= (w.to || 0))) delete tombstones[kind][k];
+        });
+      });
+    }
 
     // 名單：兩邊聯集。同一份 PDF 在不同裝置匯入會產生相同的 id，所以不會重複。
     const records = new Map();
@@ -407,7 +420,7 @@
     }
   }
 
-  async function uploadFile(fileId, dump, token) {
+  async function uploadFile(fileId, dump, token, name) {
     const body = JSON.stringify(dump);
     if (fileId) {
       await driveFetch(
@@ -417,7 +430,7 @@
       return fileId;
     }
     const boundary = 'tmsync' + Math.random().toString(36).slice(2);
-    const metadata = { name: FILE_NAME, mimeType: 'application/json' };
+    const metadata = { name: name || FILE_NAME, mimeType: 'application/json' };
     const payload = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`
       + `${JSON.stringify(metadata)}\r\n--${boundary}\r\n`
       + `Content-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
@@ -431,6 +444,68 @@
     );
     const data = await res.json();
     return data.id;
+  }
+
+  /* ---------------- 每週備份與找回某天的資料 ---------------- */
+
+  /*
+   * 使用者：「備份要能回到某一天」。同步成功時看雲端硬碟最新一份備份，超過 7 天就另存一份
+   * 「電話推廣名單-備份-2026-10-01.json」，留最近 8 份（約兩個月）。哪一台先同步哪一台備份，不會兩台各存一份。
+   * drive.file 權限只看得到這個網站自己建的檔，備份也在這個範圍內。
+   */
+  const BACKUP_PREFIX = '電話推廣名單-備份-';
+  const BACKUP_KEEP = 8;
+  const WEEK = 7 * 86400000;
+  const ymdOf = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  async function listBackupFiles(token) {
+    const q = encodeURIComponent(`name contains '${BACKUP_PREFIX}' and trashed=false`);
+    const res = await driveFetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,size)&orderBy=createdTime%20desc&pageSize=50`,
+      {}, token
+    );
+    const data = await res.json();
+    return (data.files || []).filter((f) => String(f.name || '').startsWith(BACKUP_PREFIX))
+      .sort((a, b) => String(b.createdTime || '').localeCompare(String(a.createdTime || '')));
+  }
+  async function weeklyBackup(dump, token, force) {
+    const files = await listBackupFiles(token);
+    const newest = files[0];
+    const age = newest ? Date.now() - Date.parse(newest.createdTime || 0) : Infinity;
+    if (!force && age < WEEK) return null;
+    const now = Date.now();
+    const name = `${BACKUP_PREFIX}${ymdOf(now)}.json`;
+    const id = await uploadFile(null, { ...dump, backupAt: now }, token, name);
+    for (const f of files.slice(BACKUP_KEEP - 1)) {
+      try { await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, { method: 'DELETE' }, token); } catch (e) { /* 刪不掉下次再刪 */ }
+    }
+    return { id, name };
+  }
+  async function listBackups(options) {
+    const token = await getToken({ interactive: !!(options && options.interactive) });
+    return listBackupFiles(token);
+  }
+  async function backupNow(options) {
+    const token = await getToken({ interactive: !!(options && options.interactive) });
+    const local = await global.Store.exportAll();
+    return weeklyBackup(local, token, true);
+  }
+  /**
+   * 找回某天的資料：把那份備份合併回本機，備份那天到現在的刪除不算（見 mergeDumps 的 restore-window），
+   * 再照常同步推上雲端。之後新記的通話、改的欄位照「比較新的贏」留著，不會被倒回去。
+   */
+  async function restoreBackup(fileId, options) {
+    if (running) { try { await running; } catch (e) { /* 上一次同步失敗不影響還原 */ } }
+    const token = await getToken({ interactive: !!(options && options.interactive) });
+    const backup = await downloadFile(fileId, token);
+    const from = Number(backup.backupAt) || Date.parse((options && options.createdTime) || '') || 0;
+    const local = await global.Store.exportAll();
+    const settings = { ...(local.settings || {}) };
+    const prev = (settings['restore-window'] && Array.isArray(settings['restore-window'].v)) ? settings['restore-window'].v : [];
+    const now = Date.now();
+    settings['restore-window'] = { v: [...prev, { from, to: now }].slice(-10), at: now };
+    const merged = mergeDumps({ ...local, settings }, backup);
+    await global.Store.replaceAll(merged);
+    return { gained: diffSummary(local, merged), from };
   }
 
   /* ---------------- 同步流程 ---------------- */
@@ -453,6 +528,7 @@
       const merged = mergeDumps(local, remote);
       const fileId = await uploadFile(file ? file.id : null, merged, token);
       await global.Store.replaceAll(merged);
+      try { await weeklyBackup(merged, token, false); } catch (e) { console.error('每週備份失敗', e); }   // 備份失敗不擋同步
       await global.Store.setMeta('lastSyncAt', Date.now());
       await global.Store.setMeta('driveFileId', fileId);
 
@@ -468,6 +544,6 @@
   global.DriveSync = {
     sync, mergeDumps, diffSummary, mergeTombstones, mergeState, mergeRegChanges, regHistoryOf,
     isConfigured, clientId, setClientId, signOut, getToken, describeAuthError,
-    FILE_NAME, SCOPE,
+    FILE_NAME, SCOPE, listBackups, backupNow, restoreBackup, BACKUP_PREFIX,
   };
 })(window);

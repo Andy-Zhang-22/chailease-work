@@ -984,3 +984,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
 .status-table th, .status-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .status-table tr.is-bad td { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+/* 新名單成效 */
+.funnel { margin-top: 12px; }
+.funnel h3 + table, .funnel table + h3 { margin-top: 10px; }
+.funnel-table td:not(:first-child), .funnel-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
