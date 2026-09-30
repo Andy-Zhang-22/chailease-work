@@ -1,0 +1,16 @@
+{
+  "name": "電話推廣名單系統",
+  "short_name": "電推名單",
+  "description": "電話推廣名單：可搜尋、可撥號、可追蹤。資料存在本機瀏覽器與自己的雲端硬碟。",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

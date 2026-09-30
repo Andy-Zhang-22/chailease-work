@@ -1,9 +1,10 @@
 {
   "name": "chailease-work",
   "private": true,
-  "description": "電話推廣名單系統：純前端網頁，測試用 Node 內建的 test runner，不需要安裝任何套件。",
+  "description": "電話推廣名單系統：純前端網頁。單元測試用 Node 內建的 test runner（npm test，不需要安裝套件）；瀏覽器測試用 Playwright（npm run e2e，CI 會自己裝）。",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "e2e": "node tests/e2e/run.js"
   },
   "engines": {
     "node": ">=20"

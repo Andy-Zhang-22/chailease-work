@@ -100,7 +100,7 @@ test('nameVariants：去空白、全形括號轉半形、台／臺兩種都試',
 });
 
 test('companyStem：去掉組織型態', () => {
-  assert.equal(Registry.companyStem('方舟國際股份有限公司'), '方舟國際');
+  assert.equal(Registry.companyStem('遠帆國際股份有限公司'), '遠帆國際');
   assert.equal(Registry.companyStem('甲 企業社'), '甲');
   assert.equal(Registry.companyStem('沒有型態'), '沒有型態');
 });

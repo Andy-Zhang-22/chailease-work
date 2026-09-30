@@ -1,0 +1,45 @@
+const { chromium } = require('playwright');
+const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
+const http=require('http'),fs=require('fs'),path=require('path');
+const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
+const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
+ fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9069);
+const mk=(id,name,taxId)=>({id,source:'A.csv',company:name,aliases:[],taxId,grade:'A',founded:'2015',capital:'5,000',phoneRaw:'02-1111-1111',phones:[{digits:'0211111111',ext:'',note:''}],owner:'王',keyman:'',industry:'',address:'新北市新莊區中正路1號',city:'新北市',district:'新莊區',notesRaw:'2026/09/01 電話中聊',timeline:[],outcome:'contacted',nextDate:'',lastDate:'',addedDate:'2026-09-01'});
+const SEED=[mk('1','有統編甲公司','12345678'),mk('2','無統編乙公司',''),{...mk('3','無統編丙公司',''),phoneRaw:'',phones:[]}];
+(async()=>{
+ let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
+ const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
+ const pg=await br.newPage({viewport:{width:1100,height:1400}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
+ await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
+ await pg.goto('http://localhost:9069/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
+ await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(400);
+ const chips=async()=>pg.evaluate(()=>[...document.querySelectorAll('#fltTax .chip')].map(c=>c.textContent.trim()));
+ chk(/資料完整度/.test(await pg.evaluate(()=>document.querySelector('#fltTax').closest('.filter-group').querySelector('label').textContent)), '篩選區群組改名「資料完整度」');
+ chk(JSON.stringify(await chips())===JSON.stringify(['1 有統編','2 無統編']), `兩顆固定順序含筆數：${await chips()}`);
+ const names=async()=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent).sort());
+ await pg.locator('#fltTax .chip').filter({hasText:/有統編$/}).click(); await pg.waitForTimeout(400);
+ chk(JSON.stringify(await names())===JSON.stringify(['有統編甲公司']), `只看有統編：${await names()}`);
+ await pg.locator('#fltTax .chip').filter({hasText:/有統編$/}).click(); await pg.locator('#fltTax .chip').filter({hasText:/無統編$/}).click(); await pg.waitForTimeout(400);
+ chk(JSON.stringify(await names())===JSON.stringify(['無統編乙公司','無統編丙公司'].sort()), `只看無統編：${await names()}`);
+ chk(await pg.getAttribute('#fltTax .chip[data-value="no"]','aria-pressed')==='true', '按下去的晶片有選取狀態');
+ await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
+ const pchips=await pg.evaluate(()=>[...document.querySelectorAll('#fltPhone .chip')].map(c=>c.textContent.trim()));
+ chk(JSON.stringify(pchips)===JSON.stringify(['2 有電話','1 無電話']), `同一組裡有電話／無電話兩顆：${pchips}`);
+ await pg.locator('#fltPhone .chip').filter({hasText:/無電話$/}).click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await names())==='["無統編丙公司"]', `只看無電話：${await names()}`);
+ await pg.locator('#fltTax .chip').filter({hasText:/無統編$/}).click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await names())==='["無統編丙公司"]', `無統編＋無電話疊加：${await names()}`);
+ await pg.locator('#fltPhone .chip').filter({hasText:/無電話$/}).click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await names())===JSON.stringify(['無統編乙公司','無統編丙公司'].sort()), `取消無電話後只剩無統編條件：${await names()}`);
+ await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
+ chk((await names()).length===3&&await pg.getAttribute('#fltTax .chip[data-value="no"]','aria-pressed')==='false', '清除篩選後全部回來、晶片取消');
+ // 在網站上幫乙公司補上統編 → 變成有統編
+ await pg.locator('.card:has-text("無統編乙公司")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.click('#drawerBody button:has-text("編輯資料")'); await pg.waitForSelector('#editor h2');
+ await pg.locator('#editor label.rule-field:has(span:text-is("統一編號")) input').fill('87654321'); await pg.click('#editor button:has-text("儲存")'); await pg.waitForTimeout(800);
+ await pg.keyboard.press('Escape'); await pg.waitForTimeout(400);
+ chk(JSON.stringify(await chips())===JSON.stringify(['2 有統編','1 無統編']), `編輯補上統編後筆數跟著變：${await chips()}`);
+ console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
+ await br.close(); srv.close(); process.exit(bad?1:0);
+})();

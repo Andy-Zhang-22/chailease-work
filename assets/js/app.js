@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-210';
+  const APP_VERSION = '20260930-213';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -903,6 +903,12 @@
      */
     out.blockedInfo = window.Normalize.detectBlocked(out.notesRaw);
     out.blocked = out.blockedInfo.blocked || out.outcome === 'blocked';
+    // 禁止推廣的原因與日期：最近一則標禁止推廣的通話紀錄（個資法：不要打的名單要留得住為什麼、什麼時候）
+    if (out.blocked) {
+      const bl = state.logs.filter((l) => l.recordId === record.id && window.Normalize.normalizeOutcome(l.outcome) === 'blocked').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+      out.blockedAt = (bl && bl.date) || '';
+      out.blockedReason = (bl && bl.text) || out.blockedInfo.snippet || '';
+    }
     return out;
   }
 
@@ -1276,6 +1282,34 @@
     }));
     return gradePlaces(r, places);
   }
+
+  /*
+   * 每日新名單挑完，沒電話的自動用 Google 地圖查一次（使用者：「每日新名單自動補電話」）。
+   * 稅籍檔、清冊都沒有電話，每天 15 家要自己查 104 或 Google。只在有設 Places 金鑰時跑；只採用「確定」
+   * （名稱互相包含＋同區或同門牌），疑似的不存，寧可沒電話也不要存錯的號碼。一批最多 30 家，一天一批約 15 次查詢，
+   * 在 Google 每月免費額度內。
+   */
+  async function autoPhones(sourceName) {
+    if (!placesKey()) return { tried: 0, found: 0 };
+    const todo = allViews().filter((v) => v.source === sourceName && !v.phones.length && !v.blocked).slice(0, 30);
+    let found = 0;
+    for (const v of todo) {
+      try {
+        const { best } = await placesLookup(v);
+        if (best && best.level === 'sure') { await adoptPlacePhone(v, best); found += 1; }
+      } catch (err) {
+        console.error('自動找電話', v.company, err);
+        if (/金鑰|API|HTTP 4/.test(String(err && err.message))) { toast(`自動找電話停了：${err.message}`); break; }
+      }
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    if (todo.length) {
+      await reload(); render(); scheduleSync();
+      toast(`今天的新名單有 ${todo.length} 家沒電話，Google 地圖找到 ${found} 家（名稱與地址都對得上才填）`);
+    }
+    return { tried: todo.length, found };
+  }
+  window.autoPhones = autoPhones;   // 測試用
 
   /** 採用某個店家的電話：存成編輯覆蓋（跟手動改電話一樣），並記下來源。 */
   async function adoptPlacePhone(r, p) {
@@ -1972,7 +2006,7 @@
       // 結果常常落在畫面外，捲進來才看得到——不然使用者以為按了沒反應
       const first = regList.querySelector('.group-row');
       if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center' });
-      if (!res.companies.length) regList.append(el('p', { className: 'rule-note', textContent: '查不到。登記上的寫法可能不一樣，少打幾個字（例如只打「方舟國際」）或改用統一編號再試。' }));
+      if (!res.companies.length) regList.append(el('p', { className: 'rule-note', textContent: '查不到。登記上的寫法可能不一樣，少打幾個字（例如只打「遠帆國際」）或改用統一編號再試。' }));
     };
     regBox.append(
       el('p', { className: 'muted', textContent: '名單外的關係企業：知道是哪一家就直接打公司名（或統編），商工登記的資料會一起帶進來。' }),
@@ -2641,6 +2675,7 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
+      autoPhones(name).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
       const picked = pickC.length + pickL.length + pickB.length;
       const got = state.records.filter((r) => r.source === name).length;
@@ -2718,6 +2753,118 @@
   }
 
   /** 選單的「每天打得完幾家」：看未來每個上班日各有幾家，順便照上限重排。 */
+  /*
+   * 資料狀態：每個來源上次更新日、幾天沒更新就標紅。
+   *
+   * 名單靠六個 GitHub Actions 排程餵，哪一個壞了現在沒人會發現，只會覺得「怎麼沒新名單」。
+   * 使用者：「資料健康面板與失敗警示」。這裡只讀各 index.json，另外列本機的同步、每日挑選、商工登記自動更新時間。
+   */
+  const DATA_SOURCES = [
+    { key: 'listed', name: '上市櫃公司（每日動態）', url: 'leads/listed/index.json', every: '每天', limit: 2, at: (j) => j.dailyAt || j.generatedAt, extra: (j) => `重大訊息到 ${String(j.newsAt || '').slice(0, 10)}${j.revenueYm ? `，營收 ${j.revenueYm}` : ''}` },
+    { key: 'leads', name: '每月公司設立／變更登記清冊', url: 'leads/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
+    { key: 'chattel', name: '動產擔保名單', url: 'leads/chattel/index.json', every: '每月', limit: 40, at: (j) => j.generatedAt, extra: (j) => `資料到 ${j.dataThrough || ''}` },
+    { key: 'biz', name: '商行／企業社（稅籍）', url: 'leads/biz/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `稅籍檔 ${j.fileDate || ''}，${Number(j.total || 0).toLocaleString()} 家` },
+    { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
+  ];
+  async function openDataStatus() {
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: '資料狀態' }), el('p', { className: 'muted', textContent: '檢查中…' }));
+    $('#editor').hidden = false;
+    const now = Date.now();
+    const ageDays = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? Math.floor((now - t) / 86400000) : null; };
+    const rows = await Promise.all(DATA_SOURCES.map(async (src) => {
+      try {
+        const res = await fetch(`${src.url}?t=${now}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        const at = src.at(j); const age = ageDays(at);
+        return { ...src, at, age, extra: src.extra(j), bad: age == null || age > src.limit, why: age == null ? '沒有更新時間' : age > src.limit ? `${age} 天沒更新` : '' };
+      } catch (err) { return { ...src, at: '', age: null, extra: '', bad: true, why: `讀不到（${err.message}）` }; }
+    }));
+    let lastSync = 0; try { lastSync = Number(await window.Store.getMeta('lastSyncAt')) || 0; } catch (e) { lastSync = 0; }
+    const local = [
+      { name: '雲端硬碟同步', at: lastSync ? new Date(lastSync).toISOString() : '', every: '改動後 4 秒', limit: 1, on: window.DriveSync && window.DriveSync.isConfigured() },
+      { name: '每日新名單（上次挑）', at: registryPref('daily-feed-on') ? `${registryPref('daily-feed-on')}T09:00:00` : '', every: '每個上班日', limit: 3, on: dailyFeedOn() },
+      { name: '商工登記自動更新', at: registryPref('registry-auto-last') ? `${registryPref('registry-auto-last')}T09:00:00` : '', every: '每天', limit: 3, on: registryPref('registry-auto') !== '0' },
+    ].map((x) => { const age = ageDays(x.at); return { ...x, age, bad: x.on && (age == null || age > x.limit), why: !x.on ? '沒開' : age == null ? '還沒跑過' : age > x.limit ? `${age} 天沒跑` : '' }; });
+    host.textContent = '';
+    host.append(el('h2', { textContent: '資料狀態' }));
+    const table = el('table', { className: 'status-table' });
+    table.append(el('thead', {}, [el('tr', {}, ['來源', '更新頻率', '上次更新', '狀態'].map((t) => el('th', { textContent: t })))]));
+    const tbody = el('tbody');
+    const fmt = (iso) => (iso ? new Date(iso).toLocaleString('zh-TW', { hour12: false }).replace(/:\d{2}$/, '') : '—');
+    [...rows, ...local].forEach((x) => {
+      tbody.append(el('tr', { className: x.bad ? 'is-bad' : '' }, [
+        el('td', {}, [el('b', { textContent: x.name }), x.extra ? el('div', { className: 'muted', textContent: x.extra }) : '']),
+        el('td', { textContent: x.every }),
+        el('td', { textContent: `${fmt(x.at)}${x.age != null && x.at ? `（${x.age} 天前）` : ''}` }),
+        el('td', { textContent: x.bad ? `⚠️ ${x.why}` : (x.why || '✅ 正常') }),
+      ]));
+    });
+    table.append(tbody);
+    host.append(table);
+    const bad = [...rows, ...local].filter((x) => x.bad);
+    host.append(el('p', { className: 'muted', textContent: bad.length ? `${bad.length} 項有問題。資料來源的排程在 GitHub Actions 跑，壞了可以到 Actions 頁看紀錄、手動再跑一次；GitHub 也會寄失敗通知到你的信箱（帳號設定 → Notifications → Actions 要打勾）。` : '全部正常。' }));
+    host.append(el('p', {}, [el('a', { href: 'https://github.com/Andy-Zhang-22/chailease-work/actions', target: '_blank', rel: 'noopener', textContent: '打開 GitHub Actions →' })]));
+    host.append(el('p', { className: 'muted', textContent: `網站版本 ${APP_VERSION}` }));
+  }
+
+  /*
+   * 雲端備份：每週自動另存一份在雲端硬碟（DriveSync 同步時順便做），這裡列出來、可以立刻備份、可以找回某天的資料。
+   * 找回＝把那天的備份合併回來，那天之後的刪除不算（誤刪的回來），之後新記的通話與改的欄位照留。
+   */
+  async function openBackups() {
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: '雲端備份' }));
+    $('#editor').hidden = false;
+    if (!window.DriveSync || !window.DriveSync.isConfigured()) {
+      host.append(el('p', { className: 'muted', textContent: '還沒設定雲端同步。先到選單「雲端同步設定」接上 Google 雲端硬碟，之後每週會自動在雲端硬碟另存一份備份。' }));
+      return;
+    }
+    host.append(el('p', { className: 'muted', textContent: '每次同步時，雲端硬碟最新的備份超過 7 天就另存一份「電話推廣名單-備份-日期.json」，留最近 8 份（約兩個月）。「找回這天的資料」會把那天的名單與紀錄合併回來：那天之後刪掉的會回來，之後新記的通話與改的欄位照樣留著。' }));
+    const now = el('button', { className: 'btn', type: 'button', textContent: '立刻備份一份' });
+    const list = el('div', { className: 'backup-list' }, [el('p', { className: 'muted', textContent: '讀取中…' })]);
+    host.append(el('div', { className: 'card-actions' }, [now]), list);
+    const draw = async () => {
+      let files = [];
+      try { files = await window.DriveSync.listBackups({ interactive: true }); }
+      catch (err) { list.textContent = ''; list.append(el('p', { className: 'muted', textContent: `讀不到備份：${err.message}` })); return; }
+      list.textContent = '';
+      if (!files.length) { list.append(el('p', { className: 'muted', textContent: '雲端硬碟上還沒有備份。按「立刻備份一份」或等下一次同步。' })); return; }
+      const table = el('table', { className: 'status-table' });
+      table.append(el('thead', {}, [el('tr', {}, ['備份日期', '大小', ''].map((t) => el('th', { textContent: t })))]));
+      const tb = el('tbody');
+      files.forEach((f) => {
+        const when = new Date(f.createdTime).toLocaleString('zh-TW', { hour12: false }).replace(/:\d{2}$/, '');
+        const btn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '找回這天的資料' });
+        btn.onclick = async () => {
+          if (!await askConfirm(`把 ${when} 的備份合併回來？\n\n那天之後刪掉的客戶、名單、紀錄會回來；之後新記的通話與改的欄位照樣留著。完成後會同步到雲端與其他裝置。`, { okText: '找回' })) return;
+          btn.disabled = true; btn.textContent = '找回中…';
+          try {
+            const got = await window.DriveSync.restoreBackup(f.id, { interactive: true, createdTime: f.createdTime });
+            await reload(); render();
+            await runSync({ quiet: true });
+            toast(`已找回 ${when} 的資料：客戶 ${got.gained.records >= 0 ? '+' : ''}${got.gained.records}、通話紀錄 ${got.gained.logs >= 0 ? '+' : ''}${got.gained.logs}`);
+          } catch (err) { toast(`找回失敗：${err.message}`); }
+          btn.disabled = false; btn.textContent = '找回這天的資料';
+        };
+        tb.append(el('tr', {}, [el('td', { textContent: when }), el('td', { textContent: f.size ? `${Math.round(Number(f.size) / 1024).toLocaleString()} KB` : '' }), el('td', {}, [btn])]));
+      });
+      table.append(tb);
+      list.append(table);
+    };
+    now.onclick = async () => {
+      now.disabled = true; now.textContent = '備份中…';
+      try { const got = await window.DriveSync.backupNow({ interactive: true }); toast(got ? `已備份：${got.name}` : '已備份'); await draw(); }
+      catch (err) { toast(`備份失敗：${err.message}`); }
+      now.disabled = false; now.textContent = '立刻備份一份';
+    };
+    await draw();
+  }
+  window.openBackups = openBackups;
+
   function openDayLoad() {
     const HORIZON = 20;
     const host = $('#editorBody');
@@ -3239,6 +3386,40 @@
     return (limit ? r.phones.slice(0, limit) : r.phones).map(telGroup);
   }
 
+  /*
+   * 一鍵通話結果的規則。days＝幾天後再聯絡（落在假日往後推到上班日）；chance＝順便標有機會／無機會。
+   * 使用者：「通話結果一鍵記錄，手機上少打字」。文字進通話紀錄，之後統計、卡片那一句都看得到。
+   */
+  const QUICK_OUTCOMES = {
+    noanswer: { label: '未接', hint: '記一則「未接」，下一個上班日再打', text: '未接', outcome: 'noanswer', days: 1 },
+    busy: { label: '忙線改天', hint: '記一則「忙線」，下一個上班日再打', text: '忙線，改天再撥', outcome: 'noanswer', days: 1 },
+    interested: { label: '有興趣', hint: '記一則「有興趣」，3 天後再聯絡並標有機會；要約確切時間再點卡片改', text: '有興趣，再聯絡', outcome: 'contacted', days: 3, chance: 'yes' },
+    nointerest: { label: '無意願', hint: '記一則「無意願」，標無機會，半年後再看', text: '無意願', outcome: 'contacted', days: 180, chance: 'no' },
+  };
+  async function quickOutcome(r, kind) {
+    const q = QUICK_OUTCOMES[kind];
+    if (!q) return;
+    const today = todayISO();
+    const wanted = addDays(today, q.days);
+    const got = window.Holidays ? window.Holidays.nextWorkday(wanted) : { iso: wanted, moved: false };
+    const createdAt = Date.now();
+    try {
+      await window.Store.addLog({ recordId: r.id, date: today, text: q.text, outcome: q.outcome, createdAt });
+      state.logs = await window.Store.allLogs();
+      const patch = { outcome: q.outcome, nextDate: got.iso, lastDate: today };
+      if (q.chance) { patch.chance = q.chance; patch.chanceAt = createdAt; }
+      await saveState(r.id, patch);
+    } catch (err) {
+      console.error('一鍵結果存不進去', err);
+      toast(`存不進去：${err && err.message ? err.message : err}`);
+      return;
+    }
+    scheduleSync();
+    render();
+    toast(`${r.company}：${q.text}，下次 ${dateLabel(got.iso)}${got.moved ? `（${dateLabel(got.from)} 是${got.reason}，順延）` : ''}`);
+  }
+  window.quickOutcome = quickOutcome;   // 測試用
+
   function card(r) {
     const bucket = r.bucket || dueBucket(r.nextDate);
     const node = el('article', {
@@ -3259,7 +3440,7 @@
       r.branch && r.branch.kind === 'shared' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: '全公司共同區域' }) : '',
       // 「優先區域」拿掉：新莊一帶幾乎每筆都是，標了等於沒標，只是讓卡片更擠
       r.territory === '範圍外' ? el('span', { className: 'badge badge-outside', textContent: '範圍外·需協銷' }) : '',
-      r.blocked ? el('span', { className: 'badge badge-blocked', textContent: '禁止推廣' }) : '',
+      r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
@@ -3299,6 +3480,19 @@
       const actions = el('div', { className: 'card-actions' });
       telLinks(r, 2).forEach((a) => actions.append(a));
       node.append(actions);
+    }
+    /*
+     * 一鍵通話結果（使用者在手機上打，每通少打幾個字）：未接、忙線改天、有興趣再約、無意願。
+     * 按下去寫一則紀錄並依規則排下次聯絡日（QUICK_OUTCOMES），不開詳細頁；要改日期再點卡片。禁止推廣的不給。
+     */
+    if (!r.blocked) {
+      const quick = el('div', { className: 'card-actions card-quick' });
+      Object.entries(QUICK_OUTCOMES).forEach(([k, q]) => {
+        const b = el('button', { className: `btn btn-tiny quick-${k}`, type: 'button', textContent: q.label, title: q.hint });
+        b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; try { await quickOutcome(r, k); } finally { b.disabled = false; } };
+        quick.append(b);
+      });
+      node.append(quick);
     }
 
     node.onclick = () => openDetail(r.id);
@@ -3449,6 +3643,80 @@
     ]);
   }
 
+  /*
+   * 新名單成效（來源漏斗）。
+   *
+   * 使用者：「把名單成效算出來，讓挑選規則用數據調」。每日新名單與三個分頁加進來的，依來源（動產擔保、登記清冊、
+   * 商行／企業社）算：幾家、打過幾家、接通幾家、有機會幾家、禁止推廣幾家；每日新名單再依「符合：…」的優先條件拆，
+   * 看哪一條真的比較打得出東西。來源從檔名看，每日新名單的看訪談內容開頭（動保：／新公司清冊／商行／企業社）。
+   * 成案系統裡沒有，「有機會」當代理指標。
+   */
+  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社'];
+  function freshOrigin(v) {
+    const src = String(v.source || '');
+    if (/^動產擔保名單/.test(src)) return '動產擔保';
+    if (/^登記清冊/.test(src)) return '登記清冊';
+    if (/^商行企業社/.test(src)) return '商行／企業社';
+    if (!/^每日新名單/.test(src)) return '';
+    const n = String(v.notesRaw || '');
+    if (/^動保：/.test(n)) return '動產擔保';
+    if (/^新公司清冊/.test(n)) return '登記清冊';
+    if (/^商行／企業社/.test(n)) return '商行／企業社';
+    return '';
+  }
+  function funnelStats(views) {
+    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
+    const byOrigin = new Map(FUNNEL_ORIGINS.map((k) => [k, blank()]));
+    const byRule = new Map();   // 「動產擔保｜成立 5 年內」→ 統計
+    const add = (t, v) => {
+      t.n += 1;
+      const called = v.blocked || (v.outcome && v.outcome !== 'new');
+      if (called) t.called += 1;
+      if (v.outcome === 'contacted') t.reached += 1;
+      if (v.chance === 'yes') t.chance += 1;
+      if (v.blocked) t.blocked += 1;
+    };
+    views.forEach((v) => {
+      const o = freshOrigin(v);
+      if (!o) return;
+      add(byOrigin.get(o), v);
+      const m = String(v.notesRaw || '').match(/每日新名單，符合：([^；\n]+)/);
+      if (m) m[1].split('、').map((x) => x.trim()).filter(Boolean).forEach((rule) => {
+        const k = `${o}｜${rule}`;
+        if (!byRule.has(k)) byRule.set(k, blank());
+        add(byRule.get(k), v);
+      });
+    });
+    return { byOrigin, byRule };
+  }
+  window.funnelStats = (views) => { const f = funnelStats(views || allViews()); return { byOrigin: Object.fromEntries(f.byOrigin), byRule: Object.fromEntries(f.byRule) }; };   // 測試用
+  function funnelSection(views) {
+    const { byOrigin, byRule } = funnelStats(views);
+    const total = [...byOrigin.values()].reduce((a, t) => a + t.n, 0);
+    const box = el('div', { className: 'bars funnel' }, [el('h3', { textContent: '新名單成效（每日新名單與三個分頁加進來的）' })]);
+    if (!total) { box.append(el('p', { className: 'muted', textContent: '還沒有從動產擔保、登記清冊、商行／企業社加進來的名單。' })); return box; }
+    const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+    const table = (rows, first) => {
+      const t = el('table', { className: 'status-table funnel-table' });
+      t.append(el('thead', {}, [el('tr', {}, [first, '家數', '打過', '接通率', '有機會率', '禁止推廣'].map((x) => el('th', { textContent: x })))]));
+      const tb = el('tbody');
+      rows.forEach(([label, x]) => tb.append(el('tr', {}, [
+        el('td', { textContent: label }), el('td', { textContent: String(x.n) }), el('td', { textContent: `${x.called}（${pct(x.called, x.n)}）` }),
+        el('td', { textContent: pct(x.reached, x.called) }), el('td', { textContent: pct(x.chance, x.called) }), el('td', { textContent: String(x.blocked) }),
+      ])));
+      t.append(tb);
+      return t;
+    };
+    box.append(table([...byOrigin.entries()].filter(([, x]) => x.n), '來源'));
+    const rules = [...byRule.entries()].filter(([, x]) => x.called >= 3).sort((a, b) => (b[1].chance / b[1].called) - (a[1].chance / a[1].called) || b[1].called - a[1].called);
+    if (rules.length) {
+      box.append(el('h3', { textContent: '每日新名單：依符合的優先條件（打過 3 家以上才列，有機會率高的在前）' }));
+      box.append(table(rules.map(([k, x]) => [k.replace('｜', '・'), x]), '條件'));
+    }
+    box.append(el('p', { className: 'muted', textContent: '接通率＝已聯絡÷打過；有機會率＝標有機會÷打過。成案系統裡沒記，拿「有機會」當指標。跑一個月後看哪個來源、哪條條件比較打得出東西，再調各頁每天幾家與優先順序。' }));
+    return box;
+  }
+
   function renderStats() {
     const all = allViews();
     const host = $('#paneStats');
@@ -3474,6 +3742,7 @@
       el('div', { className: 'stat' }, [el('b', { textContent: String(value) }), el('span', { textContent: label })])
     ));
     host.append(row);
+    host.append(funnelSection(all));
 
     const group = (key) => {
       const m = new Map();
@@ -3643,12 +3912,12 @@
      */
     if (r.blocked) {
       const warn = el('div', { className: 'blocked-warning' }, [
-        el('strong', { textContent: '⛔ 禁止推廣 — 請勿撥打' }),
+        el('strong', { textContent: `⛔ 禁止推廣 — 請勿撥打${r.blockedAt ? `（${dateLabel(r.blockedAt)} 標記）` : ''}` }),
       ]);
-      if (r.blockedInfo.snippet) {
-        warn.append(el('p', { textContent: `訪談內容：「${r.blockedInfo.snippet}」` }));
+      if (r.blockedReason) {
+        warn.append(el('p', { textContent: `原因：「${r.blockedReason}」` }));
       } else {
-        warn.append(el('p', { textContent: '這筆是在通話結果裡被標記為禁止推廣的。' }));
+        warn.append(el('p', { textContent: '這筆是在通話結果裡被標記為禁止推廣的，原因沒填。「不要再打」的名單要留得住原因與日期，建議在下面的通話紀錄補一句。' }));
       }
       body.append(warn);
     }
@@ -4505,8 +4774,8 @@
 
     if (r.blocked) {
       box.append(el('div', { className: 'blocked-warning' }, [
-        el('strong', { textContent: '⛔ 這家標了禁止推廣' }),
-        el('p', { textContent: r.blockedInfo.snippet ? `訪談內容：「${r.blockedInfo.snippet}」` : '是在通話結果裡被標記為禁止推廣的。' }),
+        el('strong', { textContent: `⛔ 這家標了禁止推廣${r.blockedAt ? `（${dateLabel(r.blockedAt)}）` : ''}` }),
+        el('p', { textContent: r.blockedReason ? `原因：「${r.blockedReason}」` : '是在通話結果裡被標記為禁止推廣的，原因沒填。個資法上「不要再打」的名單要留得住原因與日期，建議在通話紀錄補一句。' }),
       ]));
       line('⛔ 禁止推廣');
     }
@@ -5048,7 +5317,7 @@
      */
     const kvBox = el('textarea', {
       className: 'paste-box', rows: 4, id: 'kvPaste',
-      placeholder: '可直接貼上商工登記的公司資料，例如：\n統一編號\t28443147\n公司名稱\t三貝德數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t余明珊\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
+      placeholder: '可直接貼上商工登記的公司資料，例如：\n統一編號\t12345675\n公司名稱\t範例數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t林美玲\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
     });
     const kvNote = el('p', { className: 'rule-note' });
     const kvRun = () => {
@@ -6528,8 +6797,8 @@ export default {
       /*
        * 訪談內容要跟畫面一致：同老闆的公司訪談互通，時間軸上看得到的是整組合起來的。
        *
-       * 原本只收這一筆自己的紀錄，結果像「星彩實業」這種自己沒記過、訪談都記在同組
-       * 「星焱實業」上的公司，匯出來訪談內容整格是空的——使用者看到的畫面明明有。
+       * 原本只收這一筆自己的紀錄，結果像「星光實業」這種自己沒記過、訪談都記在同組
+       * 「星辰實業」上的公司，匯出來訪談內容整格是空的——使用者看到的畫面明明有。
        * 借來的那幾則標上是哪一家的：一來知道那通電話是打給誰，二來這個檔案可以再拖回
        * 網站，不標的話別家的紀錄會變成這家自己的。
        */
@@ -6688,6 +6957,14 @@ export default {
    * 會做這件事是因為使用者多次遇到「我明明更新了，但畫面沒變」。實際上是
    * 瀏覽器拿快取的舊檔，而從畫面上完全看不出自己跑的是哪一版，只能瞎猜。
    */
+  /* 離線快取（sw.js）：https 或本機才註冊；file:// 開的不行 */
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (!(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
+    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('離線快取註冊失敗', err));
+  }
+  registerServiceWorker();
+
   async function checkForUpdate(loud) {
     try {
       const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -6913,6 +7190,8 @@ export default {
       if (act === 'registry') { openRegistryUpdate(); return; }
       if (act === 'phone-hunt') { await openPhoneHunt(); return; }
       if (act === 'check-update') { await checkForUpdate(true); return; }
+      if (act === 'data-status') { await openDataStatus(); return; }
+      if (act === 'backups') { await openBackups(); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
       if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
