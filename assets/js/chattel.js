@@ -375,7 +375,8 @@
 
   /*
    * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
-   *   3 個月內到期 → 同業（中租自家、同業之間的融資不算）→ 我的分公司 → 100 萬以上
+   *   3 個月內到期 → 同業（中租自家、同業之間的融資不算）→ 我的分公司 → 500 萬以上
+   *   （擔保金額原本 100 萬以上；使用者說案件多半 1,000 萬，選了 500 萬以上）
    * 到期時間是分級的：3 個月內 → 6 個月內 → 12 個月內 → 更久 → 已過期／沒迄日。其餘各打勾，
    * 照順序比，全部一樣就快到期的先。全符合的先挑，不夠就往下補。名單裡有的、藏起來的不挑。
    */
@@ -386,14 +387,14 @@
    * 成立 5 年內排最前面，但不是門檻——5 年內的挑完了就往下挑 5 年以上、成立年不明的。
    * 每一項：布林值 true 在前；數字越小越好（到期等級）。
    */
-  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '我的分公司', '100 萬以上'];
+  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '我的分公司', '500 萬以上'];
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
     ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
     r.family !== 'chailease' && !r.custIsFin,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
-    r.amount >= 1000000,
+    r.amount >= 5000000,
   ];
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   function dailyCompare(a, b) {

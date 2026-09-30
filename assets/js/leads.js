@@ -26,6 +26,8 @@
     ['other', '其他變更', null],
   ];
   const HOLDING_RE = /投資|資產|控股|創投|管理顧問|顧問/;
+  // 案由看得出在擴張的：遷址、所營事業／營業項目變更、設立分公司
+  const EXPAND_RE = /所在地|遷|所營事業|營業項目|分公司/;
   const AGE = [['lt5', '未滿 5 年'], ['ge5', '5 年以上']];
   const AGE_YEARS = 5;
   const CSV_HEAD = ['統一編號', '公司名稱', '公司所在地', '代表人', '資本額', '核准設立日期', '核准變更日期', '案由或變更事項', '營業項目', '縣市', '清冊', '期別'];
@@ -531,21 +533,26 @@
 
   /*
    * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
-   *   本期 → 增資 → 製造／營造（投資控股不算）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 5 年以上
+   *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年
+   *   （成立年原本是「5 年以上」；使用者說成交的多半是成立 7～8 年、案件 1,000 萬，改成離 7～8 年多遠：Rules.ageRank）
+   *   （第三條原本是「製造／營造、投資控股不算」——那是買設備的看法。使用者說成交多半是
+   *   營運週轉金跟投資額度、買設備的少、要成長快的公司，所以改看擴張訊號）
+   *   投資控股類不進池子：使用者說「投資控股類的公司給我我也找不到他的電話，等於沒用」
    * 每一家對這六條各打勾，照順序比：前面那條符合的一律排在不符合的前面，都一樣再比下一條，
    * 全部一樣就資本額高的先。所以全符合的先挑，不夠就往下補，總是湊得到 10 家。
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['本期', '增資', '製造／營造', '資本額 500～6,000 萬', '我的分公司', '成立 5 年以上'];
+  const DAILY_PRIORITY = ['本期', '增資', '擴張', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
   const dailyChecks = (r, latest) => [
     r['期別'] === latest,
     r.rk === 'up',
-    r.classes.some((k) => 'CE'.includes(k)) && !r.holding,
+    EXPAND_RE.test(r.reason),   // 遷址、加營業項目、設分公司：在長大的公司才會動這些
     r.capital >= 5000000 && r.capital <= 60000000,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
-    ageOf(r) === 'ge5',
+    ageRankOf(r),   // 離成立 7～8 年多遠：0＝6～10 年 … 4＝不知道
   ];
+  const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.foundedDate ? yearsSince(r.foundedDate) : null) : (ageOf(r) === 'ge5' ? 0 : 3));
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
@@ -567,7 +574,7 @@
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
     const cm = customerMap();
-    return rows.filter((r) => r.type === 'change' && !mineOf(r, cm) && !hidden.has(keyOf(r)))
+    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
@@ -598,7 +605,7 @@
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
         el('input', { id: 'leads-capMax', type: 'number', min: '0', step: '100', placeholder: '上限', value: '6000' })])),
-      el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'leads-skipHolding', checked: true }), ' 略過投資／控股類（沒有設備標的）'])]),
+      el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'leads-skipHolding', checked: true }), ' 略過投資／控股類（通常找不到電話）'])]),
       group('關鍵字', el('input', { id: 'leads-q', type: 'search', placeholder: '公司、統編、代表人、地址、營業項目', autocomplete: 'off' }), 'leads-q'),
       group('排序', el('select', { id: 'leads-sort' }, [
         el('option', { value: 'capital', textContent: '資本額（高到低）' }),

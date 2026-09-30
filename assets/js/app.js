@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-214';
+  const APP_VERSION = '20260930-215';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1133,7 +1133,7 @@
       host.append(el('label', { className: 'rule-field' }, [
         el('span', { textContent: '地區' }), citySel]));
       host.append(el('label', { className: 'rule-field' }, [
-        skipHolding, el('span', { textContent: ' 略過投資／控股類（看名字沒有設備標的，通常不值得打）' })]));
+        skipHolding, el('span', { textContent: ' 略過投資／控股類（通常找不到電話）' })]));
       if (hasReason) {
         host.append(el('label', { className: 'rule-field' }, [
           onlyUp, el('span', { textContent: ' 只要「增資」的（變更清冊的案由；設立清冊沒有案由，勾了會整份被濾掉）' })]));
@@ -2903,7 +2903,7 @@
         el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
         el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
       ]));
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保挑 ${quota} 家進名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 製造／營造 → 資本額 500～6,000 萬 → 我的分公司 → 成立 5 年以上，再比資本額；動產擔保＝3 個月內到期 → 同業 → 我的分公司 → 100 萬以上，再比到期日。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社挑 ${quota} 家進名單（各三分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const over = days.filter((d) => (counts.get(d) || 0) > cap);
       const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);
@@ -3511,7 +3511,7 @@
    *
    * 分數只用來排序，不存起來；規則要改直接改這裡。
    */
-  // 靜態屬性（有設備標的、資本額區間、知道 KEYMAN）照樣算分，只是理由裡標成 quiet；以前卡片上不顯示這些
+  // 靜態屬性（資本額區間、知道 KEYMAN）照樣算分，只是理由裡標成 quiet；以前卡片上不顯示這些
   const PICK_QUIET = false;
 
   function scorePick(r) {
@@ -3555,14 +3555,19 @@
     // 往來：在往來的談加碼與續約，結束過的是回頭客
     if (r.dealingKind === 'active') add(8, '中租往來中，可談加碼／續約', PICK_QUIET);
     else if (r.dealing && r.dealing.ended) add(12, '以前往來過，回頭客', PICK_QUIET);
-    // 行業與規模：租賃要有設備標的，額度要落在做得到的區間
+    /*
+     * 成長快：兩年內增資不只一次。
+     * 成交多半是營運週轉金跟投資額度、買設備的少，所以不看有沒有設備標的
+     * （原本製造／營造 +12、投資控股 −25，拿掉了），改看公司是不是在長大。
+     */
+    // 投資／控股類：使用者說「給我我也找不到他的電話，等於沒用」
+    if (window.Normalize.guessIndustry(r.company || '').industry === '投資控股') add(-25, '投資／控股類，通常找不到電話', PICK_QUIET);
     {
-      const byName = window.Normalize.guessIndustry(r.company || '');
-      const items = String(r.notesRaw || '').match(/營業項目：([^\n]*)/);
-      const codes = items ? (items[1].match(/\b[A-Z]{1,2}\d{5,6}\b/g) || []) : [];
-      const assetsByItems = codes.some((c) => /^[CEG]/.test(c));
-      if (byName.industry === '投資控股' && !assetsByItems) add(-25, '投資／控股類，沒有設備標的', PICK_QUIET);
-      else if ((byName.industry && byName.hasAssets) || assetsByItems || /製造|工程|營造|物流|運輸|機械|加工|工業/.test(r.industry || '')) add(12, '有設備標的（製造／營造／運輸）', PICK_QUIET);
+      const ups = (r.regChanges || []).filter((c) => (c.kinds || []).includes('capitalUp') && (ago(c.date) ?? Infinity) <= 730).length;
+      if (ups >= 2) add(15, `兩年內增資 ${ups} 次，成長快`);
+    }
+    // 規模：額度要落在做得到的區間
+    {
       const cap = Number(String(r.capital || '').replace(/\D/g, '')) || 0;   // 仟元
       if (cap >= 5000 && cap <= 60000) add(10, '資本額 500 萬～6,000 萬', PICK_QUIET);
       else if (cap > 100000) add(-20, '大企部範疇', PICK_QUIET);
