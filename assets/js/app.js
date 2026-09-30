@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-212';
+  const APP_VERSION = '20260930-213';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2006,7 +2006,7 @@
       // 結果常常落在畫面外，捲進來才看得到——不然使用者以為按了沒反應
       const first = regList.querySelector('.group-row');
       if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center' });
-      if (!res.companies.length) regList.append(el('p', { className: 'rule-note', textContent: '查不到。登記上的寫法可能不一樣，少打幾個字（例如只打「方舟國際」）或改用統一編號再試。' }));
+      if (!res.companies.length) regList.append(el('p', { className: 'rule-note', textContent: '查不到。登記上的寫法可能不一樣，少打幾個字（例如只打「遠帆國際」）或改用統一編號再試。' }));
     };
     regBox.append(
       el('p', { className: 'muted', textContent: '名單外的關係企業：知道是哪一家就直接打公司名（或統編），商工登記的資料會一起帶進來。' }),
@@ -5317,7 +5317,7 @@
      */
     const kvBox = el('textarea', {
       className: 'paste-box', rows: 4, id: 'kvPaste',
-      placeholder: '可直接貼上商工登記的公司資料，例如：\n統一編號\t28443147\n公司名稱\t三貝德數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t余明珊\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
+      placeholder: '可直接貼上商工登記的公司資料，例如：\n統一編號\t12345675\n公司名稱\t範例數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t林美玲\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
     });
     const kvNote = el('p', { className: 'rule-note' });
     const kvRun = () => {
@@ -6797,8 +6797,8 @@ export default {
       /*
        * 訪談內容要跟畫面一致：同老闆的公司訪談互通，時間軸上看得到的是整組合起來的。
        *
-       * 原本只收這一筆自己的紀錄，結果像「星彩實業」這種自己沒記過、訪談都記在同組
-       * 「星焱實業」上的公司，匯出來訪談內容整格是空的——使用者看到的畫面明明有。
+       * 原本只收這一筆自己的紀錄，結果像「星光實業」這種自己沒記過、訪談都記在同組
+       * 「星辰實業」上的公司，匯出來訪談內容整格是空的——使用者看到的畫面明明有。
        * 借來的那幾則標上是哪一家的：一來知道那通電話是打給誰，二來這個檔案可以再拖回
        * 網站，不標的話別家的紀錄會變成這家自己的。
        */

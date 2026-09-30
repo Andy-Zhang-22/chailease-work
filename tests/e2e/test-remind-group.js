@@ -1,0 +1,34 @@
+// 同老闆連結的關係企業在提醒列只列一家；「完成」整組一起完成
+const { chromium } = require('playwright');
+const { installAsk } = require('./askhelp');
+const http=require('http'),fs=require('fs'),path=require('path');
+const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
+const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
+ fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9085);
+const d=new Date(); const today=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'',founded:'2015',capital:'10,000',phoneRaw:'02-1111-1111',phones:[{digits:'0211111111',ext:'',note:'',display:'02-1111-1111'}],owner:'王',keyman:'',industry:'',address:'新北市新莊區中正路1號',city:'',district:'',notesRaw:'',timeline:[],outcome:'contacted',nextDate:today,lastDate:'',addedDate:'2026-09-01'});
+(async()=>{
+ let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
+ const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
+ const pg=await br.newPage({viewport:{width:1100,height:1200}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
+ await installAsk(pg,true);
+ await pg.goto('http://localhost:9085/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.evaluate(async({r,now})=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
+   await window.Store.setState({recordId:'1',group:'g1',groupIds:['1','2'],groupAt:now,updatedAt:now});
+   await window.Store.setState({recordId:'2',group:'g1',groupIds:['1','2'],groupAt:now,updatedAt:now}); },{r:[mk('1','甲公司'),mk('2','乙公司'),mk('3','丙公司')],now:Date.now()});
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
+ const bar=()=>pg.textContent('#remindBar').then(t=>t.replace(/\s+/g,' '));
+ chk(/今天要打（2）/.test(await bar()), `三家都今天到期，甲乙同一組，提醒列算 2：${(await bar()).slice(0,60)}`);
+ const rows=await pg.$$eval('#remindBar .remind-row .remind-name',a=>a.map(x=>x.textContent.trim()));
+ const head=rows.find(t=>/＋1 家關係企業/.test(t))||'';
+ chk(rows.length===2 && /丙公司/.test(rows.join('|')) && head && ((/甲公司/.test(head)&&!/乙公司/.test(rows.join('|')))||(/乙公司/.test(head)&&!/甲公司/.test(rows.join('|')))), `只列一家代表整組（寫＋1 家關係企業）和丙：${rows.join(' | ')}`);
+ const other=/甲公司/.test(head)?'乙公司':'甲公司';
+ chk(new RegExp(other).test(await pg.locator('#remindBar .remind-row:has-text("關係企業") .remind-open').getAttribute('title')), '滑過去看得到是哪幾家');
+ await pg.locator('#remindBar .remind-row:has-text("關係企業") button:has-text("完成")').click(); await pg.waitForTimeout(500);
+ const sts=await pg.evaluate(async()=>(await window.Store.allStates()).reduce((o,s)=>{o[s.recordId]=s.dueDoneOn||'';return o;},{}));
+ chk(sts['1']===today && sts['2']===today && !sts['3'], `按完成：甲、乙都記今天處理過，丙沒動：${JSON.stringify(sts)}`);
+ chk(/今天要打（1）/.test(await bar()) && /丙公司/.test(await bar()) && !/甲公司|乙公司/.test(await bar()), `剩丙：${(await bar()).slice(0,60)}`);
+ chk(/與 1 家關係企業今天不再提醒/.test(await pg.textContent('#toast')), `提示：${await pg.textContent('#toast')}`);
+ chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
+ console.log(bad?`${bad} 個失敗`:'\n全部通過'); await br.close(); srv.close(); process.exit(bad?1:0);
+})();

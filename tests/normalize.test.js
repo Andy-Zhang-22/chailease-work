@@ -34,11 +34,11 @@ test('extractPhones：分機、括號註記、一行多支各歸各的', () => {
   assert.equal(one[0].dial, '0223456789,210');
   assert.equal(one[0].display, '02-2345-6789 分機210');
 
-  const two = Normalize.extractPhones('馬少軒0936-570087呂彥皇(員工?)0987-729-798');
-  assert.deepEqual(two.map((p) => p.dial), ['0936570087', '0987729798']);
-  assert.match(two[0].note, /馬少軒/);
-  assert.match(two[1].note, /呂彥皇/);
-  assert.doesNotMatch(two[0].note, /呂彥皇/, '第二支的名字不能算到第一支頭上');
+  const two = Normalize.extractPhones('王大明0912-345678李小華(員工?)0987-654-321');
+  assert.deepEqual(two.map((p) => p.dial), ['0912345678', '0987654321']);
+  assert.match(two[0].note, /王大明/);
+  assert.match(two[1].note, /李小華/);
+  assert.doesNotMatch(two[0].note, /李小華/, '第二支的名字不能算到第一支頭上');
 
   // 分機自己一行 → 掛回上一支電話
   const ext = Normalize.extractPhones('02-2345-6789\n分機210(財務長鍾小姐)');
@@ -56,14 +56,14 @@ test('extractPhones：分機、括號註記、一行多支各歸各的', () => {
 
 test('phoneRows／serializePhones 互相讀得回來', () => {
   const rows = [
-    { number: '0936-570087', ext: '23', note: '馬少軒' },
+    { number: '0912-345678', ext: '23', note: '王大明' },
     { number: '02-2345-6789', ext: '', note: '' },
     { number: '123', ext: '', note: '不是電話' },   // 不足 8 碼會被丟掉
   ];
   const text = Normalize.serializePhones(rows);
-  assert.equal(text, '0936-570087 分機23 (馬少軒)\n02-2345-6789');
+  assert.equal(text, '0912-345678 分機23 (王大明)\n02-2345-6789');
   assert.deepEqual(Normalize.phoneRows(text), [
-    { number: '0936-570087', digits: '0936570087', ext: '23', note: '馬少軒' },
+    { number: '0912-345678', digits: '0912345678', ext: '23', note: '王大明' },
     { number: '02-2345-6789', digits: '0223456789', ext: '', note: '' },
   ]);
 });

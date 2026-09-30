@@ -1,7 +1,8 @@
 # 每次推上來、每個 PR 都跑一次自動測試。
 #
-# 測試用 Node 內建的 test runner（node --test），沒有任何 npm 套件要裝，
-# 所以不需要 npm ci，checkout 完直接跑。本機一樣是 `npm test`。
+# 單元測試用 Node 內建的 test runner（node --test），沒有任何 npm 套件要裝，checkout 完直接跑。本機一樣是 `npm test`。
+# 瀏覽器測試（tests/e2e/，Playwright）開真的 Chromium 點畫面：一鍵結果、每日新名單、雲端備份、離線可開……
+# 一支約半分鐘，分四組同時跑。本機是 `npm run e2e`。
 name: 自動測試
 
 on:
@@ -23,3 +24,23 @@ jobs:
 
       - name: 跑測試
         run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 不進 package.json 的相依：網站本身不需要任何套件，只有測試要
+      - name: 裝 Playwright 與 Chromium
+        run: npm i --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+
+      - name: 瀏覽器測試（第 ${{ matrix.shard }}／4 組）
+        run: npm run e2e -- --shard=${{ matrix.shard }}/4
