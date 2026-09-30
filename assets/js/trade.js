@@ -17,6 +17,7 @@
   const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
   const WHEN = [['m3', '3 個月內'], ['m6', '3～6 個月'], ['y1', '半年～1 年'], ['y2', '1 年以上']];
   const QUAL = [['both', '進口＋出口'], ['exp', '只有出口'], ['imp', '只有進口'], ['none', '都沒有']];
+  const AGE = [['lt5', '未滿 5 年'], ['5to10', '5～10 年'], ['ge10', '10 年以上'], ['unknown', '不明']];
 
   let root = null;
   const $ = (sel) => root.querySelector(sel);
@@ -38,6 +39,10 @@
   /* ---------------- 純邏輯 ---------------- */
 
   const parseYmd = (s) => (global.Biz && global.Biz.parseYmd ? global.Biz.parseYmd(s) : null);
+  // 成立日期是 fill-founded.mjs 查商工登記填的，民國（104/04/13）；西元的也收
+  const parseAnyDate = (s) => (global.Biz && global.Biz.parseAnyDate ? global.Biz.parseAnyDate(s) : parseYmd(s));
+  const yearsSince = (dt, today) => (global.Biz && global.Biz.yearsSince ? global.Biz.yearsSince(dt, today) : null);
+  const ageOf = (r) => (!r.founded ? 'unknown' : r.years < 5 ? 'lt5' : r.years < 10 ? '5to10' : 'ge10');
   const ymd = (dt) => (dt ? `${dt.y}/${String(dt.m).padStart(2, '0')}/${String(dt.d).padStart(2, '0')}` : '');
   /** 距今幾個月（不足一個月算 0） */
   function monthsSince(dt, today) {
@@ -65,7 +70,9 @@
       address: o['地址'] || '', rep: o['代表人'] || '', tel: String(o['電話'] || '').trim(), fax: String(o['傳真'] || '').trim(),
       first: parseYmd(o['原始登記日期']), issued: parseYmd(o['核發日期']),
       imp: o['進口'] === 'Y', exp: o['出口'] === 'Y',
+      founded: parseAnyDate(o['成立日期']),
     };
+    r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.firstMonths = r.first ? monthsSince(r.first, today) : null;
     r.branch = branchOf(r.address);
     r.district = r.branch.district || '';
@@ -134,7 +141,7 @@
   let limit = PAGE;
   let ready = false;
   let showHidden = false;
-  const f = { branches: new Set(), districts: new Set(), when: new Set(), qual: new Set(), phone: new Set(), mine: new Set(), q: '' };
+  const f = { branches: new Set(), districts: new Set(), when: new Set(), ages: new Set(), qual: new Set(), phone: new Set(), mine: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -144,6 +151,7 @@
     return (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
       && (except === 'districts' || !f.districts.size || f.districts.has(r.district))
       && (except === 'when' || !f.when.size || f.when.has(whenOf(r)))
+      && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
       && (except === 'qual' || !f.qual.size || f.qual.has(qualOf(r)))
       && (except === 'phone' || !f.phone.size || f.phone.has(r.tel ? 'Y' : 'N'))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
@@ -179,6 +187,7 @@
       r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel })]) : el('span', { className: 'muted', textContent: '📞 登記上沒有電話' }),
       r.fax ? el('span', { textContent: `📠 ${r.fax}` }) : '',
       r.rep ? el('span', { textContent: `👤 代表人 ${r.rep}`, title: '貿易署公開檔把中間字遮掉' }) : '',
+      r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）`, title: '查商工登記來的' }) : el('span', { className: 'muted', textContent: '🎂 成立年還沒查到', title: 'Actions 每月抓完會拿統編查商工登記補上' }),
       r.first ? el('span', { textContent: `🛳 原始登記 ${ymd(r.first)}（${whenLabel(r)}）` }) : '',
       r.issued && (!r.first || ymd(r.issued) !== ymd(r.first)) ? el('span', { textContent: `🔁 最近異動 ${ymd(r.issued)}` }) : '',
       r.ename ? el('span', { className: 'muted', textContent: r.ename }) : '',
@@ -214,6 +223,7 @@
     const dkeys = [...new Set([...dc.keys(), ...f.districts])].sort((a, b) => (dc.get(b) || 0) - (dc.get(a) || 0));
     chips($('#trade-fDistrict'), dkeys.map((k) => [k, k, dc.get(k) || 0]), f.districts);
     chips($('#trade-fWhen'), WHEN.map(([k, label]) => [k, label, facet('when', (r) => whenOf(r) === k)]), f.when);
+    chips($('#trade-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#trade-fQual'), QUAL.map(([k, label]) => [k, label, facet('qual', (r) => qualOf(r) === k)]), f.qual);
     chips($('#trade-fPhone'), [['Y', '有電話'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => (r.tel ? 'Y' : 'N') === k)]), f.phone);
     chips($('#trade-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
@@ -247,13 +257,13 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`出進口廠商登記（貿易署）：${QUAL.find(([k]) => k === qualOf(r))[1]}`, r.first ? `原始登記 ${ymd(r.first).replace(/\//g, '-')}` : '',
+    return [`出進口廠商登記（貿易署）：${QUAL.find(([k]) => k === qualOf(r))[1]}`, r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : '', r.first ? `原始登記 ${ymd(r.first).replace(/\//g, '-')}` : '',
       r.issued && (!r.first || ymd(r.issued) !== ymd(r.first)) ? `最近異動 ${ymd(r.issued).replace(/\//g, '-')}` : '',
       r.fax ? `傳真 ${r.fax}` : '', r.ename || '', r.rep ? '代表人是貿易署公開檔（中間字遮掉），打前查商工登記' : ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', '', '', r.tel, r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.founded ? String(r.founded.y) : '', '', r.tel, r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const fromDate = () => { const v = $('#trade-from') && $('#trade-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
@@ -283,6 +293,7 @@
       group('歸屬分公司（同「規則」的劃分表）', el('div', { className: 'chips', id: 'trade-fBranch' })),
       group('區', el('div', { className: 'chips', id: 'trade-fDistrict' })),
       group('原始登記（開始做進出口）', el('div', { className: 'chips', id: 'trade-fWhen' })),
+      group('成立（查商工登記來的）', el('div', { className: 'chips', id: 'trade-fAge' })),
       group('進出口資格', el('div', { className: 'chips', id: 'trade-fQual' })),
       group('電話', el('div', { className: 'chips', id: 'trade-fPhone' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'trade-fMine' })),
@@ -333,7 +344,7 @@
         $('#trade-empty').textContent = '還沒有抓好的資料。GitHub Actions 每月會自動抓，也可以到 repo 的 Actions 頁手動執行「每月出進口廠商」。';
         return;
       }
-      $('#trade-sub').textContent = `${(index.cities || []).join('、')}的出進口廠商 ${Number(index.total || 0).toLocaleString()} 家（有電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　這裡列原始登記在最近 ${index.months || 24} 個月內的 ${Number(index.recent || 0).toLocaleString()} 家　·　貿易署檔案 ${String(index.lastModified || '').replace(/^\w+, /, '').slice(0, 11)}，上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
+      $('#trade-sub').textContent = `${(index.cities || []).join('、')}的出進口廠商 ${Number(index.total || 0).toLocaleString()} 家（有電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　這裡列原始登記在最近 ${index.months || 24} 個月內的 ${Number(index.recent || 0).toLocaleString()} 家　·　貿易署檔案 ${String(index.lastModified || '').replace(/^\w+, /, '').slice(0, 11)}，上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.foundedAt ? '　·　成立年查商工登記補的' : ''}`;
       $('#trade-loading').hidden = false;
       $('#trade-loading').textContent = '下載資料…';
       try {
@@ -379,5 +390,5 @@
     render();
   }
 
-  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, toStandardCsv, noteFor, phoneOf, ensurePhones };
+  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, toStandardCsv, noteFor, phoneOf, ensurePhones };
 })(window);

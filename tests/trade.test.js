@@ -41,6 +41,13 @@ test('分頁：trade.csv 一列 → 卡片資料（幾個月前登記、進出�
   assert.equal(T.whenOf(old), 'y2');
   assert.equal(T.qualOf(old), 'exp');
   assert.equal(T.monthsSince({ y: 2026, m: 9, d: 15 }, TODAY), 0, '不足一個月算 0');
+  // 成立日期是 fill-founded 填的民國；沒填就不明
+  const f = T.toRecord({ 統編: '11111112', 名稱: '丙', 地址: '新北市新莊區x路1號', 電話: '', 原始登記日期: '2026/01/01', 核發日期: '2026/01/01', 進口: 'Y', 出口: 'Y', 成立日期: '108/10/01' }, TODAY);
+  assert.deepEqual(f.founded, { y: 2019, m: 10, d: 1 }); assert.equal(f.years, 7); assert.equal(T.ageOf(f), '5to10');
+  assert.equal(T.ageOf(r), 'unknown');
+  const csvF = T.toStandardCsv([f], ['2026-10-02']).split('\n')[1];
+  assert.match(csvF, /^丙,11111112,,2019,,,/, '成立年帶進名單');
+  assert.match(csvF, /成立 2019-10-01/);
 });
 
 test('加入名單的 CSV：電話、代表人、地址、備註都帶；跟主站的標準欄位對齊', () => {
