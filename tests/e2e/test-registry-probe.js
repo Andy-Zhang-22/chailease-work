@@ -33,7 +33,7 @@ const SEED=[{id:'P1',source:'名單.pdf',company:'甲工程有限公司',aliases
    await pg.waitForSelector('#editorBody h2');
    await pg.fill('#proxyUrl','https://my-worker.test/'); await pg.dispatchEvent('#proxyUrl','change'); };
 
- await pg.goto('http://localhost:8991/index.html');
+ await pg.goto('http://localhost:8991/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}});
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900);

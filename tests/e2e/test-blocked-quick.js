@@ -10,7 +10,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const pg=await br.newPage({viewport:{width:1100,height:1300}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
- await pg.goto('http://localhost:9088/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.goto('http://localhost:9088/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},[mk('1','甲公司'),mk('2','乙公司')]);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(300);

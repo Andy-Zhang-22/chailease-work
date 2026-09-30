@@ -16,7 +16,7 @@ const APP=JSON.parse(fs.readFileSync(path.join(ROOT,'version.json'),'utf8')).ver
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const pg=await br.newPage({viewport:{width:390,height:844}});
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
- await pg.goto('http://localhost:8951/index.html');
+ await pg.goto('http://localhost:8951/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}});
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.waitForTimeout(800);
 

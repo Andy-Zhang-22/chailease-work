@@ -11,7 +11,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  // 手機寬度
  const pg=await br.newPage({viewport:{width:390,height:844}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
- await pg.goto('http://localhost:9081/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.goto('http://localhost:9081/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},[mk('1','甲'),mk('2','乙')]);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.click('#btnFilters'); await pg.waitForTimeout(300);
  const state=async()=>pg.evaluate(()=>Object.fromEntries([...document.querySelectorAll('#filters .filter-group[data-group]')].map(g=>[g.dataset.group,!g.classList.contains('is-closed')])));
