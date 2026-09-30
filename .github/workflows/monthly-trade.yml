@@ -1,0 +1,55 @@
+# 每月抓經濟部國際貿易署的「出進口廠商登記資料」（data.gov.tw 79641），只留新北市，寫成
+# 電話表（leads/trade/phones.csv，給補電話用）與最近登記的名單（leads/trade/trade.csv）；網站的「出進口廠商」分頁讀這裡。
+#
+# 使用者：「政府採購決標公告、出進口廠商登記這兩個做看看」。這份是全國唯一有公司電話的公開整批檔。
+# 為什麼在 GitHub Actions：檔案 103 MB、開發環境連不上政府網站；只有 Actions 出得去。檔案每天更新，每月抓一次夠用。
+name: 每月出進口廠商
+
+on:
+  schedule:
+    - cron: '0 20 8 * *'   # 每月 9 日台灣 04:00（在商行、公司清冊之後一天）
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: '留哪些縣市（逗號分隔）'
+        required: false
+        default: '新北市'
+      months:
+        description: '名單留原始登記在最近幾個月內的'
+        required: false
+        default: '24'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-trade
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 抓出進口廠商登記資料
+        env:
+          CITIES: ${{ inputs.cities || '新北市' }}
+          MONTHS: ${{ inputs.months || '24' }}
+        run: |
+          node tools/fetch-trade.mjs --cities "$CITIES" --months "$MONTHS" | tee fetch-trade.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-trade.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/trade
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "出進口廠商名單：$(date -u +%Y-%m-%d)"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"

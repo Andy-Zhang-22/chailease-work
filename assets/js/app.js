@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-215';
+  const APP_VERSION = '20260930-216';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1311,6 +1311,28 @@
   }
   window.autoPhones = autoPhones;   // 測試用
 
+  /*
+   * 出進口廠商登記有電話（貿易署的整批檔，Actions 每月抓到 leads/trade/phones.csv，整個新北市）。
+   * 清冊、動保、稅籍的名單都沒電話（使用者：投資控股類「找不到電話等於沒用」），匯進來的先用統編對這張表，
+   * 對得到就直接填，剩下的才去 Google 地圖。sourceName 空＝整份名單裡沒電話的都補（選單那顆）。
+   */
+  async function tradePhones(sourceName, opts = {}) {
+    if (!window.Trade || !window.Trade.phoneOf) return { tried: 0, found: 0 };
+    const todo = allViews().filter((v) => (!sourceName || v.source === sourceName) && !v.phones.length && !v.blocked && String(v.taxId || '').replace(/\D/g, '').length === 8);
+    let found = 0;
+    for (const v of todo) {
+      const p = await window.Trade.phoneOf(v.taxId);
+      if (!p || !p.tel) continue;
+      const st = state.userStates.get(v.id) || {};
+      await saveState(v.id, { edits: { ...(st.edits || {}), phoneRaw: p.tel }, editsAt: Date.now(), phoneSource: { kind: 'trade', name: '出進口廠商登記', issued: p.issued || '', at: Date.now() } });
+      found += 1;
+    }
+    if (found) { await reload(); render(); scheduleSync(); }
+    if (opts.toast) toast(todo.length ? `名單裡 ${todo.length} 家沒電話（有統編的），出進口廠商登記對到 ${found} 家` : '名單裡有統編的都有電話了');
+    return { tried: todo.length, found };
+  }
+  window.tradePhones = tradePhones;   // 測試用
+
   /** 採用某個店家的電話：存成編輯覆蓋（跟手動改電話一樣），並記下來源。 */
   async function adoptPlacePhone(r, p) {
     const st = state.userStates.get(r.id) || {};
@@ -2387,7 +2409,7 @@
     return Number.isFinite(n) && n >= 0 ? Math.min(dailyCap(), Math.round(n)) : Math.min(dailyCap(), NEW_QUOTA_DEFAULT);
   };
   /** 「完全新的名單」：從新公司、動產擔保或商行／企業社加進來、還沒打過。 */
-  const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|商行企業社|每日新名單)/;
+  const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|商行企業社|出進口廠商|每日新名單)/;
   const isFreshLead = (v) => !v.lastDate && FRESH_SOURCE_RE.test(String(v.source || ''));
 
   /** 從今天起算的上班日（今天放假就從下一個上班日開始）。 */
@@ -2675,7 +2697,7 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
-      autoPhones(name).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示
+      tradePhones(name).catch((e) => console.error('出進口廠商補電話失敗', e)).then(() => autoPhones(name)).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
       const picked = pickC.length + pickL.length + pickB.length;
       const got = state.records.filter((r) => r.source === name).length;
@@ -2764,6 +2786,7 @@
     { key: 'leads', name: '每月公司設立／變更登記清冊', url: 'leads/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
     { key: 'chattel', name: '動產擔保名單', url: 'leads/chattel/index.json', every: '每月', limit: 40, at: (j) => j.generatedAt, extra: (j) => `資料到 ${j.dataThrough || ''}` },
     { key: 'biz', name: '商行／企業社（稅籍）', url: 'leads/biz/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `稅籍檔 ${j.fileDate || ''}，${Number(j.total || 0).toLocaleString()} 家` },
+    { key: 'trade', name: '出進口廠商（貿易署，含電話）', url: 'leads/trade/index.json', every: '每月 9 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，有電話 ${Number(j.withPhone || 0).toLocaleString()}` },
     { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
   ];
   async function openDataStatus() {
@@ -3757,8 +3780,9 @@
     $('#paneChattel').hidden = tab !== 'chattel';
     $('#paneListed').hidden = tab !== 'listed';
     $('#paneBiz').hidden = tab !== 'biz';
+    $('#paneTrade').hidden = tab !== 'trade';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz';
+    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
@@ -3778,6 +3802,8 @@
       if (window.Listed) window.Listed.show();
     } else if (tab === 'biz') {
       if (window.Biz) window.Biz.show();
+    } else if (tab === 'trade') {
+      if (window.Trade) window.Trade.show();
     } else { renderList(); renderRemindBar(); }
   }
 
@@ -3891,7 +3917,9 @@
       body.append(el('p', { className: 'muted', textContent: `電話：${r.phoneRaw}` }));
     }
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
-    if (r.phoneSource && r.phones.length) {
+    if (r.phoneSource && r.phoneSource.kind === 'trade' && r.phones.length) {
+      body.append(el('p', { className: 'muted phone-source', textContent: `電話來自貿易署出進口廠商登記${r.phoneSource.issued ? `（核發 ${r.phoneSource.issued}）` : ''}` }));
+    } else if (r.phoneSource && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source' }, [
         document.createTextNode(`電話來自 Google 地圖：${r.phoneSource.name}（${r.phoneSource.address}）`),
         r.phoneSource.maps ? el('a', { href: r.phoneSource.maps, target: '_blank', rel: 'noopener', textContent: '　開地圖' }) : '',
@@ -6983,6 +7011,7 @@ export default {
     chattel: { input: '#chattel-q', placeholder: '搜尋動產擔保名單：公司、統編、金主、地址、登記編號' },
     listed: { input: '#listed-q', placeholder: '搜尋上市櫃公司：公司、代號、統編、董事長、地址、投資公司名稱' },
     biz: { input: '#biz-q', placeholder: '搜尋商行／企業社：名稱、統編、負責人、地址、行業' },
+    trade: { input: '#trade-q', placeholder: '搜尋出進口廠商：名稱、英文名、統編、代表人、地址、電話' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {
@@ -7081,7 +7110,12 @@ export default {
      * 「新公司」分頁的「加入客戶名單」：把篩好的清冊組成 CSV 檔，走跟拖檔案進來一模一樣的
      * 匯入流程（認出是登記清冊 → 問條件 → 略過重複）。只開這一個口，不另寫匯入邏輯。
      */
-    window.importLeadsFile = (file) => { $('#importer').hidden = false; return importFiles([file]); };
+    window.importLeadsFile = async (file) => {
+      $('#importer').hidden = false;
+      await importFiles([file]);
+      // 清冊、動保、商行加進來的沒電話：用統編對貿易署的出進口廠商電話表（背景跑）
+      if (FRESH_SOURCE_RE.test(file.name)) tradePhones(file.name).catch((e) => console.error('出進口廠商補電話失敗', e));
+    };
     /*
      * 動產擔保名單分頁（chattel.js）要知道哪些公司已經在名單上、以及點一下打開那一筆。
      * 只給它讀 allViews（有快取）與 openDetail，名單的邏輯還是全在這裡。
@@ -7146,6 +7180,7 @@ export default {
       if (act === 'chattel') { switchTab('chattel'); return; }
       if (act === 'registry') { openRegistryUpdate(); return; }
       if (act === 'phone-hunt') { await openPhoneHunt(); return; }
+      if (act === 'trade-phones') { await tradePhones('', { toast: true }); return; }
       if (act === 'check-update') { await checkForUpdate(true); return; }
       if (act === 'data-status') { await openDataStatus(); return; }
       if (act === 'backups') { await openBackups(); return; }
@@ -7343,7 +7378,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz') {
+    if (want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade') {
       $('#importer').hidden = true;
       switchTab(want);
     }

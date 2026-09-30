@@ -543,7 +543,8 @@
     let district = '';
     if (city) {
       const after = text.slice(text.indexOf(city) + city.length);
-      district = (after.match(/^[一-龥]{1,3}[區鄉鎮市]/) || [''])[0];
+      // 最短的那個：「樹林區鎮前街」「中和區市民街」貪婪會吃成「樹林區鎮」→ 變成「樹林區區」；區名至少兩個字（新市區、竹北市）
+      district = (after.match(/^[一-龥]{2,3}?[區鄉鎮市]/) || [''])[0];
     }
     const cityNow = city.replace(/^台/, '臺');
     if ((legacy || MUNICIPALITIES.has(cityNow)) && /[鄉鎮市]$/.test(district)) district = district.replace(/[鄉鎮市]$/, '區');

@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20260930-215">
+<link rel="stylesheet" href="assets/css/app.css?v=20260930-216">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20260930-215"></script>
+<script src="assets/js/lock.js?v=20260930-216"></script>
 </head>
 <body data-theme="auto">
 
@@ -50,6 +50,7 @@
       <button data-act="backups">雲端備份（找回某天的資料）</button>
       <hr>
       <button data-act="registry">從商工登記更新公司資料</button>
+      <button data-act="trade-phones">幫沒電話的補電話（出進口廠商登記）</button>
       <button data-act="phone-hunt">幫沒電話的找電話（Google 地圖）</button>
       <button data-act="check-names">檢查公司名稱</button>
       <button data-act="day-load">每天打得完幾家</button>
@@ -73,6 +74,7 @@
   <button class="tab" data-tab="chattel">動產擔保名單 <span class="pill" id="countChattel"></span></button>
   <button class="tab" data-tab="listed">上市櫃公司 <span class="pill" id="countListed"></span></button>
   <button class="tab" data-tab="biz">商行／企業社 <span class="pill" id="countBiz"></span></button>
+  <button class="tab" data-tab="trade">出進口廠商 <span class="pill" id="countTrade"></span></button>
   <button class="tab" data-tab="stats">統計</button>
   <button class="tab" data-tab="rules">規則</button>
   <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
@@ -178,6 +180,8 @@
     <div id="paneListed" class="leads listed" hidden></div>
     <!-- 商行／企業社：財政部稅籍登記裡的獨資、合夥，畫面由 biz.js 長出來 -->
     <div id="paneBiz" class="leads biz" hidden></div>
+    <!-- 出進口廠商：貿易署的出進口廠商登記（有電話），畫面由 trade.js 長出來 -->
+    <div id="paneTrade" class="leads trade" hidden></div>
   </section>
 </main>
 
@@ -294,21 +298,22 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20260930-215"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20260930-215"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20260930-216"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20260930-216"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20260930-215"></script>
-<script src="assets/js/normalize.js?v=20260930-215"></script>
-<script src="assets/js/holidays.js?v=20260930-215"></script>
-<script src="assets/js/registry.js?v=20260930-215"></script>
-<script src="assets/js/ocr.js?v=20260930-215"></script>
-<script src="assets/js/rules.js?v=20260930-215"></script>
-<script src="assets/js/store.js?v=20260930-215"></script>
-<script src="assets/js/sync.js?v=20260930-215"></script>
-<script src="assets/js/leads.js?v=20260930-215"></script>
-<script src="assets/js/chattel.js?v=20260930-215"></script>
-<script src="assets/js/listed.js?v=20260930-215"></script>
-<script src="assets/js/biz.js?v=20260930-215"></script>
-<script src="assets/js/app.js?v=20260930-215"></script>
+<script src="assets/js/pdf-table.js?v=20260930-216"></script>
+<script src="assets/js/normalize.js?v=20260930-216"></script>
+<script src="assets/js/holidays.js?v=20260930-216"></script>
+<script src="assets/js/registry.js?v=20260930-216"></script>
+<script src="assets/js/ocr.js?v=20260930-216"></script>
+<script src="assets/js/rules.js?v=20260930-216"></script>
+<script src="assets/js/store.js?v=20260930-216"></script>
+<script src="assets/js/sync.js?v=20260930-216"></script>
+<script src="assets/js/leads.js?v=20260930-216"></script>
+<script src="assets/js/chattel.js?v=20260930-216"></script>
+<script src="assets/js/listed.js?v=20260930-216"></script>
+<script src="assets/js/biz.js?v=20260930-216"></script>
+<script src="assets/js/trade.js?v=20260930-216"></script>
+<script src="assets/js/app.js?v=20260930-216"></script>
 </body>
 </html>
