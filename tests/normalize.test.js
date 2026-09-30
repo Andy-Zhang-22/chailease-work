@@ -74,6 +74,9 @@ test('parseAddress：升格前的舊縣名換成現在的市，鄉鎮市換成�
   assert.deepEqual(Normalize.parseAddress('台北市大安區'), { city: '臺北市', district: '大安區' });
   assert.deepEqual(Normalize.parseAddress('新竹縣竹北市光明六路'), { city: '新竹縣', district: '竹北市' }, '縣底下的市不改成區');
   assert.deepEqual(Normalize.parseAddress(''), { city: '', district: '' });
+  assert.deepEqual(Normalize.parseAddress('新北市樹林區鎮前街433號9樓'), { city: '新北市', district: '樹林區' }, '路名以鎮／市／鄉開頭不會被吃進區名');
+  assert.deepEqual(Normalize.parseAddress('新北市中和區市民街47巷'), { city: '新北市', district: '中和區' });
+  assert.deepEqual(Normalize.parseAddress('臺南市新市區中華路1號'), { city: '臺南市', district: '新市區' }, '區名本身有「市」也對');
   assert.deepEqual(Normalize.parseAddress('沒有縣市的地址'), { city: '', district: '' });
 });
 
