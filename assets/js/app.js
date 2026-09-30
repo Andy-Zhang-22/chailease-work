@@ -1285,7 +1285,7 @@
 
   /*
    * 每日新名單挑完，沒電話的自動用 Google 地圖查一次（使用者：「每日新名單自動補電話」）。
-   * 稅籍檔、清冊都沒有電話，每天 15 家要自己查 104 或 Google。只在有設 Places 金鑰時跑；只採用「確定」
+   * 稅籍檔、清冊都沒有電話，每天十幾家要自己查 104 或 Google。只在有設 Places 金鑰時跑；只採用「確定」
    * （名稱互相包含＋同區或同門牌），疑似的不存，寧可沒電話也不要存錯的號碼。一批最多 30 家，一天一批約 15 次查詢，
    * 在 Google 每月免費額度內。
    */
@@ -2395,9 +2395,10 @@
    * 上限是全部（30），其中留 10 個位子給「完全新的」——從新公司、動產擔保加進來、還沒打過的。
    * 每天早上自動從那兩頁挑 10 家補滿（dailyFeed）；手動加進來的也算在這 10 個位子裡。
    * 後來加了商行／企業社那頁：「把這名單一樣向其他分頁一樣自動給我名單，調整為各 5 間，共 15 間」→ 三頁各 5，額度預設 15。
+   * 再加出進口廠商那頁：「跟其他分頁一樣給我 5 間，每天自動給我五間，共 20 間」→ 四頁各 5，額度預設 20。
    */
   const DAILY_CAP_DEFAULT = 30;
-  const NEW_QUOTA_DEFAULT = 15;
+  const NEW_QUOTA_DEFAULT = 20;
   const dailyCap = () => {
     const n = Number(registryPref('daily-cap'));
     return Number.isFinite(n) && n > 0 ? Math.min(500, Math.round(n)) : DAILY_CAP_DEFAULT;
@@ -2633,7 +2634,7 @@
     if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return;
     if (!force && !more && registryPref('daily-feed-on') === today) return;
     if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
-    if (!window.Chattel || !window.Leads || !window.Biz) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
+    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
     /*
      * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
      * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
@@ -2656,10 +2657,11 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
-      const [chAll, leAll, bzAll] = await Promise.all([
+      const [chAll, leAll, bzAll, trAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Biz.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Trade.dailyCandidates().catch((e) => { console.error(e); return []; }),
       ]);
       /*
        * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
@@ -2679,16 +2681,19 @@
       const ch = chAll.filter((r) => fresh(r.cust.name, r.cust.id));
       const le = leAll.filter((r) => fresh(r['公司名稱'], r['統一編號']));
       const bz = bzAll.filter((r) => fresh(r.name, r.taxId));
-      // 三頁平分（15 家＝各 5）；一頁不夠另外兩頁補：輪流一家一家拿，拿到額度滿或都沒得拿
-      const take = splitEvenly([ch.length, le.length, bz.length], need);
+      const tr = trAll.filter((r) => fresh(r.name, r.taxId));
+      // 四頁平分（20 家＝各 5）；一頁不夠其他頁補：輪流一家一家拿，拿到額度滿或都沒得拿
+      const take = splitEvenly([ch.length, le.length, bz.length, tr.length], need);
       const pickC = ch.slice(0, take[0]);
       const pickL = le.slice(0, take[1]);
       const pickB = bz.slice(0, take[2]);
-      if (!pickC.length && !pickL.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more) toast('三份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      const pickT = tr.slice(0, take[3]);
+      if (!pickC.length && !pickL.length && !pickB.length && !pickT.length) { registryPref('daily-feed-on', today); if (force || more) toast('四份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
       const parts = [];
       if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => day)));
       if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => day)));
       if (pickB.length) parts.push(window.Biz.toStandardCsv(pickB, pickB.map(() => day)));
+      if (pickT.length) parts.push(window.Trade.toStandardCsv(pickT, pickT.map(() => day)));
       // 兩份都是同一個標準表頭，接起來只留第一份的表頭
       const csv = parts.map((t, i) => (i ? t.replace(/^\uFEFF?[^\n]*\n/, '') : t)).join('');
       // 來源名稱一天一個；再補的另外取名——同名重匯是「更新」，會把早上那一批整批換掉
@@ -2699,10 +2704,10 @@
       registryPref('daily-feed-on', today);
       tradePhones(name).catch((e) => console.error('出進口廠商補電話失敗', e)).then(() => autoPhones(name)).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
-      const picked = pickC.length + pickL.length + pickB.length;
+      const picked = pickC.length + pickL.length + pickB.length + pickT.length;
       const got = state.records.filter((r) => r.source === name).length;
       const lost = picked - got;
-      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
+      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家、出進口廠商 ${pickT.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
@@ -2926,7 +2931,7 @@
         el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
         el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
       ]));
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社挑 ${quota} 家進名單（各三分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商挑 ${quota} 家進名單（各四分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const over = days.filter((d) => (counts.get(d) || 0) > cap);
       const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);
@@ -3674,7 +3679,7 @@
     const { byOrigin, byRule } = funnelStats(views);
     const total = [...byOrigin.values()].reduce((a, t) => a + t.n, 0);
     const box = el('div', { className: 'bars funnel' }, [el('h3', { textContent: '新名單成效（每日新名單與三個分頁加進來的）' })]);
-    if (!total) { box.append(el('p', { className: 'muted', textContent: '還沒有從動產擔保、登記清冊、商行／企業社加進來的名單。' })); return box; }
+    if (!total) { box.append(el('p', { className: 'muted', textContent: '還沒有從動產擔保、登記清冊、商行／企業社、出進口廠商加進來的名單。' })); return box; }
     const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
     const table = (rows, first) => {
       const t = el('table', { className: 'status-table funnel-table' });

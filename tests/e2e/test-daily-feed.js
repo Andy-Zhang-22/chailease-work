@@ -1,4 +1,4 @@
-// 每天自動從登記清冊、動產擔保挑 10 家進名單；上限 30、新名單 10；加入時照額度找日期
+// 每天自動從登記清冊、動產擔保、商行、出進口廠商挑進名單；上限 30、新名單 10；加入時照額度找日期
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -34,6 +34,14 @@ const BROWS=[
 ];
 const BCSV='\uFEFF'+[BHEAD,...BROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const BINDEX={generatedAt:'2026-09-29T13:00:00.000Z',fileDate:'29-SEP-26',cities:['新北市'],minCapital:500000,total:3,byOrg:{'獨資':2,'合夥':1},byDist:{'新莊區':2,'板橋區':1},withOwner:2,taxOnly:1,files:[{path:'biz.csv',rows:3}]};
+const THEAD='統編,名稱,英文名稱,地址,代表人,電話,傳真,原始登記日期,核發日期,進口,出口,成立日期';
+const TROWS=[
+ ['70000001','晨光貿易有限公司','MORNING TRADE','新北市新莊區中正路100號','王O明','02-2990-1234','','2026/08/20','2026/09/10','Y','Y','108/10/01'],
+ ['70000002','板橋出口有限公司','','新北市板橋區文化路1號','李O華','02-2960-1111','','2025/01/15','2025/01/15','N','Y','110/03/01'],
+ ['70000003','沒電話貿易有限公司','','新北市新莊區中正路371號','','','','2026/09/01','2026/09/01','Y','Y',''],
+];
+const TCSV='\uFEFF'+[THEAD,...TROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
+const TINDEX={generatedAt:'2026-10-01T20:00:00.000Z',cities:['新北市'],months:24,total:3,withPhone:2,recent:3,files:[{path:'trade.csv',rows:3}]};
 const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2012',capital:'1,500',phoneRaw:'02-2222-3333',phones:[{digits:'0222223333',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路9號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:TODAY,lastDate:'2026-09-12',addedDate:'2026-09-01',importedAt:1});
 const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客戶二有限公司','99999992')];
 (async()=>{
@@ -50,6 +58,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.route('**/leads/biz/monthly/**',r=>r.fulfill({status:404,body:''}));   // 本機有真的清冊，測試不要載到
  await ctx.route('**/leads/biz/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(BINDEX)}));
  await ctx.route('**/leads/biz/biz.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:BCSV}));
+ await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(TINDEX)}));
+ await ctx.route('**/leads/trade/trade.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:TCSV}));
+ await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9485/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','4');
@@ -65,13 +76,16 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);
  chk(fed.every(f=>f.addedDate===TODAY), `每日新名單的名單新增日期＝今天：${fed.map(f=>f.addedDate).join('|')}`);
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
- chk(fed.length===4, `額度 4：三頁輪流拿（動產擔保 2、登記清冊 1、商行 1）：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.length===4, `額度 4：四頁輪流拿（動產擔保、登記清冊、商行、出進口各 1）：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
+ const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
+ chk(cg && /符合：有電話、我的分公司、成立 6～10 年、登記 1 年內、進口＋出口/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
  chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>f.company==='板橋企業社') && !fed.some(f=>f.company==='只有稅籍商行'), `商行／企業社挑 1 家、有商業登記且全符合的先：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：有商業登記、資本額 1,000 萬以上、我的分公司、設立 6～10 年、開發票/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行五條全符合，寫在訪談內容');
  const split=await pg.evaluate(()=>[window.splitEvenly([10,10,10],15), window.splitEvenly([10,1,10],15), window.splitEvenly([0,0,2],15), window.splitEvenly([3,3,3],20)]);
  chk(JSON.stringify(split)==='[[5,5,5],[7,1,7],[0,0,2],[3,3,3]]', `三頁平分、一頁不夠另外兩頁補：${JSON.stringify(split)}`);
  chk(fed.some(f=>f.company==='禾泰精密工業有限公司') && fed.some(f=>f.company==='甲一精密有限公司'), '全符合的先挑到');
- chk(!fed.some(f=>f.company==='昱昌汽車貨運股份有限公司') && fed.filter(f=>/動保：/.test(f.notes)).length===2, `以前刪掉的昱昌不挑，動產擔保還是補滿 2 家：${fed.map(f=>f.company).join('|')}`);
+ chk(!fed.some(f=>f.company==='昱昌汽車貨運股份有限公司') && fed.filter(f=>/動保：/.test(f.notes)).length===1, `以前刪掉的昱昌不挑，動產擔保還是補滿 1 家：${fed.map(f=>f.company).join('|')}`);
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
  // 都在名單裡了會是空的；順序要用「藏起來」之前的資料驗：改用 window 上的比較函式不好抓，改看訪談內容寫的符合條件
  const why=Object.fromEntries(fed.map(f=>[f.company,f.notes]));
@@ -118,7 +132,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('.tab[data-tab="chattel"]'); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
  await pg.click('.tab[data-tab="leads"]'); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
- chk(cand.c.map(x=>x.split('|')[0]).join(',')==='昱昌汽車貨運股份有限公司,老早過期有限公司' && cand.l.length===2, `池子裡剩以前刪掉的昱昌（挑的時候會跳過）和成立年不明、排最後的老早過期，登記清冊還剩 2 家（三頁輪流拿）；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ chk(cand.c.length===4 && cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 4（含以前刪掉的昱昌、成立年不明的老早過期），登記清冊還剩 2 家（四頁輪流拿）；跟畫面篩選無關：${JSON.stringify(cand)}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
 
  // 假日（10/10 國慶、週六）：自動不挑；按「再補」排到下一個上班日 10/12
@@ -133,6 +147,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx2.route('**/leads/biz/monthly/**',r=>r.fulfill({status:404,body:''}));
  await ctx2.route('**/leads/biz/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(BINDEX)}));
  await ctx2.route('**/leads/biz/biz.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:BCSV}));
+ await ctx2.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(TINDEX)}));
+ await ctx2.route('**/leads/trade/trade.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:TCSV}));
+ await ctx2.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:404,body:''}));
  const p2=await ctx2.newPage({viewport:{width:1300,height:1100}}); const errs2=[]; p2.on('pageerror',e=>errs2.push(e.message)); p2.on('dialog',d=>d.accept());
  await p2.goto('http://localhost:9485/index.html'); await p2.waitForSelector('#dropzone'); await p2.click('#importer .drawer-close');
  await p2.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','4'); },SEED);

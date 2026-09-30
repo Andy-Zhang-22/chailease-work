@@ -281,6 +281,44 @@
     render();
   }
 
+  /* ---------------- 每日挑選（給 app.js 的每日新名單用） ---------------- */
+
+  /*
+   * 使用者：「補上後一樣幫我加上自動新增名單的功能，跟其他分頁一樣給我 5 間，每天自動給我五間，共 20 間」。
+   * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 我的分公司（遠近，新莊挑完接新北）→ 成立 6～10 年
+   * （Rules.ageRank，成交多半 7～8 年）→ 原始登記 1 年內（剛開始做進出口，週轉金需求）→ 進口＋出口；全一樣最新登記的先。
+   */
+  const DAILY_PRIORITY = ['有電話', '我的分公司', '成立 6～10 年', '登記 1 年內', '進口＋出口'];
+  const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
+  const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
+  const dailyChecks = (r) => [!!r.tel, branchRank(r), ageRankOf(r), r.firstMonths != null && r.firstMonths < 12, r.imp && r.exp];
+  function dailyCompare(a, b) {
+    for (let i = 0; i < a._checks.length; i++) {
+      const x = a._checks[i]; const y = b._checks[i];
+      if (x === y) continue;
+      if (typeof x === 'number') return x - y;
+      return x ? -1 : 1;
+    }
+    const k = (dt) => (dt ? `${dt.y}${String(dt.m).padStart(2, '0')}${String(dt.d).padStart(2, '0')}` : '0');
+    return k(b.first).localeCompare(k(a.first));
+  }
+  const whyOf = (r, hitAt) => {
+    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i));
+    const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
+    const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
+    return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
+  };
+  async function dailyCandidates() {
+    if (!root) root = document.getElementById('paneTrade');
+    if (!root) return [];
+    await start();
+    if (!ready) return [];
+    const cm = customerMap();
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+      .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
+      .sort(dailyCompare);
+  }
+
   /* ---------------- 建畫面、載資料 ---------------- */
 
   function build() {
@@ -390,5 +428,5 @@
     render();
   }
 
-  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, toStandardCsv, noteFor, phoneOf, ensurePhones };
+  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, toStandardCsv, noteFor, phoneOf, ensurePhones, dailyCandidates, DAILY_PRIORITY };
 })(window);
