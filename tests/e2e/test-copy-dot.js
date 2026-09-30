@@ -33,9 +33,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk(look.text==='', '按鈕本身沒有文字');
  chk(/複製電話/.test(look.label||''), `讀螢幕的人還看得到是什麼：${look.label}`);
  chk(look.w>=20&&look.h>=26, `按的範圍夠手指按：${look.w}×${look.h}`);
- // 灰＝R、G、B 差不多（藍灰也算），不是綠也不是紅；色碼跟著主題的 --muted 走，不寫死
- const gray=(()=>{ const m=(look.bg||'').match(/\d+/g)||[]; const [r,g,b]=m.map(Number); return m.length>=3 && Math.max(r,g,b)-Math.min(r,g,b)<=45 && g<=b && r<=b; })();
- chk(gray, `點是灰的（不跟卡片上的綠色標記搶眼）：${look.bg}`);
+ chk(look.bg==='rgb(100, 116, 139)', `點是灰的（不跟卡片上的綠色標記搶眼）：${look.bg}`);
  chk(Math.abs(parseFloat(look.dw)-parseFloat(look.font)/2)<0.6&&look.radius==='999px',
    `點＝那行字的一半：字 ${look.font}、點 ${look.dw}`);
 
