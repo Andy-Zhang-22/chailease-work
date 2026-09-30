@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260929-208';
+  const APP_VERSION = '20260930-209';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -414,10 +414,13 @@
     const done = fresh.filter((v) => v.dueDoneOn === today || v.lastDate === today).length;
     const quota = Math.max(1, newQuota());
     const off = window.Holidays && !window.Holidays.isWorkday(today);
+    // 額度是「今天排著的完全新名單」總數：自動挑的 ＋ 自己從分頁加、排在今天的 ＋ 之前的新名單移到今天的。拆開寫，不然會以為自動只挑了幾家
+    const auto = fresh.filter((v) => String(v.source || '').startsWith(`每日新名單-${today}`)).length;
+    const others = fresh.length - auto;
     const text = off
       ? `今天放假（${(window.Holidays.holidayName(today)) || '週末'}），再補的會排在下一個上班日 ${dateLabel(window.Holidays.nextWorkday(today).iso)}`
       : fresh.length
-        ? `今天的新名單 ${fresh.length} 家${done ? `，處理了 ${done} 家` : ''}${done >= fresh.length ? '，都打完了' : ''}`
+        ? `今天的新名單 ${fresh.length} 家${others && auto ? `（自動挑 ${auto}、其他 ${others}）` : ''}${done ? `，處理了 ${done} 家` : ''}${done >= fresh.length ? '，都打完了' : ''}`
         : '今天還沒有新名單';
     const more = el('button', { className: 'btn btn-tiny btn-primary', id: 'feedMore', type: 'button', textContent: `再補 ${quota} 家`,
       title: '照優先順序從登記清冊、動產擔保、商行／企業社再挑一批進名單，排在今天' });
@@ -2627,7 +2630,11 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
-      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}`);
+      // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
+      const picked = pickC.length + pickL.length + pickB.length;
+      const got = state.records.filter((r) => r.source === name).length;
+      const lost = picked - got;
+      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
