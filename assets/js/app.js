@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-213';
+  const APP_VERSION = '20260930-214';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3386,40 +3386,6 @@
     return (limit ? r.phones.slice(0, limit) : r.phones).map(telGroup);
   }
 
-  /*
-   * 一鍵通話結果的規則。days＝幾天後再聯絡（落在假日往後推到上班日）；chance＝順便標有機會／無機會。
-   * 使用者：「通話結果一鍵記錄，手機上少打字」。文字進通話紀錄，之後統計、卡片那一句都看得到。
-   */
-  const QUICK_OUTCOMES = {
-    noanswer: { label: '未接', hint: '記一則「未接」，下一個上班日再打', text: '未接', outcome: 'noanswer', days: 1 },
-    busy: { label: '忙線改天', hint: '記一則「忙線」，下一個上班日再打', text: '忙線，改天再撥', outcome: 'noanswer', days: 1 },
-    interested: { label: '有興趣', hint: '記一則「有興趣」，3 天後再聯絡並標有機會；要約確切時間再點卡片改', text: '有興趣，再聯絡', outcome: 'contacted', days: 3, chance: 'yes' },
-    nointerest: { label: '無意願', hint: '記一則「無意願」，標無機會，半年後再看', text: '無意願', outcome: 'contacted', days: 180, chance: 'no' },
-  };
-  async function quickOutcome(r, kind) {
-    const q = QUICK_OUTCOMES[kind];
-    if (!q) return;
-    const today = todayISO();
-    const wanted = addDays(today, q.days);
-    const got = window.Holidays ? window.Holidays.nextWorkday(wanted) : { iso: wanted, moved: false };
-    const createdAt = Date.now();
-    try {
-      await window.Store.addLog({ recordId: r.id, date: today, text: q.text, outcome: q.outcome, createdAt });
-      state.logs = await window.Store.allLogs();
-      const patch = { outcome: q.outcome, nextDate: got.iso, lastDate: today };
-      if (q.chance) { patch.chance = q.chance; patch.chanceAt = createdAt; }
-      await saveState(r.id, patch);
-    } catch (err) {
-      console.error('一鍵結果存不進去', err);
-      toast(`存不進去：${err && err.message ? err.message : err}`);
-      return;
-    }
-    scheduleSync();
-    render();
-    toast(`${r.company}：${q.text}，下次 ${dateLabel(got.iso)}${got.moved ? `（${dateLabel(got.from)} 是${got.reason}，順延）` : ''}`);
-  }
-  window.quickOutcome = quickOutcome;   // 測試用
-
   function card(r) {
     const bucket = r.bucket || dueBucket(r.nextDate);
     const node = el('article', {
@@ -3481,20 +3447,6 @@
       telLinks(r, 2).forEach((a) => actions.append(a));
       node.append(actions);
     }
-    /*
-     * 一鍵通話結果（使用者在手機上打，每通少打幾個字）：未接、忙線改天、有興趣再約、無意願。
-     * 按下去寫一則紀錄並依規則排下次聯絡日（QUICK_OUTCOMES），不開詳細頁；要改日期再點卡片。禁止推廣的不給。
-     */
-    if (!r.blocked) {
-      const quick = el('div', { className: 'card-actions card-quick' });
-      Object.entries(QUICK_OUTCOMES).forEach(([k, q]) => {
-        const b = el('button', { className: `btn btn-tiny quick-${k}`, type: 'button', textContent: q.label, title: q.hint });
-        b.onclick = async (e) => { e.stopPropagation(); b.disabled = true; try { await quickOutcome(r, k); } finally { b.disabled = false; } };
-        quick.append(b);
-      });
-      node.append(quick);
-    }
-
     node.onclick = () => openDetail(r.id);
     node.onkeydown = (e) => { if (e.key === 'Enter') openDetail(r.id); };
     return node;
