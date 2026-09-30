@@ -973,3 +973,14 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .biz-modes .chips { margin: 0; }
 .biz-modes .chip[aria-pressed="true"] { font-weight: 600; }
 .biz-dyn { color: var(--primary); font-weight: 600; }
+
+/* 一鍵通話結果 */
+.card-quick { gap: 6px; margin-top: 8px; }
+.card-quick .btn-tiny { border-radius: 999px; }
+.card-quick .quick-interested { border-color: var(--ok); color: var(--ok); }
+.card-quick .quick-nointerest { color: var(--muted); }
+
+/* 資料狀態 */
+.status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.status-table th, .status-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.status-table tr.is-bad td { background: color-mix(in srgb, var(--danger) 8%, transparent); }
