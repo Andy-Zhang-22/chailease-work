@@ -842,6 +842,20 @@
     return i >= 0 ? i + 2 : 9;
   }
 
+  /*
+   * 成立年數離「最常成交的年紀」多遠（每日新名單挑的時候用）。
+   * 使用者：「案件成交金額都是 1000 萬、利率 8%-14%、成立 7-8 年的公司」。7～8 年最好，前後放寬到 6～10 年排第一級；
+   * 5 年、11～12 年第二；13 年以上第三；不到 5 年第四；不知道成立年排最後。是遠近，不是門檻。
+   */
+  const AGE_SWEET = { from: 6, to: 10 };
+  function ageRank(years) {
+    if (years == null || !Number.isFinite(years)) return 4;
+    if (years >= AGE_SWEET.from && years <= AGE_SWEET.to) return 0;
+    if (years === 5 || (years >= 11 && years <= 12)) return 1;
+    if (years >= 13) return 2;
+    return 3;
+  }
+
   /* ---------------- 規則之間怎麼串起來（分析） ---------------- */
 
   const ANALYSIS = {
@@ -922,7 +936,7 @@
 
   global.Rules = {
     RULES, ANALYSIS, evaluate, assessControl, buildCheckpoints, parseSchedule, fmt,
-    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, branchRank, NEAR, BRANCH_AREAS, COMMON_AREAS,
+    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, branchRank, NEAR, ageRank, AGE_SWEET, BRANCH_AREAS, COMMON_AREAS,
     checkDeal, parseBalance, HANDOVER_MIN_LEASE, PASSIVE_MIN_YIELD,
     EXCLUDING, CONTROLLED_COLLATERAL, IRREGULAR_METHODS,
     MICRO_CAPITAL_LIMIT, LARGE_CAPITAL_LIMIT, MICRO_CREDIT_LIMIT, MICRO_SHARE_CAP, MICRO_MIN_SPREAD,

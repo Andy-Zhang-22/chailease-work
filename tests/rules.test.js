@@ -110,3 +110,11 @@ test('branchRank：我的分公司 0、共用的共同區 1、鄰近照順序、
   assert.equal(rk('新北市', '板橋區', '新北'), 0);
   assert.equal(rk('新北市', '新莊區', '新北'), 2);
 });
+
+test('ageRank：離成立 7～8 年多遠（6～10 年最前，5／11～12 其次，13 以上，不到 5 年，不知道最後）', () => {
+  assert.deepEqual([7, 8, 6, 10].map(Rules.ageRank), [0, 0, 0, 0]);
+  assert.deepEqual([5, 11, 12].map(Rules.ageRank), [1, 1, 1]);
+  assert.equal(Rules.ageRank(13), 2); assert.equal(Rules.ageRank(30), 2);
+  assert.equal(Rules.ageRank(4), 3); assert.equal(Rules.ageRank(0), 3);
+  assert.equal(Rules.ageRank(null), 4); assert.equal(Rules.ageRank(undefined), 4);
+});

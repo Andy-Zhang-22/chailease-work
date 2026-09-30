@@ -8,7 +8,7 @@ const TODAY='2026-10-05';   // 週一
 const q=(v)=>/[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
 const LHEAD='統一編號,公司名稱,公司所在地,代表人,資本額,核准設立日期,核准變更日期,案由或變更事項,營業項目,縣市,清冊,期別';
 const LROWS=[
- ['11111111','甲一精密有限公司','新北市新莊區中正路1號','王一','30000000','101/10/01','115/08/20','增資','CC01080 電子零組件製造業','新北市','change','11508'],
+ ['11111111','甲一精密有限公司','新北市新莊區中正路1號','王一','30000000','108/10/01','115/08/20','增資','CC01080 電子零組件製造業','新北市','change','11508'],
  ['22222222','乙二機械股份有限公司','新北市泰山區中港西路2號','李二','50000000','','115/08/21','增資','CB01010 機械設備製造業','新北市','change','11508'],
  ['33333333','丙三工程有限公司','新北市五股區五權路3號','張三','20000000','','115/08/22','增資','E601010 電器承裝業','新北市','change','11508'],
  ['44444444','丁四貿易有限公司','新北市新莊區中正路4號','陳四','10000000','','115/08/23','增資','F118010 資訊軟體批發業','新北市','change','11508'],
@@ -28,7 +28,7 @@ const CCSV='﻿'+[CHEAD,...CROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const CINDEX={generatedAt:'2026-09-26T14:36:42.637Z',dataThrough:'2026/07/02',total:19541,kept:CROWS.length,files:[{path:'ntpc.csv',rows:CROWS.length}]};
 const BHEAD='統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人,稅籍資本額,商業登記';
 const BROWS=[
- ['61111111','新莊好商行','獨資','2000000','2023/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','2000000','Y'],
+ ['61111111','新莊好商行','獨資','6000000','2019/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','6000000','Y'],
  ['62222222','板橋企業社','合夥','1500000','2010/05/01','新北市板橋區文化路1號','472','五金','','','Y','李板橋','1500000','Y'],
  ['63333333','只有稅籍商行','獨資','60000000','2003/08/01','新北市新莊區中正路1號','481','水電','','','N','','60000000','N'],
 ];
@@ -67,7 +67,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
  chk(fed.length===4, `額度 4：三頁輪流拿（動產擔保 2、登記清冊 1、商行 1）：${fed.map(f=>f.company).join('|')}`);
  chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>f.company==='板橋企業社') && !fed.some(f=>f.company==='只有稅籍商行'), `商行／企業社挑 1 家、有商業登記且全符合的先：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
- chk(/符合：有商業登記、我的分公司、設立 5 年內、開發票、資本額 100 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行五條全符合，寫在訪談內容');
+ chk(/符合：有商業登記、我的分公司、設立 6～10 年、開發票、資本額 500 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行五條全符合，寫在訪談內容');
  const split=await pg.evaluate(()=>[window.splitEvenly([10,10,10],15), window.splitEvenly([10,1,10],15), window.splitEvenly([0,0,2],15), window.splitEvenly([3,3,3],20)]);
  chk(JSON.stringify(split)==='[[5,5,5],[7,1,7],[0,0,2],[3,3,3]]', `三頁平分、一頁不夠另外兩頁補：${JSON.stringify(split)}`);
  chk(fed.some(f=>f.company==='禾泰精密工業有限公司') && fed.some(f=>f.company==='甲一精密有限公司'), '全符合的先挑到');
@@ -75,7 +75,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
  // 都在名單裡了會是空的；順序要用「藏起來」之前的資料驗：改用 window 上的比較函式不好抓，改看訪談內容寫的符合條件
  const why=Object.fromEntries(fed.map(f=>[f.company,f.notes]));
- chk(/符合：本期、增資、製造／營造、資本額 500～6,000 萬、我的分公司、成立 5 年以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一六條全符合，寫在訪談內容');
+ chk(/符合：本期、增資、製造／營造、資本額 500～6,000 萬、我的分公司、成立 6～10 年/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一六條全符合，寫在訪談內容');
  chk(/符合：成立 5 年內、3 個月內到期、同業、我的分公司、100 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
  // 名單頁最上面的「再補」列：打完了按一下再補 4 家
  const barText=(await pg.textContent('#feedBar')).replace(/\s+/g,' ');
@@ -88,7 +88,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);
  chk(fed.every(f=>/^每日新名單-2026-10-05(-補1)?\.csv$/.test(f.source)), `來源名稱帶日期，再補的另外取名：${[...new Set(fed.map(f=>f.source))].join('|')}`);
  const ht=fed.find(f=>f.company==='禾泰精密工業有限公司'); chk(ht && /動保：新鑫/.test(ht.notes) && ht.founded==='2022', `動保的備註與成立年進來（只挑成立 5 年內）：${ht&&ht.notes} / ${ht&&ht.founded}`);
- const jy=fed.find(f=>f.company==='甲一精密有限公司'); chk(jy && jy.capital==='30,000' && jy.founded==='2012' && /新公司清冊/.test(jy.notes), `登記清冊的資本額（仟元）、成立年、備註：${jy&&jy.capital} / ${jy&&jy.founded} / ${jy&&jy.notes}`);
+ const jy=fed.find(f=>f.company==='甲一精密有限公司'); chk(jy && jy.capital==='30,000' && jy.founded==='2019' && /新公司清冊/.test(jy.notes), `登記清冊的資本額（仟元）、成立年、備註：${jy&&jy.capital} / ${jy&&jy.founded} / ${jy&&jy.notes}`);
  chk((await pg.evaluate(()=>localStorage.getItem('daily-feed-on')))===TODAY, '記下今天挑過了');
  chk(await pg.locator('#importer').isHidden(), '靜默匯入，沒有打開匯入抽屜');
 

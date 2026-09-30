@@ -531,21 +531,23 @@
 
   /*
    * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
-   *   本期 → 增資 → 製造／營造（投資控股不算）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 5 年以上
+   *   本期 → 增資 → 製造／營造（投資控股不算）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年
+   *   （成立年原本是「5 年以上」；使用者說成交的多半是成立 7～8 年、案件 1,000 萬，改成離 7～8 年多遠：Rules.ageRank）
    * 每一家對這六條各打勾，照順序比：前面那條符合的一律排在不符合的前面，都一樣再比下一條，
    * 全部一樣就資本額高的先。所以全符合的先挑，不夠就往下補，總是湊得到 10 家。
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['本期', '增資', '製造／營造', '資本額 500～6,000 萬', '我的分公司', '成立 5 年以上'];
+  const DAILY_PRIORITY = ['本期', '增資', '製造／營造', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
   const dailyChecks = (r, latest) => [
     r['期別'] === latest,
     r.rk === 'up',
     r.classes.some((k) => 'CE'.includes(k)) && !r.holding,
     r.capital >= 5000000 && r.capital <= 60000000,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
-    ageOf(r) === 'ge5',
+    ageRankOf(r),   // 離成立 7～8 年多遠：0＝6～10 年 … 4＝不知道
   ];
+  const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.foundedDate ? yearsSince(r.foundedDate) : null) : (ageOf(r) === 'ge5' ? 0 : 3));
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-214';
+  const APP_VERSION = '20260930-215';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2903,7 +2903,7 @@
         el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
         el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
       ]));
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保挑 ${quota} 家進名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 製造／營造 → 資本額 500～6,000 萬 → 我的分公司 → 成立 5 年以上，再比資本額；動產擔保＝3 個月內到期 → 同業 → 我的分公司 → 100 萬以上，再比到期日。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社挑 ${quota} 家進名單（各三分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 製造／營造 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 我的分公司 → 100 萬以上，再比到期日；商行／企業社＝有商業登記 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票 → 資本額 500 萬以上。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const over = days.filter((d) => (counts.get(d) || 0) > cap);
       const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);

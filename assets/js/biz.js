@@ -404,9 +404,14 @@
   // 有商業登記排最前：只有稅籍登記的沒負責人、資本額是自填的，排最後補位
   // 分公司是遠近（Rules.branchRank：我的 0 → 共同區 1 → 鄰近 2… → 其他 9），新莊挑完就接新北，不是門檻
   // 本期設立／變更：名單裡有在本期清冊出現的（dyn），或本期清冊裡資本額到門檻、名單沒有的（跟公司那頁的「本期」一樣排前面）
-  const DAILY_PRIORITY = ['有商業登記', '本期設立／變更', '我的分公司', '設立 5 年內', '開發票', '資本額 100 萬以上'];
+  // 使用者：「案件成交金額都是 1000 萬、利率 8%-14%、成立 7-8 年的公司」。設立年改成離 7～8 年多遠（Rules.ageRank）、
+  // 資本額分級（500 萬以上 → 100 萬以上 → 其他）；本期只算「變更」——剛設立的才 0 年，離 7～8 年最遠。
+  const DAILY_PRIORITY = ['有商業登記', '本期變更', '我的分公司', '設立 6～10 年', '開發票', '資本額 500 萬以上'];
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
-  const dailyChecks = (r) => [!!r.reg, !!(r.dyn || r.monthly), branchRank(r), ageOf(r) === 'lt5', !!r.invoice, r.capital >= 1000000];
+  const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
+  const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
+  const capRank = (r) => (r.capital >= 5000000 ? 0 : r.capital >= 1000000 ? 1 : 2);
+  const dailyChecks = (r) => [!!r.reg, changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice, capRank(r)];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
