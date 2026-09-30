@@ -983,3 +983,147 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .funnel { margin-top: 12px; }
 .funnel h3 + table, .funnel table + h3 { margin-top: 10px; }
 .funnel-table td:not(:first-child), .funnel-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ==================================================================
+ * 視覺整理（使用者：「網站的頁面上能美化一些嗎」）。
+ *
+ * 只動外觀，不動版面結構與功能：放在最後一段蓋過前面的設定，要退回就整段刪掉。
+ * 原則：色調更柔、邊框更淡、用陰影分層；顏色的意義不變（紅＝逾期／禁止推廣、橘＝今天、
+ * 綠＝有機會／已在名單、藍＝主要動作），標籤從「只有框線」改成淡底色，一眼比較好認。
+ * 頂欄高度不變（分頁列的 sticky top 是照它算的）。
+ * ================================================================== */
+:root {
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #f2f5fa;
+  --border: #e2e7ef;
+  --border-strong: #cfd7e3;
+  --text: #0f1b2d;
+  --muted: #5d6b80;
+  --primary: #2563eb;
+  --primary-soft: #eaf1ff;
+  --radius: 14px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .06);
+  --shadow: 0 4px 10px rgba(15, 23, 42, .06), 0 16px 36px rgba(15, 23, 42, .10);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a111e; --surface: #111a29; --surface-2: #172234; --border: #223047; --border-strong: #2e3f5a;
+    --text: #e8eef8; --muted: #95a5bd; --primary: #6ea8ff; --primary-soft: #16264a;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4); --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a111e; --surface: #111a29; --surface-2: #172234; --border: #223047; --border-strong: #2e3f5a;
+  --text: #e8eef8; --muted: #95a5bd; --primary: #6ea8ff; --primary-soft: #16264a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4); --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+}
+body { letter-spacing: .01em; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-weight: 700; letter-spacing: .01em; }
+::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+
+/* 頂欄：半透明毛玻璃，捲動時內容從底下滑過去不會突兀 */
+.topbar {
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  -webkit-backdrop-filter: saturate(1.6) blur(12px); backdrop-filter: saturate(1.6) blur(12px);
+  border-bottom-color: var(--border); box-shadow: 0 1px 0 rgba(15, 23, 42, .02);
+}
+.brand-mark {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
+  font-size: 18px; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #7c3aed));
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 30%, transparent);
+  filter: saturate(1.1);
+}
+.brand h1 { letter-spacing: .02em; }
+.search-wrap input { background: var(--surface-2); border-color: transparent; transition: box-shadow .15s ease, border-color .15s ease, background .15s ease; }
+.search-wrap input:focus { outline: none; background: var(--surface); border-color: var(--primary); box-shadow: var(--ring); }
+
+/* 按鈕：圓一點、按下去有回饋；主要按鈕帶一點點漸層與陰影 */
+.btn { border-radius: 10px; border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-sm); transition: border-color .15s ease, box-shadow .15s ease, transform .08s ease, background .15s ease; }
+.btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible, .chip:focus-visible, .tab:focus-visible, .tel:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 92%, #fff), var(--primary)); border-color: var(--primary); box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 30%, transparent); }
+.btn-primary:hover { background: var(--primary); border-color: var(--primary); box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent); }
+.btn-ghost { box-shadow: none; }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn-tiny { border-radius: 8px; }
+.menu { border-radius: 14px; padding: 8px; }
+.menu button, .menu a.menu-link { border-radius: 9px; }
+
+/* 分頁：選到的那頁底下一條圓頭的藍線，字也變藍 */
+.tabs { background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.tab { border-bottom-width: 3px; border-radius: 10px 10px 0 0; transition: color .15s ease, background .15s ease; }
+.tab:hover { color: var(--text); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.tab.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.pill { background: var(--surface); border: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.pill:empty { display: none; }   /* 還沒載入的分頁計數是空的，別留一條小框 */
+.tab.is-active .pill { background: var(--primary-soft); border-color: transparent; color: var(--primary); }
+
+/* 篩選欄、卡片、區塊：淡框＋小陰影分層 */
+.filters, .leads-filters, .stat, .bars, .rule-card, .feed-bar, .leads-founded { border-color: var(--border); box-shadow: var(--shadow-sm); }
+.chip { background: var(--surface); transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.chip:hover { border-color: var(--border-strong); }
+.chip[aria-pressed="true"] { box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 28%, transparent); }
+.filter-group input, .filter-group select, .leads-group input[type="search"], .leads-group input[type="number"], .leads-group select { border-radius: 10px; }
+
+.cards { gap: 12px; }
+.card {
+  border-color: var(--border); border-left-width: 4px; border-left-color: var(--border-strong);
+  border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm);
+  transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+}
+.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
+.card.is-due, .card.is-due:hover { border-left-color: var(--warn); }
+.card.is-overdue, .card.is-overdue:hover { border-left-color: var(--danger); }
+.leads-card.is-up, .leads-card.is-up:hover { border-left-color: var(--primary); }
+.chattel-card.is-mine, .leads-card.is-mine, .chattel-card.is-mine:hover, .leads-card.is-mine:hover, .listed-card.is-same, .listed-card.is-same:hover { border-left-color: var(--ok); }
+.card-name { font-size: 16px; font-weight: 700; }
+.card-meta { gap: 6px 16px; }
+.card-notes { color: color-mix(in srgb, var(--text) 72%, var(--muted)); background: var(--surface-2); border-radius: 10px; padding: 6px 10px; }
+
+/* 標籤：框線色保留（意義不變），加淡淡的同色底 */
+.badge { border-color: color-mix(in srgb, currentColor 30%, transparent); background: color-mix(in srgb, currentColor 8%, var(--surface)); padding: 1px 9px; font-weight: 500; }
+.badge-blocked { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+
+/* 電話膠囊：藍色，一看就知道按了會撥 */
+.tel { background: var(--primary-soft); border-color: transparent; color: var(--primary); font-weight: 600; }
+.tel:hover { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+
+/* 名單上方兩條：今天的新名單、今天要打 */
+.feed-bar { background: linear-gradient(90deg, var(--primary-soft), var(--surface) 70%); border-color: color-mix(in srgb, var(--primary) 18%, var(--border)); padding: 10px 14px; }
+.feed-bar .feed-text { color: var(--text); font-weight: 500; }
+.remind-bar { border-radius: var(--radius); border-left-width: 4px; box-shadow: var(--shadow-sm); padding: 10px 14px; }
+.remind-row { border-top-style: solid; border-top-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.remind-tel { font-weight: 600; }
+
+/* 詳細頁、對話框 */
+.drawer-backdrop { background: rgba(8, 12, 22, .45); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.drawer-panel { border-left: 0; box-shadow: -12px 0 40px rgba(15, 23, 42, .18); }
+@media (min-width: 901px) { .drawer-panel { border-radius: 18px 0 0 18px; } }
+.modal, .ask-box, .lock-box { border-radius: 18px; border-color: var(--border); }
+.drawer-close { border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-sm); }
+.detail-section h3 { letter-spacing: .03em; }
+.logform { background: var(--surface-2); border-color: var(--border); border-radius: var(--radius); }
+.logform textarea, .logform input[type="date"] { border-radius: 10px; }
+.logform textarea:focus, .rule-field input:focus, .rule-field select:focus, .rule-field textarea:focus, .filter-group input:focus, .filter-group select:focus { outline: none; border-color: var(--primary); box-shadow: var(--ring); }
+.timeline li::before { box-shadow: 0 0 0 3px var(--surface); }
+
+/* 統計：數字用主色，卡片之間有層次 */
+.stat b { color: var(--primary); font-weight: 700; }
+.bar i { background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 70%, #fff), var(--primary)); }
+
+/* 深色模式：寫死深色的幾種標籤（分公司、共同區、變更登記）在深底上太暗，換亮一階 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .badge-branch { color: #2dd4bf; }
+  :root:not([data-theme="light"]) .badge-branch-common, :root:not([data-theme="light"]) .branch-common, :root:not([data-theme="light"]) .badge-regchange { color: #fbbf24; }
+  :root:not([data-theme="light"]) .badge-large, :root:not([data-theme="light"]) .dyn-item .tag-deal { color: #a78bfa; }
+}
+:root[data-theme="dark"] .badge-branch { color: #2dd4bf; }
+:root[data-theme="dark"] .badge-branch-common, :root[data-theme="dark"] .branch-common, :root[data-theme="dark"] .badge-regchange { color: #fbbf24; }
+:root[data-theme="dark"] .badge-large, :root[data-theme="dark"] .dyn-item .tag-deal { color: #a78bfa; }
+
+/* 提示泡泡 */
+.toast { border-radius: 14px; padding: 11px 18px; box-shadow: 0 10px 30px rgba(15, 23, 42, .28); }
+.update-bar, .registry-bar { border-radius: 14px; }
