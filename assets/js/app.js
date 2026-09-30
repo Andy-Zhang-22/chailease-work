@@ -1133,7 +1133,7 @@
       host.append(el('label', { className: 'rule-field' }, [
         el('span', { textContent: '地區' }), citySel]));
       host.append(el('label', { className: 'rule-field' }, [
-        skipHolding, el('span', { textContent: ' 略過投資／控股類' })]));
+        skipHolding, el('span', { textContent: ' 略過投資／控股類（通常找不到電話）' })]));
       if (hasReason) {
         host.append(el('label', { className: 'rule-field' }, [
           onlyUp, el('span', { textContent: ' 只要「增資」的（變更清冊的案由；設立清冊沒有案由，勾了會整份被濾掉）' })]));
@@ -3560,6 +3560,8 @@
      * 成交多半是營運週轉金跟投資額度、買設備的少，所以不看有沒有設備標的
      * （原本製造／營造 +12、投資控股 −25，拿掉了），改看公司是不是在長大。
      */
+    // 投資／控股類：使用者說「給我我也找不到他的電話，等於沒用」
+    if (window.Normalize.guessIndustry(r.company || '').industry === '投資控股') add(-25, '投資／控股類，通常找不到電話', PICK_QUIET);
     {
       const ups = (r.regChanges || []).filter((c) => (c.kinds || []).includes('capitalUp') && (ago(c.date) ?? Infinity) <= 730).length;
       if (ups >= 2) add(15, `兩年內增資 ${ups} 次，成長快`);

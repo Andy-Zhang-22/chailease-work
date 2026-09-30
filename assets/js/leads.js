@@ -536,7 +536,8 @@
    *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年
    *   （成立年原本是「5 年以上」；使用者說成交的多半是成立 7～8 年、案件 1,000 萬，改成離 7～8 年多遠：Rules.ageRank）
    *   （第三條原本是「製造／營造、投資控股不算」——那是買設備的看法。使用者說成交多半是
-   *   營運週轉金跟投資額度、買設備的少、要成長快的公司，所以改看擴張訊號，投資控股也照樣挑）
+   *   營運週轉金跟投資額度、買設備的少、要成長快的公司，所以改看擴張訊號）
+   *   投資控股類不進池子：使用者說「投資控股類的公司給我我也找不到他的電話，等於沒用」
    * 每一家對這六條各打勾，照順序比：前面那條符合的一律排在不符合的前面，都一樣再比下一條，
    * 全部一樣就資本額高的先。所以全符合的先挑，不夠就往下補，總是湊得到 10 家。
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
@@ -573,7 +574,7 @@
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
     const cm = customerMap();
-    return rows.filter((r) => r.type === 'change' && !mineOf(r, cm) && !hidden.has(keyOf(r)))
+    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
@@ -604,7 +605,7 @@
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
         el('input', { id: 'leads-capMax', type: 'number', min: '0', step: '100', placeholder: '上限', value: '6000' })])),
-      el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'leads-skipHolding' }), ' 略過投資／控股類'])]),
+      el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'leads-skipHolding', checked: true }), ' 略過投資／控股類（通常找不到電話）'])]),
       group('關鍵字', el('input', { id: 'leads-q', type: 'search', placeholder: '公司、統編、代表人、地址、營業項目', autocomplete: 'off' }), 'leads-q'),
       group('排序', el('select', { id: 'leads-sort' }, [
         el('option', { value: 'capital', textContent: '資本額（高到低）' }),
@@ -677,7 +678,7 @@
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
       f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.q = ''; showHidden = false;
-      $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = false;
+      $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };
     /*
