@@ -851,6 +851,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 
 /* ---------- 找電話（Google 地圖） ---------- */
 .phone-finder { margin-top: 6px; }
+.phone-search { align-items: center; flex-wrap: wrap; }
+.phone-search .phone-paste { width: 12em; font-size: 12px; padding: 4px 6px; }
 .phone-finder-out { margin-top: 8px; }
 .phone-source { font-size: 13px; margin: 4px 0 0; }
 .place-cand { padding: 8px 10px; margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 14px; }

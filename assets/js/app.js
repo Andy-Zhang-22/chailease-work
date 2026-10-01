@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-221';
+  const APP_VERSION = '20261001-222';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1384,8 +1384,40 @@
   }
 
   /** 詳細頁上的那一小塊：找、看結果、採用或刪。 */
+  /*
+   * 沒電話的：一鍵去 Google、地圖、104、1111、商工登記找，找到了直接貼回來存。
+   * 使用者：「新增的名單有些撈不到電話，我都需要透過 google 去他的官網或求職平台上找電話」——
+   * 清冊、動保、稅籍本來就沒電話，貿易署電話表對不到的只能人找；這裡省掉打字搜尋跟開編輯視窗那幾步。
+   */
+  function phoneSearchRow(r, opts = {}) {
+    const q = encodeURIComponent(r.company || '');
+    const stop = (e) => e.stopPropagation();
+    const link = (text, href, title) => el('a', { className: 'btn btn-tiny', href, target: '_blank', rel: 'noopener', textContent: text, title, onclick: stop });
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到了貼這裡，Enter 存', autocomplete: 'off', onclick: stop });
+    input.onkeydown = async (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault(); e.stopPropagation();
+      const v = input.value.trim();
+      if (!v) return;
+      const st = state.userStates.get(r.id) || {};
+      await saveState(r.id, { edits: { ...(st.edits || {}), phoneRaw: v }, editsAt: Date.now() });
+      await reload(); render(); scheduleSync(); toast(`已填入 ${v}`);
+      if (opts.detail) openDetail(r.id);
+    };
+    return el('div', { className: 'card-actions phone-search', onclick: stop }, [
+      el('span', { className: 'muted', textContent: '找電話：' }),
+      link('Google', `https://www.google.com/search?q=${q}+%E9%9B%BB%E8%A9%B1`, '搜「公司名 電話」'),
+      link('地圖', `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.company || ''} ${r.address || ''}`.trim())}`, 'Google 地圖'),
+      link('104', `https://www.google.com/search?q=site%3A104.com.tw+${q}`, '104 上的公司頁'),
+      link('1111', `https://www.google.com/search?q=site%3A1111.com.tw+${q}`, '1111 上的公司頁'),
+      r.taxId ? link('商工登記', `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${encodeURIComponent(r.taxId)}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`, '商工登記公示資料') : '',
+      input,
+    ]);
+  }
+
   function phoneFinder(r) {
     const box = el('div', { className: 'phone-finder' });
+    box.append(phoneSearchRow(r, { detail: true }));
     const btn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '用 Google 地圖找電話' });
     const out = el('div', { className: 'phone-finder-out' });
     btn.onclick = async () => {
@@ -2939,7 +2971,7 @@
         el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
         el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
       ]));
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商挑 ${quota} 家進名單（各四分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商挑 ${quota} 家進名單（各四分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const over = days.filter((d) => (counts.get(d) || 0) > cap);
       const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);
@@ -3482,6 +3514,8 @@
       const actions = el('div', { className: 'card-actions' });
       telLinks(r, 2).forEach((a) => actions.append(a));
       node.append(actions);
+    } else if (!r.blocked) {
+      node.append(phoneSearchRow(r));   // 沒電話的直接在卡片上找、貼
     }
     node.onclick = () => openDetail(r.id);
     node.onkeydown = (e) => { if (e.key === 'Enter') openDetail(r.id); };

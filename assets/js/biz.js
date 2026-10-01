@@ -226,6 +226,7 @@
       r.reg ? '' : el('span', { className: 'badge badge-own', textContent: '只有稅籍登記', title: '沒辦商業登記（小規模營業人可免辦）：商工登記查不到、沒有負責人，資本額是稅籍上自己填的' }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       r.invoice ? el('span', { className: 'badge badge-ind', textContent: '開發票' }) : '',
+      hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '',
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
@@ -413,12 +414,14 @@
   // 本期只算「變更」——剛設立的才 0 年，離 7～8 年最遠。
   // 使用者：「商行那分頁可以挑資本額大於 1000 萬的優先給我」：資本額提到第二（有商業登記之後——只有稅籍的資本額是自填的，
   // 不能讓它靠自填的數字插隊），分級 1,000 萬以上 → 500 萬以上 → 100 萬以上 → 其他。
-  const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
+  const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
   const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
   const capRank = (r) => (r.capital >= 10000000 ? 0 : r.capital >= 5000000 ? 1 : r.capital >= 1000000 ? 2 : 3);
-  const dailyChecks = (r) => [!!r.reg, capRank(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
+  const dailyChecks = (r) => [!!r.reg, capRank(r), hasPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -440,6 +443,7 @@
     if (!root) return [];
     await start();
     if (!ready) return [];
+    if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
     // 池子＝名單 ＋ 本期清冊裡資本額到門檻、名單裡沒有的（新設立的稅籍檔還沒收進去，只有清冊有）
     let extra = [];
@@ -546,6 +550,7 @@
       $('#biz-loading').hidden = true;
       await attachDyn();   // 本期清冊對名單（沒有清冊就略過）
       ready = true;
+      if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
       const rerender = () => { limit = PAGE; render(); };
       ['#biz-capMin', '#biz-capMax'].forEach((s) => { $(s).oninput = rerender; });
       $('#biz-sort').onchange = () => { switchMode.touched = true; rerender(); };

@@ -72,6 +72,14 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
 
  // 補電話：選單那顆——遠帆（統編對得到）補上、律森（對不到）還是沒有、星辰本來就有不動
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
+ // 沒電話的卡片上有一排找電話的連結跟貼回來的框（使用者：撈不到電話都要自己 Google）
+ const yfCard=pg.locator('#cards .card:has-text("遠帆")').first();
+ chk(await yfCard.locator('.phone-search a').count()===5 && await yfCard.locator('.phone-search input').count()===1, `沒電話的卡片有找電話連結：${await yfCard.locator('.phone-search a').count()}`);
+ chk(/google\.com\/search\?q=.*%E9%9B%BB%E8%A9%B1/.test(await yfCard.locator('.phone-search a').first().getAttribute('href')), 'Google 連結搜「公司名 電話」');
+ await yfCard.locator('.phone-search input').fill('02-5555-6666'); await yfCard.locator('.phone-search input').press('Enter'); await pg.waitForTimeout(500);
+ chk(/0255556666/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='遠帆國際開發有限公司').phones))), '貼回來按 Enter 就存了');
+ chk(await pg.isHidden('#drawer'), '在卡片上貼電話不會誤開詳細頁');
+ await pg.evaluate(async()=>{ const v=window.customerViews().find(x=>x.company==='遠帆國際開發有限公司'); const st=(await window.Store.getState(v.id))||{}; await window.Store.setState({...st, recordId:v.id, edits:{...(st.edits||{}), phoneRaw:''}}); }); await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const res=await pg.evaluate(()=>window.tradePhones('',{toast:true}));
  chk(res.tried===2 && res.found===1, `整份補電話：沒電話有統編的 ${res.tried} 家、對到 ${res.found} 家`);
  await pg.waitForTimeout(400);

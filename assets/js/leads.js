@@ -377,7 +377,8 @@
     return el('article', { className: `card leads-card${mine ? ' is-mine' : r.rk === 'up' ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
-        r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '', mineBadge]),
+        r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '',
+        hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '', mineBadge]),
       el('div', { className: 'card-meta' }, [
         el('span', { textContent: `💰 ${wan(r.capital)}` }),
         r['代表人'] ? el('span', { textContent: `👤 ${r['代表人']}` }) : '',
@@ -537,7 +538,7 @@
 
   /*
    * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
-   *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年
+   *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 有電話（貿易署電話表對得到）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年
    *   （成立年原本是「5 年以上」；使用者說成交的多半是成立 7～8 年、案件 1,000 萬，改成離 7～8 年多遠：Rules.ageRank）
    *   （第三條原本是「製造／營造、投資控股不算」——那是買設備的看法。使用者說成交多半是
    *   營運週轉金跟投資額度、買設備的少、要成長快的公司，所以改看擴張訊號）
@@ -547,11 +548,14 @@
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['本期', '增資', '擴張', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  const DAILY_PRIORITY = ['本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
+  const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r['統一編號']));
   const dailyChecks = (r, latest) => [
     r['期別'] === latest,
     r.rk === 'up',
     EXPAND_RE.test(r.reason),   // 遷址、加營業項目、設分公司：在長大的公司才會動這些
+    hasPhone(r),
     r.capital >= 5000000 && r.capital <= 60000000,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
     ageRankOf(r),   // 離成立 7～8 年多遠：0＝6～10 年 … 4＝不知道
@@ -577,12 +581,13 @@
     if (!latest) return [];
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
+    if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
     return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
-        const rk = r._checks[4];
+        const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
         r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
       })
@@ -670,6 +675,7 @@
     if (periods.length > 1) $('#leads-period').append(el('option', { value: 'all', textContent: `全部期別（${periods.length} 期）` }));
     $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     ready = true;
+    if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
     const rerender = async () => { limit = PAGE; await ensureLoaded(); render(); };
     $('#leads-period').onchange = async () => { await rerender(); };
     $('#leads-capMin').oninput = () => { limit = PAGE; render(); };
