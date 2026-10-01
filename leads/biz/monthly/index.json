@@ -101,7 +101,7 @@
    ]
   },
   "11508": {
-   "generatedAt": "2026-09-29T15:32:05.522Z",
+   "generatedAt": "2026-10-01T14:33:16.512Z",
    "period": "11508",
    "files": [
     {
@@ -117,11 +117,25 @@
      "path": "11508/新北市-setup.csv",
      "rows": 668,
      "capitalUp": 0
+    },
+    {
+     "city": "臺北市",
+     "type": "change",
+     "path": "11508/臺北市-change.csv",
+     "rows": 298,
+     "capitalUp": 12
+    },
+    {
+     "city": "臺北市",
+     "type": "setup",
+     "path": "11508/臺北市-setup.csv",
+     "rows": 337,
+     "capitalUp": 0
     }
    ]
   }
  },
  "latest": "11508",
- "generatedAt": "2026-09-29T15:45:36.482Z",
+ "generatedAt": "2026-10-01T14:33:16.512Z",
  "kind": "bms"
 }
