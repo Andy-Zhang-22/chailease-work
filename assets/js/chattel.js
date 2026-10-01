@@ -241,6 +241,7 @@
     const lenderBadge = r.family === 'chailease'
       ? el('span', { className: 'badge', textContent: `自家：${r.lender.name}`, title: '中租自家的案件，預設藏起來' })
       : el('span', { className: 'badge badge-peer', textContent: `金主：${r.lender.name || '不明'}` });
+    const phoneBadge = hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '';
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上是禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
       : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）' });
@@ -255,7 +256,7 @@
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card chattel-card${mine ? ' is-mine' : r.days != null && r.days >= 0 && r.days <= 30 ? ' is-overdue' : r.days != null && r.days > 30 && r.days <= 90 ? ' is-due' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [
-      el('div', { className: 'card-top' }, [name, dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, mineBadge,
+      el('div', { className: 'card-top' }, [name, dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
         r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.custIsFin ? el('span', { className: 'badge badge-ind', textContent: '客戶那一方也是金融業' }) : '']),
       el('div', { className: 'card-meta' }, [
@@ -391,12 +392,15 @@
    * 成立 5 年內排最前面，但不是門檻——5 年內的挑完了就往下挑 5 年以上、成立年不明的。
    * 每一項：布林值 true 在前；數字越小越好（到期等級）。
    */
-  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '我的分公司', '500 萬以上'];
+  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '有電話', '我的分公司', '500 萬以上'];
+  // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
+  const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.cust && r.cust.id));
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
     ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
     r.family !== 'chailease' && !r.custIsFin,
+    hasPhone(r),
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
     r.amount >= 5000000,
   ];
@@ -415,12 +419,13 @@
     if (!root) return [];
     await start();
     if (!ready) return [];
+    if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
     return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
       .map((r) => {
         r._checks = dailyChecks(r);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
-        const rk = r._checks[3];
+        const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
         r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
       })
@@ -537,6 +542,7 @@
     $('#chattel-sub').textContent = `新北市動產擔保登記清冊（新北市經發局，每月更新）　·　資料截到 ${through || '？'}　·　上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     $('#chattel-loading').hidden = true;
     ready = true;
+    if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
     const rerender = () => { limit = PAGE; render(); };
     ['#chattel-amtMin', '#chattel-amtMax'].forEach((s) => { $(s).oninput = rerender; });
     $('#chattel-hideFin').onchange = rerender;

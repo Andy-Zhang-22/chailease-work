@@ -60,7 +60,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.route('**/leads/biz/biz.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:BCSV}));
  await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(TINDEX)}));
  await ctx.route('**/leads/trade/trade.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:TCSV}));
- await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:404,body:''}));
+ await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'\uFEFF統編,電話,傳真,核發日期\n11111111,02-1234-5678,,2025/01/01\n'}));   // 甲一在貿易署電話表裡
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9485/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','4');
@@ -89,7 +89,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
  // 都在名單裡了會是空的；順序要用「藏起來」之前的資料驗：改用 window 上的比較函式不好抓，改看訪談內容寫的符合條件
  const why=Object.fromEntries(fed.map(f=>[f.company,f.notes]));
- chk(/符合：本期、增資、擴張、資本額 500～6,000 萬、我的分公司、成立 6～10 年/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一六條全符合，寫在訪談內容');
+ chk(/符合：本期、增資、擴張、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一七條全符合（含貿易署電話表對得到），寫在訪談內容');
+ chk(/0212345678/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='甲一精密有限公司').phones))), '甲一的電話從貿易署電話表自動填進來');
  chk(/符合：成立 5 年內、3 個月內到期、同業、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
  // 名單頁最上面的「再補」列：打完了按一下再補 4 家
  const barText=(await pg.textContent('#feedBar')).replace(/\s+/g,' ');

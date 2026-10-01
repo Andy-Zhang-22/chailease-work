@@ -110,6 +110,8 @@
     })();
     return phonesLoading;
   }
+  /** 電話表載好之後，同步問這個統編有沒有電話（其他分頁的卡片、每日挑選用；還沒載就當沒有） */
+  const hasPhone = (taxId) => { const tax = String(taxId || '').replace(/\D/g, ''); const p = phones && tax.length === 8 ? phones.get(tax) : null; return !!(p && p.tel); };
   /** 這個統編在出進口廠商登記裡的電話；沒有回 null */
   async function phoneOf(taxId) {
     const tax = String(taxId || '').replace(/\D/g, '');
@@ -452,5 +454,5 @@
     render();
   }
 
-  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, toStandardCsv, noteFor, phoneOf, ensurePhones, dailyCandidates, DAILY_PRIORITY };
+  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, dailyCandidates, DAILY_PRIORITY };
 })(window);
