@@ -39,7 +39,14 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  chk(/新北市的出進口廠商 75,454 家（有電話 70,514）/.test(sub) && /最近 24 個月內的 3 家/.test(sub), `副標：${sub}`);
  const names=async()=>pg.$$eval('#trade-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
  let n=await names();
- chk(n.join('|')==='新莊好商行|晨光貿易有限公司|遠帆國際開發有限公司', `預設最新登記在前：${n.join('|')}`);
+ // 預設篩資本額 500～6,000 萬、有電話、我的分公司（使用者：「照你的建議做」）
+ const defs=await pg.evaluate(()=>({min:document.querySelector('#trade-capMin').value,max:document.querySelector('#trade-capMax').value,phone:document.querySelector('#trade-fPhone .chip[aria-pressed="true"]')?.textContent,branch:document.querySelector('#trade-fBranch .chip[aria-pressed="true"]')?.textContent}));
+ chk(defs.min==='500'&&defs.max==='6000'&&/有電話/.test(defs.phone||'')&&/新莊分公司/.test(defs.branch||''), `預設篩選：${JSON.stringify(defs)}`);
+ chk(n.join('|')==='晨光貿易有限公司', `預設只剩最值得打的：${n.join('|')}`);
+ // 把預設清掉看全部
+ const clearAll=async()=>{ await pg.fill('#trade-capMin',''); await pg.fill('#trade-capMax',''); await pg.waitForTimeout(200); for (const sel of ['#trade-fPhone','#trade-fBranch']) { const on=pg.locator(`${sel} .chip[aria-pressed="true"]`); if (await on.count()) { await on.first().click(); await pg.waitForTimeout(200); } } };
+ await clearAll(); n=await names();
+ chk(n.join('|')==='新莊好商行|晨光貿易有限公司|遠帆國際開發有限公司', `清掉預設後最新登記在前：${n.join('|')}`);
  const first=pg.locator('#trade-cards .card:has-text("晨光")');
  const top=(await first.locator('.card-top').textContent()).replace(/\s+/g,' ');
  chk(/新登記/.test(top) && /進口＋出口/.test(top) && /新莊分公司/.test(top), `卡片標籤：${top}`);
@@ -53,7 +60,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await clickChip('#trade-fAge','5～10 年'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩成立 5～10 年：${n.join('|')}`); await clickChip('#trade-fAge','5～10 年');
  await clickChip('#trade-fPhone','有電話'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩有電話：${n.join('|')}`);
  await pg.fill('#trade-capMin','500'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `資本額 500 萬以上：${n.join('|')}`);
- await pg.click('#trade-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選');
+ await pg.click('#trade-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `「回到預設篩選」回到那組預設：${n.join('|')}`); await clearAll(); n=await names(); chk(n.length===3, '再清掉看全部');
  await pg.fill('#search','MORNING'); await pg.waitForTimeout(400); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `頂端搜尋欄搜英文名：${n.join('|')}`); await pg.fill('#search',''); await pg.waitForTimeout(400);
 
  // 單家加入：電話、代表人、地址、備註一起進去，排明天
