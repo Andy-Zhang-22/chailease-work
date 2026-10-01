@@ -69,7 +69,8 @@ jobs:
           git add -A leads/nhi
           if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
           git commit -m "剛開始請人名單：$(date -u +%Y-%m-%d)"
-          git pull --rebase origin "$GITHUB_REF_NAME"
+          # leads/nhi 整份是這次重算的，跟分支上的舊檔撞到一律用這次的（第一次跑就撞到佔位檔，整輪白跑）
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
 
       - name: 還沒查完，再排一輪
