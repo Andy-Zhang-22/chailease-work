@@ -29,7 +29,7 @@
  * 同樣只讀 leads/founded.json 當種子（使用者：「出進口廠商能補上成立年嗎」）。同一次查詢順便拿資本總額（元）填進「資本額」欄，
  * 快取 leads/trade/capital.json（使用者：「幫我把出進口的分頁名單補上資本額」）——資本額的快取是分開的，成立年查過但資本額還沒有的要再查一次。
  *
- * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade] [--out leads] [--minutes 240]
+ * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade|nhi] [--out leads] [--minutes 240]
  *                                   [--concurrency 6] [--limit N] [--dry]
  */
 import { createRequire } from 'node:module';
@@ -49,10 +49,11 @@ const LIMIT = Number(opt('limit', '0')) || 0;
 const DRY = args.includes('--dry');
 const CHATTEL = SOURCE === 'chattel';
 const TRADE = SOURCE === 'trade';
-const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : '';   // 自己的資料夾（快取、index 都在那裡）
+const NHI = SOURCE === 'nhi';   // 剛開始請人（健保新投保單位）：成立日檔案裡多半有，主要是補資本額
+const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : NHI ? 'nhi' : '';   // 自己的資料夾（快取、index 都在那裡）
 const CACHE = SUB ? path.join(OUT, SUB, 'founded.json') : path.join(OUT, 'founded.json');
 const SEED = SUB ? path.join(OUT, 'founded.json') : '';   // 只讀、不寫回
-const CAP_CACHE = TRADE ? path.join(OUT, 'trade', 'capital.json') : '';   // 統編 → 資本總額（元；0＝登記上沒有）
+const CAP_CACHE = (TRADE || NHI) ? path.join(OUT, SUB, 'capital.json') : '';   // 統編 → 資本總額（元；0＝登記上沒有）
 const DEADLINE = Date.now() + MINUTES * 60000;
 
 // 政府網站對沒有瀏覽器 UA 的請求有時直接回空白，跟每週健檢用同一個
@@ -118,12 +119,16 @@ const COLS = CHATTEL
   ? { tax: '客戶統編', name: '客戶名稱', fill: '成立日期', order: '契約迄', label: '動產擔保名單' }
   : TRADE
     ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: '出進口廠商' }   // 檔案本來就是最新登記在前，照檔案順序查
-    : { tax: '統一編號', name: '公司名稱', fill: '核准設立日期', order: '', label: '變更清冊' };
+    : NHI
+      ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: '剛開始請人' }   // 最近投保的在前
+      : { tax: '統一編號', name: '公司名稱', fill: '核准設立日期', order: '', label: '變更清冊' };
 const files = [];
 if (CHATTEL) {
   files.push(path.join(OUT, 'chattel', 'ntpc.csv'));
 } else if (TRADE) {
   files.push(path.join(OUT, 'trade', 'trade.csv'));
+} else if (NHI) {
+  files.push(path.join(OUT, 'nhi', 'nhi.csv'));
 } else {
   for (const period of (await fs.readdir(OUT, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
     for (const name of (await fs.readdir(path.join(OUT, period))).filter((f) => f.endsWith('-change.csv'))) {
@@ -149,7 +154,7 @@ for (const file of files) {
   if (iSetup < 0) { head.push(COLS.fill); iSetup = head.length - 1; rows.forEach((r, i) => { if (i) r[iSetup] = ''; }); }
   // 出進口廠商還要「資本額」欄（元），也是這支加的
   let iCap = -1;
-  if (TRADE) { iCap = head.indexOf('資本額'); if (iCap < 0) { head.push('資本額'); iCap = head.length - 1; rows.forEach((r, i) => { if (i) r[iCap] = ''; }); } }
+  if (TRADE || NHI) { iCap = head.indexOf('資本額'); if (iCap < 0) { head.push('資本額'); iCap = head.length - 1; rows.forEach((r, i) => { if (i) r[iCap] = ''; }); } }
   parsed.push({ file, rows, iTax, iName, iSetup, iCap });
   for (let i = 1; i < rows.length; i++) {
     rowsTotal += 1;

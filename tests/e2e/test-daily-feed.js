@@ -1,4 +1,4 @@
-// 每天自動從登記清冊、動產擔保、商行、出進口廠商挑進名單；上限 30、新名單 10；加入時照額度找日期
+// 每天自動從登記清冊、動產擔保、商行、出進口廠商、剛開始請人挑進名單；上限 30、新名單 10；加入時照額度找日期
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -42,6 +42,13 @@ const TROWS=[
 ];
 const TCSV='\uFEFF'+[THEAD,...TROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const TINDEX={generatedAt:'2026-10-01T20:00:00.000Z',cities:['新北市'],months:24,total:3,withPhone:2,recent:3,files:[{path:'trade.csv',rows:3}]};
+const NHEAD='統編,名稱,地址,行業代號,行業,成立日期,投保年月,電話,資本額';
+const NROWS=[
+ ['54867253','名祿實業有限公司','新北市新莊區中正路100號','4582','運動用品、器材批發業','108/09/03','202609','02-2960-0000','12000000'],
+ ['24908600','沒電話請人有限公司','新北市板橋區文化路1號','4552','服裝及其配件批發業','104/08/14','202608','','3000000'],
+];
+const NCSV='\uFEFF'+[NHEAD,...NROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
+const NINDEX={generatedAt:'2026-10-02T20:00:00.000Z',cities:['新北市'],months:6,total:2,withPhone:1,latestYm:'2026/09',files:[{path:'nhi.csv',rows:2}]};
 const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2012',capital:'1,500',phoneRaw:'02-2222-3333',phones:[{digits:'0222223333',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路9號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:TODAY,lastDate:'2026-09-12',addedDate:'2026-09-01',importedAt:1});
 const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客戶二有限公司','99999992')];
 (async()=>{
@@ -61,9 +68,11 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(TINDEX)}));
  await ctx.route('**/leads/trade/trade.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:TCSV}));
  await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'\uFEFF統編,電話,傳真,核發日期\n11111111,02-1234-5678,,2025/01/01\n'}));   // 甲一在貿易署電話表裡
+ await ctx.route('**/leads/nhi/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(NINDEX)}));
+ await ctx.route('**/leads/nhi/nhi.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:NCSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9485/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','4');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','5');
    // 昱昌以前刪掉過（公司墓碑）：挑的時候就要跳過，不然挑了 4 家只進來 3 家
    await window.Store.addCompanyTombstones([{key:'tax:53217846',company:'昱昌汽車貨運股份有限公司',taxId:'53217846'}]); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(3500);
@@ -76,7 +85,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);
  chk(fed.every(f=>f.addedDate===TODAY), `每日新名單的名單新增日期＝今天：${fed.map(f=>f.addedDate).join('|')}`);
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
- chk(fed.length===4, `額度 4：四頁輪流拿（動產擔保、登記清冊、商行、出進口各 1）：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.length===5, `額度 5：五頁輪流拿（動產擔保、登記清冊、商行、出進口、剛開始請人各 1）：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.some(f=>f.company==='名祿實業有限公司') && !fed.some(f=>f.company==='沒電話請人有限公司'), `剛開始請人挑 1 家、有電話且全符合的先：${fed.filter(f=>/請人|名祿/.test(f.company)).map(f=>f.company).join('|')}`);
+ chk(/符合：有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、剛投保 3 個月內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿五條全符合，寫在訪談內容');
  chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
  const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
  chk(cg && /符合：有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、登記 1 年內、進口＋出口/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
@@ -92,12 +103,12 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(/符合：本期、增資、擴張、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一七條全符合（含貿易署電話表對得到），寫在訪談內容');
  chk(/0212345678/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='甲一精密有限公司').phones))), '甲一的電話從貿易署電話表自動填進來');
  chk(/符合：成立 5 年內、3 個月內到期、同業、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
- // 名單頁最上面的「再補」列：打完了按一下再補 4 家
+ // 名單頁最上面的「再補」列：打完了按一下再補 5 家
  const barText=(await pg.textContent('#feedBar')).replace(/\s+/g,' ');
- chk(/今天的新名單 4 家/.test(barText) && /再補 4 家/.test(barText), `再補那一條：${barText}`);
+ chk(/今天的新名單 5 家/.test(barText) && /再補 5 家/.test(barText), `再補那一條：${barText}`);
  await pg.click('#feedMore'); await pg.waitForTimeout(1500);
  const fed2=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.company));
- chk(fed2.length===8, `再補之後 8 家：${fed2.join('|')}`);
+ chk(fed2.length===10, `再補之後 10 家：${fed2.join('|')}`);
  chk(fed2.includes('板橋企業社') && !fed2.includes('只有稅籍商行'), `再補的商行是板橋企業社（有商業登記），只有稅籍的還沒輪到：${fed2.filter(x=>/商行|企業社/.test(x)).join('|')}`);
  chk(/符合：3 個月內到期、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='自家客戶有限公司'); return r?r.notesRaw:''; })) || !fed2.includes('自家客戶有限公司'), '中租自家的不算同業，排在後面補位');
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);
@@ -110,21 +121,21 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  // 再開一次不會再挑
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2000);
  const again=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).length);
- chk(again===8, `同一天再開不會再挑：${again}`);
+ chk(again===10, `同一天再開不會再挑：${again}`);
 
  // 每天打得完幾家：上限 30、新名單 10、今天那一列寫（新 8）
  await pg.click('#btnMenu, .menu-btn, [aria-label="更多"]').catch(async()=>{ await pg.click('header button:has-text("…"), header button:has-text("⋯")').catch(()=>{}); });
  await pg.click('[data-act="day-load"]', {force:true}).catch(()=>{});
  await pg.waitForSelector('#editorBody .day-load',{timeout:5000}).catch(()=>{});
  const caps=await pg.$$eval('#editorBody .cap-input',a=>a.map(x=>x.value));
- chk(caps[0]==='30' && caps[1]==='4', `上限 30、新名單額度（測試設 4）：${caps.join('|')}`);
+ chk(caps[0]==='30' && caps[1]==='5', `上限 30、新名單額度（測試設 5）：${caps.join('|')}`);
  const first=await pg.locator('#editorBody .day-row').first().textContent();
- chk(/10 家（新 8）/.test(first.replace(/\s+/g,' ')), `今天那一列：${first.replace(/\s+/g,' ')}`);
+ chk(/12 家（新 10）/.test(first.replace(/\s+/g,' ')), `今天那一列：${first.replace(/\s+/g,' ')}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
 
  // 幫新名單找日期：加入的最早從明天起；12 家 → 明天 10、後天 2
  const plan=await pg.evaluate(()=>window.planNewDates(Array(12).fill('')));
- chk(plan.filter(d=>d==='2026-10-06').length===4 && plan.filter(d=>d==='2026-10-07').length===4 && plan.filter(d=>d==='2026-10-08').length===4, `12 家、額度 4：一天 4 家排三天：${JSON.stringify(plan)}`);
+ chk(plan.filter(d=>d==='2026-10-06').length===5 && plan.filter(d=>d==='2026-10-07').length===5 && plan.filter(d=>d==='2026-10-08').length===2, `12 家、額度 5：一天 5 家排三天：${JSON.stringify(plan)}`);
  const want=await pg.evaluate(()=>window.Chattel.wantedDate({end:'2026/12/23'},60));
  chk(want==='2026-10-24', `到期前 60 天：${want}`);
  const placed=await pg.evaluate(()=>window.planNewDates(['2026-10-24']));
@@ -159,9 +170,11 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx2.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(TINDEX)}));
  await ctx2.route('**/leads/trade/trade.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:TCSV}));
  await ctx2.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:404,body:''}));
+ await ctx2.route('**/leads/nhi/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(NINDEX)}));
+ await ctx2.route('**/leads/nhi/nhi.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:NCSV}));
  const p2=await ctx2.newPage({viewport:{width:1300,height:1100}}); const errs2=[]; p2.on('pageerror',e=>errs2.push(e.message)); p2.on('dialog',d=>d.accept());
  await p2.goto('http://localhost:9485/index.html'); await p2.waitForSelector('#dropzone'); await p2.click('#importer .drawer-close');
- await p2.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','4'); },SEED);
+ await p2.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','5'); },SEED);
  await p2.reload(); await p2.waitForSelector('#btnImport'); await p2.waitForTimeout(2500);
  const hol=await p2.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).length);
  chk(hol===0, `放假那天自動不挑：${hol}`);
@@ -169,7 +182,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(/今天放假（週六）/.test(bar2) && /下一個上班日 2026\/10\/12/.test(bar2), `名單頁那一條講清楚放假、再補排哪天：${bar2}`);
  await p2.click('#feedMore'); await p2.waitForTimeout(1500);
  const hol2=await p2.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.nextDate));
- chk(hol2.length===4 && hol2.every(d=>d==='2026-10-12'), `假日按再補：4 家都排在下一個上班日 10/12：${[...new Set(hol2)].join('|')}`);
+ chk(hol2.length===5 && hol2.every(d=>d==='2026-10-12'), `假日按再補：5 家都排在下一個上班日 10/12：${[...new Set(hol2)].join('|')}`);
  chk(errs2.length===0, `假日那一輪沒有 JS 錯誤：${errs2.join(' | ')}`);
  await br.close(); srv.close(); console.log(bad?`\n${bad} 個失敗`:'\n全部通過'); process.exit(bad?1:0);
 })();
