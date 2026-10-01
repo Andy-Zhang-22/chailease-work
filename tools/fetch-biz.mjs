@@ -38,6 +38,18 @@ const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s
 const MIN_CAPITAL = Number(opt('min-capital', '500000')) || 0;
 const SOURCE = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
 const OWNER_SOURCE = 'https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-83cb-474d91b7f3fc/csv/file';   // 新北市商業登記清冊
+/*
+ * 臺北市沒有像新北那樣帶負責人的清冊（探路：data.gov.tw 整份目錄裡「臺北市＋商業登記」21 個，欄位有負責人的 0 個；
+ * data.taipei 搜不到）。有的是經濟部商業發展署「台北市商業登記資料」按行業分的檔（統一編號、商業名稱、商業地址、
+ * 實收資本額、核准設立日期），只有 A、C、F、I、J 五個行業檔。拿來標「有商業登記」、用登記資本額取代稅籍自填的；負責人還是空的。
+ */
+const TPE_REG = {
+  A: 'D336A7C8-4772-4B93-88DC-A6CE51BAABBF',   // 農林漁牧（data.gov.tw 139890）
+  C: '44FEB6B1-BEF5-413C-8773-399EE9586C28',   // 製造業（53663）
+  F: '76A5AA0B-385A-459A-899B-38C96ADF9319',   // 零售、批發及餐飲業（53661）
+  I: 'AE1DA8CA-5F26-450C-960C-D358A2CB05B4',   // 專業、科學及技術服務業（52934）
+  J: 'E6F56E3C-BD98-4545-9C38-4FF44F27C6B4',   // 文化、運動、休閒及其他服務業（160031）
+};
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,23 +117,55 @@ async function loadOwners(taxIds, source = OWNER_SOURCE) {
   return { owners, month };
 }
 
-/** 對負責人與登記資本額：清冊抓得到就整批換新；抓不到就沿用上次的 owners.json（那裡面也有登記資本額）。
+/** 臺北市的商業登記（經濟部按行業分的檔）：只留名單裡的統編，回 統編 → { funds, setup }。一個檔抓不到就略過那個檔。 */
+async function loadTaipeiRegistry(taxIds) {
+  const found = {}; let total = 0;
+  for (const [cat, oid] of Object.entries(TPE_REG)) {
+    try {
+      const res = await fetch(`https://data.gcis.nat.gov.tw/od/file?oid=${oid}`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10 * 60000) });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const rl = readline.createInterface({ input: Readable.fromWeb(res.body) });
+      let head = null;
+      for await (const raw of rl) {
+        const line = raw.replace(/^\uFEFF/, '');
+        if (!head) { head = parseLine(line).map((h) => h.trim()); if (!head.includes('統一編號') || !head.includes('實收資本額')) throw new Error(`表頭對不上：${line.slice(0, 120)}`); continue; }
+        total++;
+        const cells = parseLine(line);
+        const row = {}; head.forEach((h, i) => { row[h] = (cells[i] || '').trim(); });
+        const tax = (row['統一編號'] || '').replace(/\D/g, '');
+        if (tax.length !== 8 || !taxIds.has(tax)) continue;
+        found[tax] = { funds: Number(String(row['實收資本額'] || '').replace(/\D/g, '')) || 0, setup: (row['核准設立日期'] || '').replace(/\D/g, '') };
+      }
+    } catch (e) { console.log(`✗ 台北市商業登記資料-${cat} 抓不到（${e.message}）`); }
+    await nap(500);
+  }
+  console.log(`台北市商業登記資料（五個行業檔）${total.toLocaleString()} 列，對到名單裡 ${Object.keys(found).length.toLocaleString()} 家（這份沒有負責人）`);
+  return found;
+}
+
+/** 對負責人與登記資本額：新北清冊抓得到就整批換新；抓不到就沿用上次的 owners.json（那裡面也有登記資本額）。
+ *  臺北市另外對經濟部的商業登記檔：標「有商業登記」、用登記資本額，負責人空著（每次重抓，不進快取）。
  *  回 { owners: 統編 → { at, name, month, funds }, month, fresh }；owners.json 由呼叫端篩完再寫，免得存十幾萬筆。 */
 async function fillOwners(kept) {
   let cached = {};
   try { cached = JSON.parse(await fs.readFile(path.join(OUT, 'owners.json'), 'utf8')); } catch (e) { cached = {}; }
   Object.keys(cached).forEach((k) => { if (!cached[k] || !cached[k].name) delete cached[k]; });
   const taxIds = new Set(kept.map((r) => r.taxId));
+  const at = new Date().toISOString().slice(0, 10);
+  let merged = {}; let month = ''; let fresh = false;
   try {
-    const { owners, month } = await loadOwners(taxIds);
-    const at = new Date().toISOString().slice(0, 10);
-    const merged = {};
-    kept.forEach((r) => { const o = owners[r.taxId]; if (o) merged[r.taxId] = { at, name: o.name, month, funds: o.funds || 0 }; else if (cached[r.taxId]) merged[r.taxId] = cached[r.taxId]; });
-    return { owners: merged, month, fresh: true };
+    const got = await loadOwners(taxIds);
+    month = got.month; fresh = true;
+    kept.forEach((r) => { const o = got.owners[r.taxId]; if (o) merged[r.taxId] = { at, name: o.name, month, funds: o.funds || 0 }; else if (cached[r.taxId]) merged[r.taxId] = cached[r.taxId]; });
   } catch (e) {
     console.log(`✗ 商業登記清冊抓不到（${e.message}），負責人沿用上次的 ${Object.keys(cached).length} 家`);
-    return { owners: cached, month: '', fresh: false };
+    merged = { ...cached };
   }
+  if (CITIES.some((c) => /^[臺台]北市$/.test(c))) {
+    const tpe = await loadTaipeiRegistry(taxIds);
+    kept.forEach((r) => { const t = tpe[r.taxId]; if (t && !merged[r.taxId]) merged[r.taxId] = { at, name: '', month: 'gcis', funds: t.funds || 0 }; });
+  }
+  return { owners: merged, month, fresh };
 }
 
 /** 資本額以商業登記為準（稅籍檔那欄是營業人自己填的，有 20 萬填成 2 億的）；清冊沒有這家或登記資本額是 0 才用稅籍的 */
@@ -143,6 +187,7 @@ async function writeOut(kept, fileDate, ow) {
     generatedAt: new Date().toISOString(), fileDate, source: SOURCE, cities: CITIES, minCapital: MIN_CAPITAL,
     total: kept.length, byOrg, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     withOwner: kept.filter((r) => owners[r.taxId] && owners[r.taxId].name).length, ownerSource: OWNER_SOURCE, ownerMonth: ow.month || '', ownerFresh: ow.fresh,
+    registeredNoOwner: kept.filter((r) => owners[r.taxId] && !owners[r.taxId].name).length,   // 臺北市：有商業登記但那份檔沒負責人
     capitalFromRegistry: kept.filter((r) => owners[r.taxId] && owners[r.taxId].funds > 0).length,
     taxOnly: kept.filter((r) => !owners[r.taxId]).length,
     files: [{ path: 'biz.csv', rows: kept.length }],
@@ -179,7 +224,7 @@ async function main() {
   await writeOut(list, fileDate, ow);
 }
 
-export { normalize, parseLine, halfWidth, rocDate, districtOf, loadOwners, applyFunds, HEAD };
+export { normalize, parseLine, halfWidth, rocDate, districtOf, loadOwners, loadTaipeiRegistry, applyFunds, HEAD, TPE_REG };
 
 if (process.argv[1] && /fetch-biz\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
