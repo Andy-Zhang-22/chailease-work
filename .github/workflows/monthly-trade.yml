@@ -1,4 +1,4 @@
-# 每月抓經濟部國際貿易署的「出進口廠商登記資料」（data.gov.tw 79641），只留新北市，寫成
+# 每月抓經濟部國際貿易署的「出進口廠商登記資料」（data.gov.tw 79641），只留新北市、臺北市，寫成
 # 電話表（leads/trade/phones.csv，給補電話用）與最近登記的名單（leads/trade/trade.csv）；網站的「出進口廠商」分頁讀這裡。
 #
 # 使用者：「政府採購決標公告、出進口廠商登記這兩個做看看」。這份是全國唯一有公司電話的公開整批檔。
@@ -13,7 +13,7 @@ on:
       cities:
         description: '留哪些縣市（逗號分隔）'
         required: false
-        default: '新北市'
+        default: '新北市,臺北市'
       months:
         description: '名單留原始登記在最近幾個月內的'
         required: false
@@ -49,7 +49,7 @@ jobs:
       - name: 抓出進口廠商登記資料
         if: inputs.skip_fetch != true
         env:
-          CITIES: ${{ inputs.cities || '新北市' }}
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
           MONTHS: ${{ inputs.months || '24' }}
         run: |
           node tools/fetch-trade.mjs --cities "$CITIES" --months "$MONTHS" | tee fetch-trade.log

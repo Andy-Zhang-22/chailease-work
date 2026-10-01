@@ -16,7 +16,7 @@
  *   trade.csv（全部欄位）：原始登記日期在最近 --months 個月內的——剛開始做進出口的公司，開信用狀、押貨款正是週轉金需求。
  * index.json 記抓取時間、檔案日期、各區筆數。
  *
- * 用法：node tools/fetch-trade.mjs [--out leads/trade] [--cities 新北市] [--months 24]
+ * 用法：node tools/fetch-trade.mjs [--out leads/trade] [--cities 新北市,臺北市] [--months 24]
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -26,7 +26,7 @@ import { Readable } from 'node:stream';
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
 const OUT = opt('out', 'leads/trade');
-const CITIES = opt('cities', '新北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const MONTHS = Number(opt('months', '24')) || 24;
 const SOURCE = 'https://fbfh.trade.gov.tw/opendata/companyData.csv';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
