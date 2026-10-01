@@ -41,14 +41,14 @@ const REG={ '57001161':{Business_Accounting_NO:'57001161',Company_Name:'大中�
  chk(JSON.stringify(kinds['1'])==='[]', `舊值剛好等於實收，不算增資：${JSON.stringify(kinds['1'])}`);
 
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("大中鋼鐵")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("大中鋼鐵") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  chk(/資本總額\s*1,200,000 仟元（大企部範疇）/.test(d), `詳細頁：資本總額與範疇（看總額，不是實收）：${d.match(/資本總額.{0,30}/)?.[0]}`);
  chk(/實收資本額\s*491,600 仟元/.test(d), `詳細頁：實收資本額：${d.match(/實收資本額.{0,20}/)?.[0]}`);
  chk(/最近核准變更\s*2025\/07\/16/.test(d), `詳細頁：最近核准變更日期：${d.match(/最近核准變更.{0,16}/)?.[0]}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  // 登記上沒變更過的公司（政府回 0 年 0 月 0 日）：那一列還是要在，講明是沒有紀錄
- await pg.locator('.card:has-text("小公司")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("小公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2');   // 點名稱：卡片正中央可能落在複製點上
  const d2=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  chk(/最近核准變更\s*1911年0月0日/.test(d2), `沒變更過就照登記原樣顯示：${d2.match(/最近核准變更.{0,20}/)?.[0]}`);
  const saved2=await pg.evaluate(async()=>{const s=await window.Store.allStates(); return (s.find(x=>x.recordId==='2')||{}).edits;});
