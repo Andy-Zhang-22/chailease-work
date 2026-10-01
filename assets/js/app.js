@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-227';
+  const APP_VERSION = '20261001-228';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -454,7 +454,210 @@
     bar.hidden = false;
   }
 
+  /* ---------------- 本週節奏：業務的一週 ----------------
+   *
+   * 使用者拿了一組「業務的一週」的卡片（一 數字日、二 開發日、三 拜訪日、四 服務日、五 覆盤日）說
+   * 「這些幫我運用在網站上」。做成名單頁最上面一條，照今天星期幾換內容，每一天只講那天該做的事，
+   * 數字都從已經在記的通話／拜訪／有機會算，不另外要人填表：
+   *   一 數字日　上週打了幾通、接通幾個、約到幾個見面、拜訪幾個、標了幾家有機會、送件幾家；
+   *   　　　　　 設本週要約幾個新見面；本週追單名單，標出最熱的三家（🔥，卡片上也看得到，下週自動失效）
+   *   二 開發日　只做一件事：約見面。今天約到幾個；舊名單重啟（談過但三個月沒聯絡的）
+   *   三 拜訪日　今天要去誰那（通話紀錄勾「約到見面」、日期是今天的），至少兩個；拜訪準備、記拜訪、會後摘要
+   *   四 服務日　老客戶（有跟中租往來、以前往來過）照最久沒聯絡排，只問「最近怎麼樣」
+   *   五 覆盤日　本週數字對目標、對上週；未跟完的一鍵移到下週一；下週三的拜訪今天就約好
+   * 上面五個籤可以點，看別天的內容（只是看，不存）。週末看覆盤。可收起，收起狀態存本機。
+   */
+  const WEEK_OPEN_KEY = 'week-bar-open';
+  const WEEK_DAYS = {
+    1: { name: '數字日', motto: '先看帳，再出門' },
+    2: { name: '開發日', motto: '只做一件事：約見面' },
+    3: { name: '拜訪日', motto: '出門見人，不坐辦公室' },
+    4: { name: '服務日', motto: '聯繫老客戶，不談商品' },
+    5: { name: '覆盤日', motto: '算帳，備戰' },
+  };
+  const WEEK_NUM = ['日', '一', '二', '三', '四', '五', '六'];
+  const HOT_MAX = 3;
+  let weekPreview = 0;   // 點了別天的籤就暫時看那天；0＝今天
+  const dow = (iso) => new Date(`${iso}T00:00:00`).getDay();
+  const inRange = (iso, a, b) => !!iso && iso >= a && iso <= b;
+  const weekMonday = () => weekOf(todayISO(), 0)[0];
+  /** 本週要約幾個新見面：存 "週一日期:數字"，別週的設定不算（每週重設）。預設 3。 */
+  function weekGoal(value) {
+    const monday = weekMonday();
+    if (value !== undefined) { registryPref('week-goal', `${monday}:${value}`); return value; }
+    const raw = registryPref('week-goal');
+    const m = String(raw || '').match(/^(\d{4}-\d{2}-\d{2}):(\d+)$/);
+    return m && m[1] === monday ? Number(m[2]) : 3;
+  }
+  /** 一段期間的數字：全部從已經記的紀錄算。 */
+  function weekNumbers(from, to) {
+    const calls = state.logs.filter((l) => l.kind !== 'visit' && inRange(l.date, from, to));
+    const visits = state.logs.filter((l) => l.kind === 'visit' && inRange(l.date, from, to));
+    const fromMs = new Date(`${from}T00:00:00`).getTime();
+    const toMs = new Date(`${to}T23:59:59`).getTime();
+    return {
+      calls: calls.length,
+      reached: calls.filter((l) => window.Normalize.normalizeOutcome(l.outcome) === 'contacted').length,
+      meetings: calls.filter((l) => l.meeting).length,
+      visits: visits.length,
+      submitted: visits.filter((l) => /下一步：送資料評估/.test(l.text || '')).length,
+      chance: allViews().filter((v) => v.chance === 'yes' && !v.chanceFrom && v.chanceAt >= fromMs && v.chanceAt <= toMs).length,
+    };
+  }
+  window.weekNumbers = weekNumbers;   // 測試用
+  /** 哪幾家約了哪天見面：通話紀錄勾「約到見面」的，日期＝當時填的下次聯絡日。 */
+  function meetingsBetween(from, to) {
+    const byId = new Map();
+    state.logs.forEach((l) => { if (l.meeting && inRange(l.meetingDate, from, to)) byId.set(l.recordId, l.meetingDate); });
+    return allViews().filter((v) => byId.has(v.id) && !v.blocked).map((v) => ({ v, date: byId.get(v.id) }));
+  }
+  const hotViews = () => allViews().filter((v) => v.hot && !v.blocked);
+  async function toggleHot(v) {
+    const on = !v.hot;
+    if (on && hotViews().length >= HOT_MAX) { toast(`最熱的只標 ${HOT_MAX} 家，先把一家的 🔥 拿掉`); return; }
+    await saveState(v.id, { hot: on ? weekMonday() : '' });
+    scheduleSync();
+    render();
+    toast(on ? `🔥 ${v.company} 標為本週最熱` : `${v.company} 不再是本週最熱`);
+  }
+  /** 一列：公司（點開詳細頁）＋說明＋電話＋動作鈕。 */
+  function weekRow(v, meta, actions) {
+    const open = el('button', { className: 'week-open', type: 'button' }, [
+      el('span', { className: 'week-name', textContent: `${v.hot ? '🔥 ' : ''}${v.company}` }),
+      el('span', { className: 'week-meta', textContent: meta || '' }),
+    ]);
+    open.onclick = () => openDetail(v.id);
+    const main = el('div', { className: 'week-main' }, [open]);
+    const p = v.phones && v.phones[0];
+    if (p) main.append(el('a', { className: 'week-tel', href: `tel:${p.dial || p.digits}`, textContent: `📞 ${p.display || p.digits}` }));
+    return el('div', { className: 'week-row' }, [main, el('div', { className: 'week-actions' }, actions || [])]);
+  }
+  const numLine = (n) => `打 ${n.calls} 通、接通 ${n.reached}、約到見面 ${n.meetings}、拜訪 ${n.visits}、標有機會 ${n.chance}、送件 ${n.submitted}`;
+  const monthsAgo = (iso) => (iso ? Math.round(-dayDiff(iso) / 30) : null);
+
+  function renderWeekBar() {
+    const bar = $('#weekBar');
+    if (!bar) return;
+    bar.textContent = '';
+    if (!state.records.length) { bar.hidden = true; return; }
+    const today = todayISO();
+    const actual = dow(today);
+    const shown = weekPreview || (actual >= 1 && actual <= 5 ? actual : 5);
+    const day = WEEK_DAYS[shown];
+    const [monday, sunday] = weekOf(today, 0);
+    const [lastMon, lastSun] = weekOf(today, -1);
+    let open = true;
+    try { open = localStorage.getItem(WEEK_OPEN_KEY) !== '0'; } catch (e) { /* 無痕模式 */ }
+    bar.classList.toggle('is-closed', !open);
+
+    const toggle = el('button', { className: 'remind-toggle', type: 'button', title: open ? '收起' : '展開' }, [
+      el('strong', { textContent: `📆 週${WEEK_NUM[shown]} ${day.name}｜${day.motto}` }),
+      el('span', { className: 'remind-caret', textContent: open ? '▾' : '▸' }),
+    ]);
+    toggle.onclick = () => {
+      try { localStorage.setItem(WEEK_OPEN_KEY, open ? '0' : '1'); } catch (e) { /* 無痕模式 */ }
+      renderWeekBar();
+    };
+    const tabs = el('div', { className: 'week-tabs' });
+    [1, 2, 3, 4, 5].forEach((d) => {
+      const b = el('button', { className: `week-tab${d === shown ? ' is-on' : ''}${d === actual ? ' is-today' : ''}`, type: 'button', textContent: `${WEEK_NUM[d]} ${WEEK_DAYS[d].name.slice(0, 2)}`, title: WEEK_DAYS[d].motto });
+      b.onclick = () => { weekPreview = d === actual ? 0 : d; if (!open) { try { localStorage.setItem(WEEK_OPEN_KEY, '1'); } catch (e) { /* 無痕模式 */ } } renderWeekBar(); };
+      tabs.append(b);
+    });
+    bar.append(el('div', { className: 'remind-head' }, [toggle, tabs]));
+    bar.hidden = false;
+    if (!open) return;
+    const body = el('div', { className: 'week-body' });
+    if (weekPreview && weekPreview !== actual) body.append(el('p', { className: 'muted week-note', textContent: `（先看週${WEEK_NUM[shown]}的；今天是週${WEEK_NUM[actual]}）` }));
+    const hint = (t) => body.append(el('p', { className: 'week-hint', textContent: t }));
+    const title = (t) => body.append(el('h4', { className: 'week-title', textContent: t }));
+    const list = (rows) => { const box = el('div', { className: 'week-list' }); rows.forEach((x) => box.append(x)); body.append(box); return box; };
+    const goal = weekGoal();
+    const thisWeek = weekNumbers(monday, sunday);
+
+    if (shown === 1) {
+      const last = weekNumbers(lastMon, lastSun);
+      title(`上週（${dateLabel(lastMon)}～${dateLabel(lastSun)}）`);
+      hint(numLine(last));
+      // 本週目標：只設「約幾個新見面」，數字日就這一件事要訂死
+      const goalIn = el('input', { type: 'number', min: '0', max: '99', value: String(goal), className: 'week-goal' });
+      goalIn.onchange = () => { const n = Math.max(0, Math.round(Number(goalIn.value) || 0)); weekGoal(n); toast(`本週目標：約 ${n} 個新見面`); };
+      body.append(el('p', { className: 'week-goal-row' }, ['本週要約 ', goalIn, ` 個新見面（今天訂死）；目前約到 ${thisWeek.meetings} 個`]));
+      // 追單名單：有機會的、本週要聯絡的、逾期的；最熱的三家標 🔥
+      const cands = allViews().filter((v) => !v.blocked && v.chance !== 'no' && v.outcome !== 'new' && (v.chance === 'yes' || v.hot || inRange(v.nextDate, '0000-00-00', sunday)))
+        .map((v) => ({ v, s: (scorePick(v) || { score: -999 }).score }))
+        .sort((a, b) => Number(b.v.hot) - Number(a.v.hot) || b.s - a.s || a.v.company.localeCompare(b.v.company, 'zh-Hant'))
+        .slice(0, 10);
+      title(`本週追單名單（${hotViews().length}/${HOT_MAX} 家標了最熱）`);
+      if (!cands.length) hint('還沒有談過的客戶可以追：先從今天的新名單打起。');
+      list(cands.map(({ v }) => {
+        const hot = el('button', { className: `btn btn-tiny hot-btn${v.hot ? ' is-on' : ''}`, type: 'button', textContent: v.hot ? '🔥 最熱' : '標最熱', title: '本週最熱的三家：追單優先，卡片上會標 🔥' });
+        hot.onclick = () => toggleHot(v);
+        const bits = [v.chance === 'yes' ? '有機會' : '', v.nextDate ? `下次 ${dateLabel(v.nextDate)}` : '沒排下次', v.lastDate ? `上次 ${dateLabel(v.lastDate)}` : ''].filter(Boolean).join('　');
+        return weekRow(v, bits, [hot]);
+      }));
+    } else if (shown === 2) {
+      hint(`聯繫新的人，不談商品，只約時間；轉介紹、舊名單重啟、陌生開發都算。本週約到 ${thisWeek.meetings} 個見面／目標 ${goal}${actual === 2 ? `，今天約到 ${weekNumbers(today, today).meetings} 個` : ''}。`);
+      hint('週二不開發，週四、週五就沒東西跟。新名單在下面那條「今天的新名單」。');
+      const stale = allViews().filter((v) => !v.blocked && v.chance !== 'no' && v.outcome === 'contacted' && v.lastDate && -dayDiff(v.lastDate) >= 90 && v.dealingKind !== 'active')
+        .sort((a, b) => a.lastDate.localeCompare(b.lastDate)).slice(0, 6);
+      title(`舊名單重啟：談過但 3 個月以上沒聯絡的（${stale.length ? `先列 ${stale.length} 家` : '沒有'}）`);
+      list(stale.map((v) => weekRow(v, `上次 ${dateLabel(v.lastDate)}（${monthsAgo(v.lastDate)} 個月前）${v.chance === 'yes' ? '　有機會' : ''}`)));
+    } else if (shown === 3) {
+      const target = weekPreview && weekPreview !== actual ? addDays(monday, 2) : today;
+      // 只列真的約到見面的：最熱的、今天到期的那些是要打電話追，不是拜訪
+      const rows = meetingsBetween(target, target).map((x) => x.v);
+      title(`${target === today ? '今天' : dateLabel(target)}要去拜訪（${rows.length} 家，至少 2 家）`);
+      if (rows.length < 2) hint(rows.length ? '只排了一家：打幾通把第二家約進來，執行週一排好的名單。' : '還沒排拜訪：通話紀錄勾「約到見面」、日期填那天，這裡就會列出來。');
+      list(rows.map((v) => {
+        const prep = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '拜訪準備' });
+        prep.onclick = () => openVisitBrief(v.id);
+        const log = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '記拜訪' });
+        log.onclick = () => openDetail(v.id, { visit: true });
+        return weekRow(v, [v.district || v.city, v.addressActual].filter(Boolean).join('　'), [prep, log]);
+      }));
+      hint('見完 30 分鐘內寫會後摘要發給客戶（記拜訪裡有「複製會後摘要給客戶」）；沒成交就當場把下次跟進日期填好。');
+      const week = meetingsBetween(monday, sunday);
+      if (week.length) hint(`本週已約：${[1, 2, 3, 4, 5, 6, 0].map((d) => { const n = week.filter((x) => dow(x.date) === d).length; return n ? `週${WEEK_NUM[d]} ${n}` : ''; }).filter(Boolean).join('、')}`);
+    } else if (shown === 4) {
+      const olds = allViews().filter((v) => !v.blocked && (v.dealingKind === 'active' || (v.dealing && v.dealing.ended)))
+        .sort((a, b) => (a.lastDate || '').localeCompare(b.lastDate || '') || a.company.localeCompare(b.company, 'zh-Hant')).slice(0, 8);
+      hint('只問「最近怎麼樣」，聽，把變動記下來。轉介紹等給完服務再開口。老客戶是護城河。');
+      title(`老客戶（有跟中租往來、以前往來過），最久沒聯絡的在前${olds.length ? `，先列 ${olds.length} 家` : ''}`);
+      if (!olds.length) hint('名單上還沒有標到「有跟中租往來」的客戶（訪談內容寫到中租往來才認得出）。');
+      list(olds.map((v) => weekRow(v, `${v.dealingKind === 'active' ? '往來中' : '以前往來過'}　${v.lastDate ? `上次 ${dateLabel(v.lastDate)}（${monthsAgo(v.lastDate)} 個月前）` : '沒聯絡過'}`)));
+    } else {
+      const last = weekNumbers(lastMon, lastSun);
+      title(`本週（${dateLabel(monday)}～${dateLabel(sunday)}）對目標：約到見面 ${thisWeek.meetings}／${goal}${thisWeek.meetings >= goal ? ' ✅' : ` ❌ 差 ${goal - thisWeek.meetings}`}`);
+      hint(`本週：${numLine(thisWeek)}`);
+      hint(`上週：${numLine(last)}`);
+      hint('只分析，不解釋。');
+      // 未跟完的：本週排到今天為止、還沒處理的，移進下週
+      const nextMon = window.Holidays ? window.Holidays.nextWorkday(addDays(monday, 7)).iso : addDays(monday, 7);
+      const undone = allViews().filter((v) => !v.blocked && inRange(v.nextDate, monday, today) && !(v.lastDate && v.lastDate >= v.nextDate) && v.dueDoneOn !== today);
+      const move = el('button', { className: 'btn btn-tiny', type: 'button', textContent: `未跟完的 ${undone.length} 家移到 ${dateLabel(nextMon)}`, disabled: !undone.length, title: '本週排了還沒聯絡到的，全部改到下週一' });
+      move.onclick = async () => {
+        if (!await askConfirm(`把本週排了、還沒聯絡到的 ${undone.length} 家全部改到 ${dateLabel(nextMon)}（週${WEEK_NUM[dow(nextMon)]}）？`, { okText: '移到下週' })) return;
+        move.disabled = true; move.textContent = '移動中…';
+        for (const v of undone) await saveState(v.id, { nextDate: nextMon });
+        await reload(); render(); scheduleSync();
+        toast(`${undone.length} 家移到 ${dateLabel(nextMon)} 了`);
+      };
+      body.append(el('p', { className: 'week-goal-row' }, [move]));
+      // 下週三的拜訪今天就約好
+      const nextWed = addDays(monday, 9);
+      const wed = meetingsBetween(nextWed, nextWed);
+      const nextWeek = new Set(meetingsBetween(addDays(monday, 7), addDays(monday, 13)).map((x) => x.v.id));
+      const toBook = allViews().filter((v) => !v.blocked && (v.hot || v.chance === 'yes') && !nextWeek.has(v.id))
+        .map((v) => ({ v, s: (scorePick(v) || { score: -999 }).score })).sort((a, b) => Number(b.v.hot) - Number(a.v.hot) || b.s - a.s).slice(0, 5);
+      title(`下週三（${dateLabel(nextWed)}）的拜訪：已約 ${wed.length} 家${wed.length ? `（${wed.map((x) => x.v.company).join('、')}）` : ''}`);
+      if (toBook.length) { hint('今天就約好，先打這幾家：'); list(toBook.map(({ v }) => weekRow(v, [v.hot ? '本週最熱' : '有機會', v.nextDate ? `下次 ${dateLabel(v.nextDate)}` : ''].filter(Boolean).join('　')))); }
+    }
+    bar.append(body);
+  }
+
   function renderRemindBar() {
+    renderWeekBar();
     renderFeedBar();
     const bar = $('#remindBar');
     if (!bar) return;
@@ -800,6 +1003,8 @@
       // 客戶也生效，不能只對之後匯入的有效。使用者自己記的結果照樣優先。
       outcome: window.Normalize.normalizeOutcome((mine && mine.outcome) || (lastLog && lastLog.outcome) || window.Normalize.guessOutcome(base.notesRaw || '')),
       starred: !!(mine && mine.starred),
+      // 本週最熱的三家（「業務的一週」週一標的）：記的是哪一週標的，下週自動失效
+      hot: !!(mine && mine.hot && mine.hot === weekOf(todayISO(), 0)[0]),
       chance: (mine && mine.chance) || '',
       chanceAt: (mine && mine.chanceAt) || 0,
       edited: !!edits,
@@ -3546,6 +3751,7 @@
       outcomeBadge(r),
       r.chance === 'yes' ? el('span', { className: 'badge badge-chance-yes', textContent: '有機會' }) : '',
       r.chance === 'no' ? el('span', { className: 'badge badge-chance-no', textContent: '無機會' }) : '',
+      r.hot ? el('span', { className: 'badge badge-hot', textContent: '🔥 本週最熱', title: '週一標的本週最熱的三家，追單優先' }) : '',
       (r.scale || capitalScale(r)) === '微企範疇' ? el('span', { className: 'badge badge-micro', textContent: '微企範疇' }) : '',
       (r.scale || capitalScale(r)) === '大企部範疇' ? el('span', { className: 'badge badge-large', textContent: '大企部範疇' }) : '',
       r.regChange && r.regKinds[0] !== 'none' && r.regKinds[0] !== 'unchecked'
@@ -4242,6 +4448,13 @@
     outcomeSel.value = r.outcome === 'new' ? 'noanswer' : r.outcome;
     const nextInput = el('input', { type: 'date', value: r.nextDate || '' });
     /*
+     * 約到見面了：「業務的一週」裡週二只做一件事——約見面。勾了就記在這則紀錄上
+     * （meeting、meetingDate＝下次聯絡日），本週節奏那條會算「這週約到幾個」、
+     * 週三列「今天要去拜訪誰」。不勾就跟以前一模一樣。
+     */
+    const meet = el('input', { type: 'checkbox', className: 'meet-check' });
+    const meetLabel = el('label', { className: 'meet-label', title: '這通約到了見面：週三的拜訪名單會列這家，本週節奏會算進「約到見面」' }, [meet, document.createTextNode(' 約到見面')]);
+    /*
      * 打到一半的草稿保存在這台裝置（每家各一份）。
      *
      * 打字打到一半接到另一通、關掉視窗、按了提醒或連結讓詳細頁重畫，字就不見了。
@@ -4263,8 +4476,8 @@
       return logDrafts.get(r.id) || null;
     };
     const writeDraft = () => {
-      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, at: Date.now() };
-      const keep = d.text.trim() || d.nextDate !== (r.nextDate || '');
+      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, meet: meet.checked, at: Date.now() };
+      const keep = d.text.trim() || d.nextDate !== (r.nextDate || '') || d.meet;
       if (keep) logDrafts.set(r.id, d); else logDrafts.delete(r.id);
       try {
         if (keep) localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
@@ -4280,10 +4493,11 @@
     // 存檔失敗的原因要留在畫面上，不能只靠兩秒就消失的 toast
     const saveErr = el('p', { className: 'save-err', hidden: true });
     const draft = readDraft();
-    if (draft && (draft.text || draft.nextDate)) {
+    if (draft && (draft.text || draft.nextDate || draft.meet)) {
       memo.value = draft.text || '';
       if (draft.outcome) outcomeSel.value = draft.outcome;
       if (draft.nextDate) nextInput.value = draft.nextDate;
+      meet.checked = !!draft.meet;
       draftNote.hidden = !memo.value.trim();
       const discard = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '丟掉草稿' });
       discard.onclick = () => { memo.value = ''; nextInput.value = r.nextDate || ''; nextInput.dispatchEvent(new Event('change')); clearDraft(); draftNote.hidden = true; };
@@ -4292,6 +4506,7 @@
     memo.addEventListener('input', writeDraft);
     outcomeSel.addEventListener('change', writeDraft);
     nextInput.addEventListener('change', writeDraft);
+    meet.addEventListener('change', () => { if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted'; writeDraft(); });
     const quick = el('div', { className: 'card-actions' });
     [['今天', 0], ['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1'], ['三個月後', 'm3']].forEach(([label, days]) => {
       const b = el('button', { className: 'btn btn-tiny', type: 'button', textContent: label });
@@ -4374,6 +4589,8 @@
         // 只寫這一家：同組其他家靠訪談互通與日期、狀態連動看得到同一通電話，不用各寫一則
         await window.Store.addLog({
           recordId: r.id, date: today, text, outcome: outcomeSel.value, createdAt,
+          // 約到見面：記在這則紀錄上，本週節奏算「約到幾個」、週三列拜訪名單用
+          ...(meet.checked ? { meeting: true, meetingDate: picked || '' } : {}),
         });
         state.logs = await window.Store.allLogs();
         if (!state.logs.some((l) => l.recordId === r.id && l.createdAt === createdAt)) {
@@ -4404,14 +4621,14 @@
         ? `已儲存${extra}，並依內容把下次聯絡日設為 ${dateLabel(auto.iso)}`
           + (auto.movedFrom ? `（${dateLabel(auto.movedFrom)} 是${auto.reason}，順延了）` : '')
         : '';
-      toast(blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`);
+      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + (meet.checked ? (picked ? `，約到 ${dateLabel(picked)} 見面 🎯` : '，約到見面了（記得把日期填在下次聯絡）') : ''));
       render();
       openDetail(r.id);
       scheduleSync();
     };
     form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
-      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), save,
+      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, save,
     ]));
     form.append(quick);
     if (members.length) {
@@ -4762,6 +4979,25 @@
       openDetail(r.id);
       scheduleSync();
     };
+    /*
+     * 會後摘要：「見完 30 分鐘內寫會後摘要發客戶」（業務的一週・週三）。
+     * 照表單現在填的內容組一段可以直接貼到 LINE 的文字：見到誰、談了什麼、資金需求、下一步、哪天再聯絡。
+     * 不另外存，拜訪紀錄本身就是底稿；存紀錄前後都能按。
+     */
+    const summaryBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製會後摘要給客戶', title: '照上面填的內容組一段文字，貼到 LINE 給客戶' });
+    summaryBtn.onclick = async () => {
+      const whoText = who.value.trim();
+      const memoText = memo.value.trim();
+      if (!memoText && !needs.size && !next) { toast('先填談了什麼、資金需求或下一步，才有東西可以摘要'); return; }
+      const lines = [`${whoText || r.company}${whoText ? ' ' : ''}您好，謝謝今天撥空。`];
+      if (memoText) lines.push(`今天談到：${memoText}`);
+      if (needs.size) lines.push(`資金需求：${NEED_OPTIONS.filter((n) => needs.has(n)).join('、')}`);
+      if (next && next !== '先不追') lines.push(`下一步：${next}${nextInput.value ? `，${dateLabel(nextInput.value)} 再跟您聯繫` : ''}`);
+      else if (nextInput.value) lines.push(`${dateLabel(nextInput.value)} 再跟您聯繫`);
+      lines.push('有任何問題隨時找我。');
+      const ok = await copyText(lines.join('\n'));
+      toast(ok ? '會後摘要已複製，貼到 LINE 給客戶' : '這個瀏覽器不讓網頁複製，請長按內容手動複製');
+    };
     const field = (label, control) => el('div', { className: 'visit-field' }, [el('span', { className: 'muted', textContent: label }), control]);
     form.append(
       el('div', { className: 'row' }, [
@@ -4774,7 +5010,7 @@
       field('有沒有機會', chanceBox),
       saveErr,
       el('div', { className: 'row' }, [
-        el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), save,
+        el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), save, summaryBtn,
       ]),
       quick,
     );
@@ -5656,7 +5892,9 @@ export default {
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
-    'new-quota', 'daily-feed-on', 'daily-feed-auto']);
+    'new-quota', 'daily-feed-on', 'daily-feed-auto',
+    // 本週要約幾個新見面：週一在電腦上設的，手機打開要看到同一個數字
+    'week-goal']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
   const registryAutoOn = () => registryPref('registry-auto') !== '0';
   const registryPref = (key, value) => {
