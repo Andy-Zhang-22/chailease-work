@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261001-228">
+<link rel="stylesheet" href="assets/css/app.css?v=20261001-229">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261001-228"></script>
+<script src="assets/js/lock.js?v=20261001-229"></script>
 </head>
 <body data-theme="auto">
 
@@ -75,6 +75,7 @@
   <button class="tab" data-tab="listed">上市櫃公司 <span class="pill" id="countListed"></span></button>
   <button class="tab" data-tab="biz">商行／企業社 <span class="pill" id="countBiz"></span></button>
   <button class="tab" data-tab="trade">出進口廠商 <span class="pill" id="countTrade"></span></button>
+  <button class="tab" data-tab="nhi">剛開始請人 <span class="pill" id="countNhi"></span></button>
   <button class="tab" data-tab="stats">統計</button>
   <button class="tab" data-tab="rules">規則</button>
   <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
@@ -183,6 +184,8 @@
     <div id="paneBiz" class="leads biz" hidden></div>
     <!-- 出進口廠商：貿易署的出進口廠商登記（有電話），畫面由 trade.js 長出來 -->
     <div id="paneTrade" class="leads trade" hidden></div>
+    <!-- 剛開始請人：健保署的新成立投保單位（剛開始幫員工投保），畫面由 nhi.js 長出來 -->
+    <div id="paneNhi" class="leads nhi" hidden></div>
   </section>
 </main>
 
@@ -299,22 +302,23 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261001-228"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261001-228"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261001-229"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261001-229"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261001-228"></script>
-<script src="assets/js/normalize.js?v=20261001-228"></script>
-<script src="assets/js/holidays.js?v=20261001-228"></script>
-<script src="assets/js/registry.js?v=20261001-228"></script>
-<script src="assets/js/ocr.js?v=20261001-228"></script>
-<script src="assets/js/rules.js?v=20261001-228"></script>
-<script src="assets/js/store.js?v=20261001-228"></script>
-<script src="assets/js/sync.js?v=20261001-228"></script>
-<script src="assets/js/leads.js?v=20261001-228"></script>
-<script src="assets/js/chattel.js?v=20261001-228"></script>
-<script src="assets/js/listed.js?v=20261001-228"></script>
-<script src="assets/js/biz.js?v=20261001-228"></script>
-<script src="assets/js/trade.js?v=20261001-228"></script>
-<script src="assets/js/app.js?v=20261001-228"></script>
+<script src="assets/js/pdf-table.js?v=20261001-229"></script>
+<script src="assets/js/normalize.js?v=20261001-229"></script>
+<script src="assets/js/holidays.js?v=20261001-229"></script>
+<script src="assets/js/registry.js?v=20261001-229"></script>
+<script src="assets/js/ocr.js?v=20261001-229"></script>
+<script src="assets/js/rules.js?v=20261001-229"></script>
+<script src="assets/js/store.js?v=20261001-229"></script>
+<script src="assets/js/sync.js?v=20261001-229"></script>
+<script src="assets/js/leads.js?v=20261001-229"></script>
+<script src="assets/js/chattel.js?v=20261001-229"></script>
+<script src="assets/js/listed.js?v=20261001-229"></script>
+<script src="assets/js/biz.js?v=20261001-229"></script>
+<script src="assets/js/trade.js?v=20261001-229"></script>
+<script src="assets/js/nhi.js?v=20261001-229"></script>
+<script src="assets/js/app.js?v=20261001-229"></script>
 </body>
 </html>
