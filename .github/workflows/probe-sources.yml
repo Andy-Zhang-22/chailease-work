@@ -1,0 +1,14 @@
+name: 探路：新名單來源（一次探幾個）
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/probe-sources.mjs 2>&1 | tee probe.txt
+      - run: |
+          { echo '```'; cat probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
