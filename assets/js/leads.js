@@ -352,6 +352,32 @@
   /* ---------------- 畫面 ---------------- */
 
   const wan = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(n % 1e8 ? 1 : 0)} 億` : `${Math.round(n / 1e4).toLocaleString()} 萬`);
+
+  /*
+   * 分頁上就先找電話、填電話（使用者：「我會複製分頁內名單的公司名，去看一下他是做什麼的，順便找他的電話，
+   * 但我把它加入到重點電推表中還要再找他出來才能新增電話」）：
+   * 名稱旁一顆複製的點；卡片上一排 Google／地圖／104／1111；找到的電話先貼在卡片上的框，按「加入客戶名單」就一起帶進去；
+   * 單張加入後直接打開那一筆。貿易署電話表對得到的不用填（會自動填），框就不出現。
+   */
+  const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  function phoneBox(r, key, hasAuto) {
+    if (hasAuto) return '';
+    const stop = (e) => e.stopPropagation();
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
+    input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
+    return el('div', { className: 'card-actions phone-search', onclick: stop }, [
+      el('span', { className: 'muted', textContent: '找電話：' }),
+      ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
+      input,
+    ]);
+  }
+  const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
+  /** 單張加入之後直接打開那一筆（整批不開） */
+  function openJustAdded(fileName, single) {
+    if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
+    const v = global.customerViews().find((x) => x.source === fileName);
+    if (v) global.openCustomer(v.id);
+  }
   function card(r, c) {
     const mine = c ? mineOf(r, c.cm) : null;
     const mineBadge = !mine ? '' : declined(mine)
@@ -363,7 +389,7 @@
           : el('span', { className: 'badge', textContent: r.reason || '變更' });
     const name = el('span', { className: 'card-name' }, [r['統一編號']
       ? el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r['統一編號'])}`, target: '_blank', rel: 'noopener', textContent: r['公司名稱'] })
-      : document.createTextNode(r['公司名稱'])]);
+      : document.createTextNode(r['公司名稱']), copyName(r['公司名稱'] || '')]);
     const inds = r.classes.filter((c) => IND[c]).slice(0, 2).map((c) => el('span', { className: 'badge badge-ind', textContent: IND[c] }));
     const items = (r['營業項目'] || '').split('；').filter(Boolean);
     const all = $('#leads-period').value === 'all';
@@ -389,6 +415,7 @@
         el('span', { textContent: `#${r['統一編號']}` }),
       ]),
       items.length ? el('p', { className: 'leads-items', textContent: `${items.slice(0, 4).join('　')}${items.length > 4 ? `　…共 ${items.length} 項` : ''}` }) : '',
+      mine ? '' : (r.__name = r['公司名稱'], r.__addr = r['公司所在地'], phoneBox(r, keyOf(r), hasPhone(r))),
       el('div', { className: 'card-actions' }, actions),
     ]);
   }
@@ -498,11 +525,14 @@
     const iTax = head.indexOf('統編');
     const iName = head.indexOf('公司名稱');
     const iAdded = head.indexOf('名單新增日期');
+    const iPhone = head.indexOf('電話');
     const t = new Date(); const addedToday = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     rows.slice(1).forEach((row) => {
       const d = dateOf.get(row[iTax]) || dateOf.get(row[iName]) || '';
       if (iNext >= 0 && d) row[iNext] = d;
       if (iAdded >= 0) row[iAdded] = addedToday;   // 名單新增日期＝加進名單這天，「今天新增」才篩得到
+      const srcKey = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
+      if (iPhone >= 0 && srcKey && typed.get(keyOf(srcKey))) row[iPhone] = typed.get(keyOf(srcKey));   // 卡片上貼的電話一起帶
       // 從哪一期、什麼案由來的寫進去，之後在名單上看得出這家是怎麼來的
       const src = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
       if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), src._why ? `每日新名單，${src._why}` : '', row[iNote] || ''].filter(Boolean).join('\n');
@@ -527,6 +557,8 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
     const file = new File([toStandardCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    fresh.forEach((r) => typed.delete(keyOf(r)));
+    openJustAdded(file.name, fresh.length === 1);
     // 匯入時靠名稱比對到已在名單的會被略過，不能再說「N 家排在…」（使用者：昨天加的「昨天新增」看不到——早就在名單上）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
     const lost = fresh.length - got;

@@ -48,8 +48,18 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.click('#biz-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選');
  // 頂端搜尋欄跟著分頁
  await pg.fill('#search','裝潢'); await pg.waitForTimeout(400); n=await names(); chk(n.join('|')==='協玖裝潢企業社', `頂端搜尋欄搜這一頁：${n.join('|')}`); await pg.fill('#search',''); await pg.waitForTimeout(400);
+ // 名稱旁有複製的點；卡片上有找電話那排＋貼電話的框（使用者：在分頁找好電話，加入時要一起帶、加完直接開那一筆）
+ const jx=pg.locator('#biz-cards .card:has-text("協玖")');
+ chk(await jx.locator('.card-name .copy-dot').count()===1, '名稱旁一顆複製的點');
+ chk(await jx.locator('.phone-search a').count()===4 && await jx.locator('.phone-search input').count()===1, `卡片上有找電話連結與貼電話的框：${await jx.locator('.phone-search a').count()}`);
+ await jx.locator('.phone-search input').fill('02-2277-8899'); await pg.waitForTimeout(100);
+ await pg.locator('#biz-fBranch .chip').first().click(); await pg.waitForTimeout(250); await pg.locator('#biz-fBranch .chip').first().click(); await pg.waitForTimeout(250);   // 重畫
+ chk((await pg.locator('#biz-cards .card:has-text("協玖") .phone-search input').inputValue())==='02-2277-8899', '重畫之後貼的電話還在');
  // 單家加入
  await pg.locator('#biz-cards .card:has-text("協玖")').locator('button.biz-add-one').click(); await pg.waitForTimeout(1500);
+ chk(await pg.isVisible('#drawer') && /協玖/.test(await pg.textContent('#drawerBody h2')), '單家加入後直接打開那一筆');
+ chk((await pg.evaluate(()=>window.customerViews().find(v=>v.company==='協玖裝潢企業社').phoneRaw))==='02-2277-8899', '卡片上貼的電話一起進名單');
+ await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  const recs=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^商行企業社/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,owner:r.owner,industry:r.industry,capital:r.capital,founded:r.founded,nextDate:r.nextDate,notes:r.notesRaw,address:r.address,addedDate:r.addedDate})));
  chk(recs.length===1 && recs[0].company==='協玖裝潢企業社' && recs[0].taxId==='91712817' && recs[0].capital==='1,000' && recs[0].founded==='2022' && recs[0].industry==='室內裝潢工程', `加進去的資料：${JSON.stringify(recs[0])}`);
  chk(recs[0] && /商行／企業社（稅籍登記）：獨資/.test(recs[0].notes) && /只有稅籍登記/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06' && recs[0].addedDate===TODAY, `備註、排明天、名單新增日期：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
