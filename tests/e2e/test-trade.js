@@ -46,7 +46,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  // 把預設清掉看全部
  const clearAll=async()=>{ await pg.fill('#trade-capMin',''); await pg.fill('#trade-capMax',''); await pg.waitForTimeout(200); for (const sel of ['#trade-fPhone','#trade-fBranch']) { const on=pg.locator(`${sel} .chip[aria-pressed="true"]`); if (await on.count()) { await on.first().click(); await pg.waitForTimeout(200); } } };
  await clearAll(); n=await names();
- chk(n.join('|')==='新莊好商行|晨光貿易有限公司|遠帆國際開發有限公司', `清掉預設後最新登記在前：${n.join('|')}`);
+ chk(n.join('|')==='晨光貿易有限公司|遠帆國際開發有限公司|新莊好商行', `清掉預設後照資本額高到低：${n.join('|')}`);
  const first=pg.locator('#trade-cards .card:has-text("晨光")');
  const top=(await first.locator('.card-top').textContent()).replace(/\s+/g,' ');
  chk(/新登記/.test(top) && /進口＋出口/.test(top) && /新莊分公司/.test(top), `卡片標籤：${top}`);
@@ -56,7 +56,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  chk(await first.locator('a[href^="tel:"]').count()===1, '電話可以直接撥');
  chk(/已在名單/.test(await pg.locator('#trade-cards .card:has-text("遠帆")').locator('.card-top').textContent()), '已在名單的有標');
  const clickChip=async(host,label)=>{ await pg.locator(`${host} .chip:has-text("${label}")`).first().click(); await pg.waitForTimeout(250); };
- await clickChip('#trade-fWhen','3 個月內'); n=await names(); chk(n.join('|')==='新莊好商行|晨光貿易有限公司', `篩 3 個月內：${n.join('|')}`);
+ await clickChip('#trade-fWhen','3 個月內'); n=await names(); chk(n.join('|')==='晨光貿易有限公司|新莊好商行', `篩 3 個月內：${n.join('|')}`);
  await clickChip('#trade-fAge','5～10 年'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩成立 5～10 年：${n.join('|')}`); await clickChip('#trade-fAge','5～10 年');
  await clickChip('#trade-fPhone','有電話'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩有電話：${n.join('|')}`);
  await pg.fill('#trade-capMin','500'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `資本額 500 萬以上：${n.join('|')}`);

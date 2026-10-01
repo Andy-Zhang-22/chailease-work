@@ -209,6 +209,32 @@
 
   /* ---------------- 畫面 ---------------- */
 
+  /*
+   * 分頁上就先找電話、填電話（使用者：「我會複製分頁內名單的公司名，去看一下他是做什麼的，順便找他的電話，
+   * 但我把它加入到重點電推表中還要再找他出來才能新增電話」）：
+   * 名稱旁一顆複製的點；卡片上一排 Google／地圖／104／1111；找到的電話先貼在卡片上的框，按「加入客戶名單」就一起帶進去；
+   * 單張加入後直接打開那一筆。貿易署電話表對得到的不用填（會自動填），框就不出現。
+   */
+  const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  function phoneBox(r, key, hasAuto) {
+    if (hasAuto) return '';
+    const stop = (e) => e.stopPropagation();
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
+    input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
+    return el('div', { className: 'card-actions phone-search', onclick: stop }, [
+      el('span', { className: 'muted', textContent: '找電話：' }),
+      ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
+      input,
+    ]);
+  }
+  const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
+  /** 單張加入之後直接打開那一筆（整批不開） */
+  function openJustAdded(fileName, single) {
+    if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
+    const v = global.customerViews().find((x) => x.source === fileName);
+    if (v) global.openCustomer(v.id);
+  }
+
   /* 商業（獨資／合夥）在 findbiz 的頁面是 /fts/business/統編/序號，序號（banKey）稅籍與清冊都沒有，湊不出直達連結；
    * /fts/company/統編 是公司用的，商業開不到（使用者回報）。改連查詢結果頁，帶統編當條件（欄位照 findbiz 查詢表單），
    * 點結果那一列就是商業登記頁。findbiz 有 Cloudflare，開發環境與 Actions 都連不到，這條是使用者實際點過確認的。 */
@@ -218,7 +244,7 @@
     const mine = mineOf(r, c.cm);
     const isHidden = hidden.has(r.key);
     const top = el('div', { className: 'card-top' }, [
-      el('span', { className: 'card-name' }, [r.reg ? findbiz(r.taxId, r.name) : el('span', { textContent: r.name, title: '只有稅籍登記，商工登記查不到' })]),
+      el('span', { className: 'card-name' }, [r.reg ? findbiz(r.taxId, r.name) : el('span', { textContent: r.name, title: '只有稅籍登記，商工登記查不到' }), copyName(r.name)]),
       r.org ? el('span', { className: 'badge badge-new', textContent: r.org }) : '',
       r.monthly ? (r.kind === '設立'
         ? el('span', { className: 'badge badge-up', textContent: `${periodLabel(r.period)} 新設立` })
@@ -245,7 +271,8 @@
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny biz-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
-    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, actions]);
+    r.__name = r.name; r.__addr = r.address;
+    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, mine ? '' : phoneBox(r, r.key, hasPhone(r)), actions]);
   }
 
   function chips(host, options, set) {
@@ -381,7 +408,7 @@
   }
   const thousands = (yuan) => (yuan ? Math.round(yuan / 1000).toLocaleString() : '');
   function toStandardCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.setup ? String(r.setup.y) : '', thousands(r.capital), '', r.owner || '', '', r.inds[0] || '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.setup ? String(r.setup.y) : '', thousands(r.capital), typed.get(r.key) || '', r.owner || '', '', r.inds[0] || '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -395,6 +422,8 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
     const file = new File([toStandardCsv(fresh, dates)], `商行企業社-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    fresh.forEach((r) => typed.delete(r.key));
+    openJustAdded(file.name, fresh.length === 1);
     // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），不能再說「N 家排在…」
     // （使用者：昨天加進去的，「昨天新增」卻看不到——其實是早就在名單上，加的那次被略過了）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;

@@ -177,6 +177,32 @@
 
   /* ---------------- 畫面 ---------------- */
 
+  /*
+   * 分頁上就先找電話、填電話（使用者：「我會複製分頁內名單的公司名，去看一下他是做什麼的，順便找他的電話，
+   * 但我把它加入到重點電推表中還要再找他出來才能新增電話」）：
+   * 名稱旁一顆複製的點；卡片上一排 Google／地圖／104／1111；找到的電話先貼在卡片上的框，按「加入客戶名單」就一起帶進去；
+   * 單張加入後直接打開那一筆。貿易署電話表對得到的不用填（會自動填），框就不出現。
+   */
+  const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  function phoneBox(r, key, hasAuto) {
+    if (hasAuto) return '';
+    const stop = (e) => e.stopPropagation();
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
+    input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
+    return el('div', { className: 'card-actions phone-search', onclick: stop }, [
+      el('span', { className: 'muted', textContent: '找電話：' }),
+      ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
+      input,
+    ]);
+  }
+  const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
+  /** 單張加入之後直接打開那一筆（整批不開） */
+  function openJustAdded(fileName, single) {
+    if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
+    const v = global.customerViews().find((x) => x.source === fileName);
+    if (v) global.openCustomer(v.id);
+  }
+
   const findbiz = (taxId, text) => el('a', { href: `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${encodeURIComponent(taxId)}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`, target: '_blank', rel: 'noopener', textContent: text, title: '商工登記公示資料：用統編查' });
   const whenLabel = (r) => (r.firstMonths == null ? '' : r.firstMonths < 1 ? '這個月' : r.firstMonths < 12 ? `${r.firstMonths} 個月前` : `${Math.floor(r.firstMonths / 12)} 年${r.firstMonths % 12 ? `${r.firstMonths % 12} 個月` : ''}前`);
 
@@ -184,7 +210,7 @@
     const mine = mineOf(r, c.cm);
     const isHidden = hidden.has(r.key);
     const top = el('div', { className: 'card-top' }, [
-      el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name)]),
+      el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name), copyName(r.name)]),
       r.firstMonths != null && r.firstMonths < 6 ? el('span', { className: 'badge badge-up', textContent: '新登記', title: '原始登記在 6 個月內：剛開始做進出口' }) : '',
       el('span', { className: 'badge badge-ind', textContent: QUAL.find(([k]) => k === qualOf(r))[1] }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
@@ -208,7 +234,8 @@
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny trade-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
-    return el('article', { className: `card leads-card trade-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, actions]);
+    r.__name = r.name; r.__addr = r.address;
+    return el('article', { className: `card leads-card trade-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, mine ? '' : phoneBox(r, r.key, !!r.tel), actions]);
   }
 
   function chips(host, options, set) {
@@ -271,7 +298,7 @@
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.founded ? String(r.founded.y) : '', thousands(r.capital), r.tel, r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.founded ? String(r.founded.y) : '', thousands(r.capital), r.tel || typed.get(r.key) || '', r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const fromDate = () => { const v = $('#trade-from') && $('#trade-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
@@ -284,6 +311,8 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
     const file = new File([toStandardCsv(fresh, dates)], `出進口廠商-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    fresh.forEach((r) => typed.delete(r.key));
+    openJustAdded(file.name, fresh.length === 1);
     // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），不能再說「N 家排在…」
     // （使用者：昨天加進去的，「昨天新增」卻看不到——其實是早就在名單上，加的那次被略過了）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
@@ -354,8 +383,8 @@
         el('input', { id: 'trade-capMax', type: 'number', min: '0', step: '10', placeholder: '上限' })])),
       group('關鍵字', el('input', { id: 'trade-q', type: 'search', placeholder: '名稱、英文名、統編、代表人、地址、電話', autocomplete: 'off' }), 'trade-q'),
       group('排序', el('select', { id: 'trade-sort' }, [
+        el('option', { value: 'capital', textContent: '資本額（高到低）' }),   // 使用者：找名單的分頁預設都照資本額高到低
         el('option', { value: 'first', textContent: '最新登記在前' }),
-        el('option', { value: 'capital', textContent: '資本額（高到低）' }),
         el('option', { value: 'issued', textContent: '最近異動在前' }),
         el('option', { value: 'name', textContent: '名稱' })]), 'trade-sort'),
       el('div', { className: 'leads-row' }, [
@@ -431,7 +460,7 @@
       const defaults = () => {
         Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
         f.phone.add('Y'); f.branches.add(myBranch());
-        $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'first'; showHidden = false;
+        $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'capital'; showHidden = false;
       };
       $('#trade-reset').onclick = () => { defaults(); rerender(); };
       $('#trade-reset').textContent = '回到預設篩選';

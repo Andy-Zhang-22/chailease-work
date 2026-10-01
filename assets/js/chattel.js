@@ -234,6 +234,32 @@
   /* ---------------- 畫面 ---------------- */
 
   const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
+
+  /*
+   * 分頁上就先找電話、填電話（使用者：「我會複製分頁內名單的公司名，去看一下他是做什麼的，順便找他的電話，
+   * 但我把它加入到重點電推表中還要再找他出來才能新增電話」）：
+   * 名稱旁一顆複製的點；卡片上一排 Google／地圖／104／1111；找到的電話先貼在卡片上的框，按「加入客戶名單」就一起帶進去；
+   * 單張加入後直接打開那一筆。貿易署電話表對得到的不用填（會自動填），框就不出現。
+   */
+  const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  function phoneBox(r, key, hasAuto) {
+    if (hasAuto) return '';
+    const stop = (e) => e.stopPropagation();
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
+    input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
+    return el('div', { className: 'card-actions phone-search', onclick: stop }, [
+      el('span', { className: 'muted', textContent: '找電話：' }),
+      ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
+      input,
+    ]);
+  }
+  const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
+  /** 單張加入之後直接打開那一筆（整批不開） */
+  function openJustAdded(fileName, single) {
+    if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
+    const v = global.customerViews().find((x) => x.source === fileName);
+    if (v) global.openCustomer(v.id);
+  }
   function card(r, c) {
     const mine = mineOf(r, c.cm);
     const dueBadge = r.days == null ? el('span', { className: 'badge', textContent: '契約沒有迄日' })
@@ -247,7 +273,7 @@
       : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）' });
     const name = el('span', { className: 'card-name' }, [r.cust.id
       ? el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r.cust.id)}`, target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料' })
-      : document.createTextNode(r.cust.name || '（沒有名稱）')]);
+      : document.createTextNode(r.cust.name || '（沒有名稱）'), copyName(r.cust.name || '')]);
     const isHidden = hidden.has(r.key);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
@@ -268,6 +294,7 @@
         r.no ? el('span', { textContent: `🧾 登記 ${r.no}` }) : '',
         r.cust.id ? el('span', { textContent: `#${r.cust.id}` }) : '',
       ]),
+      mine ? '' : (r.__name = r.cust.name, r.__addr = r.addr, phoneBox(r, r.key, hasPhone(r))),
       el('div', { className: 'card-actions' }, actions),
     ]);
   }
@@ -340,7 +367,7 @@
 
   /** 標準欄位的 CSV：主站匯入認得「公司名稱、統編、地址、訪談內容、下次聯絡日」，不會當成登記清冊再問一次條件。 */
   function toCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.cust.name, r.cust.id, '', r.founded ? String(r.founded.y) : '', '', typed.get(r.key) || '', '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.addr, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `\uFEFF${lines.join('\n')}\n`;
   }
   const toStandardCsv = toCsv;
@@ -369,6 +396,8 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(wants) : wants;
     const file = new File([toCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    fresh.forEach((r) => typed.delete(r.key));
+    openJustAdded(file.name, fresh.length === 1);
     // 匯入時靠名稱比對到已在名單的會被略過，不能再說「N 家排在…」（使用者：昨天加的「昨天新增」看不到——早就在名單上）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
     const lost = fresh.length - got;
@@ -452,8 +481,8 @@
       el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'chattel-hideFin', checked: true }), ' 藏起客戶那一方也是租賃／銀行的案件（同業之間的融資，不是要打的對象）'])]),
       group('關鍵字', el('input', { id: 'chattel-q', type: 'search', placeholder: '公司、統編、金主、地址、登記編號', autocomplete: 'off' }), 'chattel-q'),
       group('排序', el('select', { id: 'chattel-sort' }, [
+        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),   // 使用者：找名單的分頁預設都照金額高到低（動保沒有資本額，用擔保金額）
         el('option', { value: 'end', textContent: '到期日（近的在前）' }),
-        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),
         el('option', { value: 'company', textContent: '公司名稱' })]), 'chattel-sort'),
       el('div', { className: 'leads-row' }, [
         el('button', { className: 'btn btn-tiny', id: 'chattel-reset', type: 'button', textContent: '清除篩選' }),
@@ -553,7 +582,7 @@
     $('#chattel-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#chattel-reset').onclick = () => {
       f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.q = '';
-      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'end';
+      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'amount';
       showHidden = false;
       rerender();
     };

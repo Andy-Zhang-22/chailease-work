@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-223';
+  const APP_VERSION = '20261001-225';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1389,10 +1389,22 @@
    * 使用者：「新增的名單有些撈不到電話，我都需要透過 google 去他的官網或求職平台上找電話」——
    * 清冊、動保、稅籍本來就沒電話，貿易署電話表對不到的只能人找；這裡省掉打字搜尋跟開編輯視窗那幾步。
    */
-  function phoneSearchRow(r, opts = {}) {
-    const q = encodeURIComponent(r.company || '');
+  /** 找電話的那幾顆連結（分頁的卡片也用：global.phoneSearchLinks） */
+  function phoneSearchLinks(company, address) {
+    const q = encodeURIComponent(company || '');
     const stop = (e) => e.stopPropagation();
     const link = (text, href, title) => el('a', { className: 'btn btn-tiny', href, target: '_blank', rel: 'noopener', textContent: text, title, onclick: stop });
+    return [
+      link('Google', `https://www.google.com/search?q=${q}+%E9%9B%BB%E8%A9%B1`, '搜「公司名 電話」'),
+      link('地圖', `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${company || ''} ${address || ''}`.trim())}`, 'Google 地圖'),
+      link('104', `https://www.google.com/search?q=site%3A104.com.tw+${q}`, '104 上的公司頁'),
+      link('1111', `https://www.google.com/search?q=site%3A1111.com.tw+${q}`, '1111 上的公司頁'),
+    ];
+  }
+  window.phoneSearchLinks = phoneSearchLinks;
+  window.copyDot = copyDot;   // 分頁的卡片也要一顆複製公司名稱的點
+  function phoneSearchRow(r, opts = {}) {
+    const stop = (e) => e.stopPropagation();
     const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到了貼這裡，Enter 存', autocomplete: 'off', onclick: stop });
     input.onkeydown = async (e) => {
       if (e.key !== 'Enter') return;
@@ -1406,10 +1418,7 @@
     };
     return el('div', { className: 'card-actions phone-search', onclick: stop }, [
       el('span', { className: 'muted', textContent: '找電話：' }),
-      link('Google', `https://www.google.com/search?q=${q}+%E9%9B%BB%E8%A9%B1`, '搜「公司名 電話」'),
-      link('地圖', `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.company || ''} ${r.address || ''}`.trim())}`, 'Google 地圖'),
-      link('104', `https://www.google.com/search?q=site%3A104.com.tw+${q}`, '104 上的公司頁'),
-      link('1111', `https://www.google.com/search?q=site%3A1111.com.tw+${q}`, '1111 上的公司頁'),
+      ...phoneSearchLinks(r.company, r.address),
       input,
     ]);
   }
