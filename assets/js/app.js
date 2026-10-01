@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20260930-217';
+  const APP_VERSION = '20261001-218';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -97,6 +97,14 @@
     d.setDate(d.getDate() + n);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
+  /** 幾個月後的同一天（10/1 → 1/1）；那個月沒有這一天就取月底（8/31 → 9/30）。使用者：「按三個月後的聯絡按鈕不會顯示正確日期」——以前是 +90 天 */
+  const addMonths = (iso, n) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    const last = new Date(y, m - 1 + n + 1, 0).getDate();
+    const t = new Date(y, m - 1 + n, Math.min(d, last));
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  };
+  window.addMonths = addMonths;   // 測試用
   /*
    * 日期一律顯示西元 yyyy/mm/dd。
    *
@@ -4168,10 +4176,11 @@
     outcomeSel.addEventListener('change', writeDraft);
     nextInput.addEventListener('change', writeDraft);
     const quick = el('div', { className: 'card-actions' });
-    [['今天', 0], ['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 30], ['三個月後', 90]].forEach(([label, days]) => {
+    [['今天', 0], ['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1'], ['三個月後', 'm3']].forEach(([label, days]) => {
       const b = el('button', { className: 'btn btn-tiny', type: 'button', textContent: label });
       b.onclick = () => {
-        const want = addDays(todayISO(), days);
+        // 「一個月後」是下個月的同一天，不是 30 天（10/1 按三個月後要是 1/1，不是 12/30）
+        const want = typeof days === 'string' ? addMonths(todayISO(), Number(days.slice(1))) : addDays(todayISO(), days);
         // 「今天」不順延：人是在今天按的，今天放假也是他自己知道
         const got = days && window.Holidays ? window.Holidays.nextWorkday(want) : { iso: want, moved: false };
         nextInput.value = got.iso;
@@ -4549,10 +4558,10 @@
     nextInput.addEventListener('change', writeDraft);
 
     const quick = el('div', { className: 'card-actions' });
-    [['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 30]].forEach(([label, days]) => {
+    [['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1']].forEach(([label, days]) => {
       const b = el('button', { className: 'btn btn-tiny', type: 'button', textContent: label });
       b.onclick = () => {
-        const want = addDays(todayISO(), days);
+        const want = typeof days === 'string' ? addMonths(todayISO(), Number(days.slice(1))) : addDays(todayISO(), days);
         const got = window.Holidays ? window.Holidays.nextWorkday(want) : { iso: want, moved: false };
         nextInput.value = got.iso;
         nextInput.dispatchEvent(new Event('change'));

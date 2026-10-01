@@ -41,6 +41,13 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  const toast=await pg.textContent('#toast');
  chk(/中秋節/.test(toast)&&/順延/.test(toast), `而且講明為什麼：${toast}`);
 
+ // 「一個月後」「三個月後」是下個月、三個月後的同一天，不是 30／90 天（使用者：按三個月後不會顯示正確日期；9/30 按三個月後出來 12/30）
+ await pg.click('#drawerBody button:has-text("一個月後")'); await pg.waitForTimeout(300);
+ const vm1=await pg.inputValue('#drawerBody input[type="date"]');
+ chk(vm1==='2026-10-27', `9/24 按「一個月後」→ 10/24 週六、10/26 光復節補假，順延到 10/27：${vm1}`);
+ const m=await pg.evaluate(()=>[window.addMonths('2026-10-01',3), window.addMonths('2026-08-31',1), window.addMonths('2026-01-31',1), window.addMonths('2026-11-30',3)]);
+ chk(JSON.stringify(m)==='["2027-01-01","2026-09-30","2026-02-28","2027-02-28"]', `幾個月後的同一天、沒有那一天就取月底：${JSON.stringify(m)}`);
+
  // 「今天」不順延：人就是在今天按的
  await pg.click('#drawerBody button:has-text("今天")'); await pg.waitForTimeout(400);
  const v2=await pg.inputValue('#drawerBody input[type="date"]');
