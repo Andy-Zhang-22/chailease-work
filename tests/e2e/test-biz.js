@@ -41,7 +41,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const meta=(await first.locator('.card-meta').textContent()).replace(/\s+/g,' ');
  chk(/資本額 120 萬/.test(meta) && /設立 2021\/02（5 年）/.test(meta) && /負責人 張大同/.test(meta) && /室內裝修工程、室內設計/.test(meta), `卡片內容：${meta}`);
  chk(await first.evaluate(e=>e.classList.contains('is-up')), '在我的分公司轄區的卡片左邊有色');
- chk(/已在名單/.test(await pg.locator('#biz-cards .card:has-text("樹德")').locator('.card-top').textContent()), '已在名單的有標');
+ chk(/已在名單・9\/1 加入/.test(await pg.locator('#biz-cards .card:has-text("樹德")').locator('.card-top').textContent()), `已在名單的有標，而且寫哪天加的：${await pg.locator('#biz-cards .card:has-text("樹德")').locator('.card-top').textContent()}`);
  const clickChip=async(host,label)=>{ await pg.locator(`${host} .chip:has-text("${label}")`).first().click(); await pg.waitForTimeout(250); };
  await clickChip('#biz-fBranch','新莊分公司'); n=await names(); chk(n.length===2 && !n.includes('樹德醫療器材行'), `篩新莊分公司：${n.join('|')}`);
  await clickChip('#biz-fAge','未滿 5 年'); n=await names(); chk(n.join('|')==='協玖裝潢企業社', `再篩未滿 5 年：${n.join('|')}`);

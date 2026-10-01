@@ -356,7 +356,7 @@
     const mine = c ? mineOf(r, c.cm) : null;
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
-      : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })
+      : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })
     const reasonBadge = r.type === 'setup' ? el('span', { className: 'badge badge-new', textContent: '新設立' })
       : r.rk === 'up' ? el('span', { className: 'badge badge-up', textContent: r.reason })
         : r.rk === 'down' ? el('span', { className: 'badge badge-down', textContent: r.reason })
@@ -526,8 +526,12 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
     const file = new File([toStandardCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    // 匯入時靠名稱比對到已在名單的會被略過，不能再說「N 家排在…」（使用者：昨天加的「昨天新增」看不到——早就在名單上）
+    const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
+    const lost = fresh.length - got;
     const last = dates.filter(Boolean).sort().pop();
-    if (last) toast(`${fresh.length} 家排在 ${dates[0].replace(/-/g, '/')}${last !== dates[0] ? `～${last.replace(/-/g, '/')}` : ''}`);
+    if (!got) toast(`${fresh.length === 1 ? '這家' : `這 ${fresh.length} 家`}早就在名單上了（同名或同統編），沒有再加一次；卡片上的「已在名單」有寫哪天加的`);
+    else if (last) toast(`${got} 家排在 ${dates[0].replace(/-/g, '/')}${last !== dates[0] ? `～${last.replace(/-/g, '/')}` : ''}${lost > 0 ? `；另外 ${lost} 家早就在名單上（同名），略過` : ''}`);
     render();   // 匯進去之後卡片就變成「已在名單」
   }
 
