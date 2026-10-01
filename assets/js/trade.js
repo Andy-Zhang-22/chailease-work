@@ -383,8 +383,8 @@
         el('input', { id: 'trade-capMax', type: 'number', min: '0', step: '10', placeholder: '上限' })])),
       group('關鍵字', el('input', { id: 'trade-q', type: 'search', placeholder: '名稱、英文名、統編、代表人、地址、電話', autocomplete: 'off' }), 'trade-q'),
       group('排序', el('select', { id: 'trade-sort' }, [
+        el('option', { value: 'capital', textContent: '資本額（高到低）' }),   // 使用者：找名單的分頁預設都照資本額高到低
         el('option', { value: 'first', textContent: '最新登記在前' }),
-        el('option', { value: 'capital', textContent: '資本額（高到低）' }),
         el('option', { value: 'issued', textContent: '最近異動在前' }),
         el('option', { value: 'name', textContent: '名稱' })]), 'trade-sort'),
       el('div', { className: 'leads-row' }, [
@@ -460,7 +460,7 @@
       const defaults = () => {
         Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
         f.phone.add('Y'); f.branches.add(myBranch());
-        $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'first'; showHidden = false;
+        $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'capital'; showHidden = false;
       };
       $('#trade-reset').onclick = () => { defaults(); rerender(); };
       $('#trade-reset').textContent = '回到預設篩選';

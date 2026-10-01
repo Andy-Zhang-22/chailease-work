@@ -254,7 +254,7 @@
     const mine = mineOfTax(r.taxId, r.name, c.cm);
     const isHidden = hidden.has(r.key);
     const top = el('div', { className: 'card-top' }, [
-      el('span', { className: 'card-name' }, [r.taxId ? findbiz(r.taxId, r.name) : document.createTextNode(r.name)]),
+      el('span', { className: 'card-name' }, [r.taxId ? findbiz(r.taxId, r.name) : document.createTextNode(r.name), typeof global.copyDot === 'function' ? global.copyDot(r.name, '複製公司名稱', `已複製：${r.name}`) : '']),
       el('span', { className: 'badge badge-new', textContent: `${r.market} ${r.code}` }),
       r.industry ? el('span', { className: 'badge badge-ind', textContent: r.industry }) : '',
       r.invest.length ? el('span', { className: 'badge badge-peer', textContent: `名下投資公司 ${r.invest.length} 家${r.sameSpot.length ? `（同址 ${r.sameSpot.length}）` : ''}` }) : '',
@@ -457,9 +457,9 @@
         el('input', { id: 'listed-capMax', type: 'number', min: '0', step: '1', placeholder: '上限' })])),
       group('關鍵字', el('input', { id: 'listed-q', type: 'search', placeholder: '公司、代號、統編、董事長、總經理、地址、投資公司名稱', autocomplete: 'off' }), 'listed-q'),
       group('排序', el('select', { id: 'listed-sort' }, [
+        el('option', { value: 'capital', textContent: '實收資本額（高到低）' }),   // 使用者：找名單的分頁預設都照資本額高到低
         el('option', { value: 'invest', textContent: '投資公司多的在前（同址優先）' }),
         el('option', { value: 'active', textContent: '最新動態在前' }),
-        el('option', { value: 'capital', textContent: '實收資本額（高到低）' }),
         el('option', { value: 'code', textContent: '公司代號' }),
         el('option', { value: 'company', textContent: '公司名稱' })]), 'listed-sort'),
       el('div', { className: 'leads-row' }, [
@@ -550,7 +550,7 @@
     $('#listed-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#listed-reset').onclick = () => {
       f.markets.clear(); f.inds.clear(); f.branches.clear(); f.invest.clear(); f.mine.clear(); f.dyn.clear(); f.pledge.clear(); f.q = '';
-      $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-hideBig').checked = true; $('#listed-sort').value = 'invest'; showHidden = false;
+      $('#listed-q').value = ''; $('#listed-capMin').value = ''; $('#listed-capMax').value = ''; $('#listed-hideBig').checked = true; $('#listed-sort').value = 'capital'; showHidden = false;
       rerender();
     };
     $('#listed-add').onclick = () => { const c = criteria(); addToList(current.flatMap((r) => r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm)).map((x) => ({ x, r })))); };

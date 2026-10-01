@@ -481,8 +481,8 @@
       el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'chattel-hideFin', checked: true }), ' 藏起客戶那一方也是租賃／銀行的案件（同業之間的融資，不是要打的對象）'])]),
       group('關鍵字', el('input', { id: 'chattel-q', type: 'search', placeholder: '公司、統編、金主、地址、登記編號', autocomplete: 'off' }), 'chattel-q'),
       group('排序', el('select', { id: 'chattel-sort' }, [
+        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),   // 使用者：找名單的分頁預設都照金額高到低（動保沒有資本額，用擔保金額）
         el('option', { value: 'end', textContent: '到期日（近的在前）' }),
-        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),
         el('option', { value: 'company', textContent: '公司名稱' })]), 'chattel-sort'),
       el('div', { className: 'leads-row' }, [
         el('button', { className: 'btn btn-tiny', id: 'chattel-reset', type: 'button', textContent: '清除篩選' }),
@@ -582,7 +582,7 @@
     $('#chattel-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#chattel-reset').onclick = () => {
       f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.q = '';
-      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'end';
+      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'amount';
       showHidden = false;
       rerender();
     };

@@ -50,7 +50,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  // 預設：6 個月內、同業（中租自家藏起來）、金額 100 萬起、過期的不算
  const names=async()=>pg.$$eval('#chattel-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
  let n=await names();
- chk(n.join('|')==='禾泰精密工業有限公司|昱昌汽車貨運股份有限公司|泓宇塑膠射出有限公司|巨鎰金屬製品有限公司', `預設 6 個月內、照到期日排、中租自家與 50 萬的小案子藏起來：${n.join('|')}`);
+ chk(n.join('|')==='禾泰精密工業有限公司|昱昌汽車貨運股份有限公司|巨鎰金屬製品有限公司|泓宇塑膠射出有限公司', `預設 6 個月內、照擔保金額高到低排、中租自家與 50 萬的小案子藏起來：${n.join('|')}`);
  chk((await pg.textContent('#countChattel'))==='4', `分頁上的數字＝列出來的家數：${await pg.textContent('#countChattel')}`);
 
  // 卡片內容
