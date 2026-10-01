@@ -134,6 +134,14 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('.tab[data-tab="leads"]'); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
  chk(cand.c.length===4 && cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 4（含以前刪掉的昱昌、成立年不明的老早過期），登記清冊還剩 2 家（四頁輪流拿）；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
+ await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
+ const dueNow=await pg.evaluate(()=>window.customerViews().filter(v=>v.nextDate==='2026-10-05'&&!v.blocked).length);
+ chk(/今天的 \d+ 家挪到 2026\/10\/06/.test(await pg.textContent("#feedBar")) && dueNow>0, `再補那一條有「挪到明天」：${(await pg.textContent('#feedBar')).replace(/\s+/g,' ')}`);
+ await pg.click('#feedDefer'); await pg.waitForTimeout(300); await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(800);
+ const after=await pg.evaluate(()=>({today:window.customerViews().filter(v=>v.nextDate==='2026-10-05').length, next:window.customerViews().filter(v=>v.nextDate==='2026-10-06').length}));
+ chk(after.today===0 && after.next===dueNow, `今天的 ${dueNow} 家全部挪到 10/6：${JSON.stringify(after)}`);
+ chk(/今天還沒有新名單/.test(await pg.textContent('#feedBar')), `挪完今天那一條變空：${(await pg.textContent('#feedBar')).replace(/\s+/g,' ')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
 
  // 假日（10/10 國慶、週六）：自動不挑；按「再補」排到下一個上班日 10/12
