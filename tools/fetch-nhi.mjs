@@ -13,7 +13,7 @@
  * ODS 是 zip 裡一個 content.xml：Node 沒有內建 unzip，這裡自己走 central directory、inflateRaw（檔案結構很單純，不值得裝套件）。
  *
  * 寫 nhi.csv（統編,名稱,地址,行業代號,行業,成立日期,投保年月,電話,資本額；成立日期用民國，跟其他清冊一致）與 index.json。
- * 用法：node tools/fetch-nhi.mjs [--out leads/nhi] [--cities 新北市] [--months 6] [--phones leads/trade/phones.csv]
+ * 用法：node tools/fetch-nhi.mjs [--out leads/nhi] [--cities 新北市,臺北市] [--months 6] [--phones leads/trade/phones.csv]
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -22,7 +22,7 @@ import zlib from 'node:zlib';
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
 const OUT = opt('out', 'leads/nhi');
-const CITIES = opt('cities', '新北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const MONTHS = Number(opt('months', '6')) || 6;
 const PHONES = opt('phones', 'leads/trade/phones.csv');
 const META = 'https://data.gov.tw/api/v2/rest/dataset/26769';

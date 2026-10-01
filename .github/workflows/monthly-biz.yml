@@ -14,7 +14,7 @@ on:
       cities:
         description: '留哪些縣市（逗號分隔；負責人只有新北市對得到）'
         required: false
-        default: '新北市'
+        default: '新北市,臺北市'
       min_capital:
         description: '資本額下限（元）'
         required: false
@@ -49,7 +49,7 @@ jobs:
       - name: 抓稅籍登記、篩商行／企業社、對負責人
         if: inputs.only_bms != true
         env:
-          CITIES: ${{ inputs.cities || '新北市' }}
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
           MIN_CAPITAL: ${{ inputs.min_capital || '500000' }}
         run: |
           node tools/fetch-biz.mjs --cities "$CITIES" --min-capital "$MIN_CAPITAL" | tee fetch-biz.log
@@ -62,7 +62,7 @@ jobs:
       - name: 抓商業每月設立／變更清冊
         continue-on-error: true
         env:
-          CITIES: ${{ inputs.cities || '新北市' }}
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
           PERIODS: ${{ inputs.bms_periods }}
         run: |
           if [ -n "$PERIODS" ]; then

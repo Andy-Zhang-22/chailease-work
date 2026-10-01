@@ -344,7 +344,7 @@
     ]);
     filters.open = !matchMedia('(max-width: 760px)').matches;
     root.append(
-      el('p', { className: 'muted leads-sub', id: 'nhi-sub', textContent: '健保署的新成立投保單位（新北市）：剛開始幫員工投保的公司' }),
+      el('p', { className: 'muted leads-sub', id: 'nhi-sub', textContent: '健保署的新成立投保單位（新北市、臺北市）：剛開始幫員工投保的公司' }),
       filters,
       el('div', { className: 'leads-head' }, [
         el('div', { className: 'leads-count', id: 'nhi-count', textContent: '—' }),
@@ -362,7 +362,7 @@
       el('div', { className: 'empty', id: 'nhi-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'nhi-more', type: 'button', textContent: '載入更多', hidden: true })]),
       el('div', { className: 'chattel-legend' }, [el('span', {}, [el('i', { className: 'swatch is-up' }), ' 在我的分公司轄區'])]),
-      el('p', { className: 'muted leads-foot', textContent: '資料來源：衛生福利部中央健康保險署「全民健康保險新成立投保單位資料（不含移工雇主單位）」（政府資料開放平臺 26769，每月），GitHub Actions 每月抓，只留新北市、最近幾個月。健保檔沒有電話：抓的時候拿統編對貿易署的出進口廠商登記填，對不到的用卡片上的「找電話」。資本額是查商工登記補的。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
+      el('p', { className: 'muted leads-foot', textContent: '資料來源：衛生福利部中央健康保險署「全民健康保險新成立投保單位資料（不含移工雇主單位）」（政府資料開放平臺 26769，每月），GitHub Actions 每月抓，只留新北市、臺北市、最近幾個月。健保檔沒有電話：抓的時候拿統編對貿易署的出進口廠商登記填，對不到的用卡片上的「找電話」。資本額是查商工登記補的。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
     );
   }
 

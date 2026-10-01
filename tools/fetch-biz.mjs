@@ -24,7 +24,7 @@
  *   商業登記 Y＝清冊裡有這家；N＝只有稅籍登記、沒辦商業登記（小規模營業人可免辦），findbiz 查不到、負責人沒有、資本額是稅籍自填的。
  * owners.json（統編 → 負責人，清冊抓不到時沿用）、index.json（抓取時間、出檔日期、各區筆數、查到負責人幾家）。
  *
- * 用法：node tools/fetch-biz.mjs [--out leads/biz] [--cities 新北市] [--min-capital 500000]
+ * 用法：node tools/fetch-biz.mjs [--out leads/biz] [--cities 新北市,臺北市] [--min-capital 500000]
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -34,7 +34,7 @@ import { Readable } from 'node:stream';
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
 const OUT = opt('out', 'leads/biz');
-const CITIES = opt('cities', '新北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const MIN_CAPITAL = Number(opt('min-capital', '500000')) || 0;
 const SOURCE = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
 const OWNER_SOURCE = 'https://data.ntpc.gov.tw/api/datasets/1ae53d31-a418-4209-83cb-474d91b7f3fc/csv/file';   // 新北市商業登記清冊

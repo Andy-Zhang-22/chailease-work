@@ -1,4 +1,4 @@
-# 每月抓健保署的「全民健康保險新成立投保單位資料」（data.gov.tw 26769），只留新北市、最近幾個月，
+# 每月抓健保署的「全民健康保險新成立投保單位資料」（data.gov.tw 26769），只留新北市、臺北市、最近幾個月，
 # 寫成 leads/nhi/nhi.csv；網站的「剛開始請人」分頁讀這裡。電話拿統編對貿易署的電話表（leads/trade/phones.csv），
 # 資本額查商工登記補（fill-founded.mjs --source nhi）。排在出進口廠商之後一天，電話表才是新的。
 name: 每月健保新投保單位
@@ -11,7 +11,7 @@ on:
       cities:
         description: '留哪些縣市（逗號分隔）'
         required: false
-        default: '新北市'
+        default: '新北市,臺北市'
       months:
         description: '留最近幾個月成立投保單位的'
         required: false
@@ -47,7 +47,7 @@ jobs:
       - name: 抓健保新成立投保單位
         if: inputs.skip_fetch != true
         env:
-          CITIES: ${{ inputs.cities || '新北市' }}
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
           MONTHS: ${{ inputs.months || '6' }}
         run: |
           node tools/fetch-nhi.mjs --cities "$CITIES" --months "$MONTHS" | tee fetch-nhi.log

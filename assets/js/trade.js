@@ -393,7 +393,7 @@
     ]);
     filters.open = !matchMedia('(max-width: 760px)').matches;
     root.append(
-      el('p', { className: 'muted leads-sub', id: 'trade-sub', textContent: '經濟部國際貿易署的出進口廠商登記（新北市，最近兩年登記的）' }),
+      el('p', { className: 'muted leads-sub', id: 'trade-sub', textContent: '經濟部國際貿易署的出進口廠商登記（新北市、臺北市，最近兩年登記的）' }),
       filters,
       el('div', { className: 'leads-head' }, [
         el('div', { className: 'leads-count', id: 'trade-count', textContent: '—' }),
@@ -411,7 +411,7 @@
       el('div', { className: 'empty', id: 'trade-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'trade-more', type: 'button', textContent: '載入更多', hidden: true })]),
       el('div', { className: 'chattel-legend' }, [el('span', {}, [el('i', { className: 'swatch is-up' }), ' 在我的分公司轄區'])]),
-      el('p', { className: 'muted leads-foot', textContent: '資料來源：經濟部國際貿易署「出進口廠商登記資料」（政府資料開放平臺 79641，每日更新），GitHub Actions 每月抓，只留新北市；這個分頁列原始登記在最近兩年內的（剛開始做進出口）。代表人中間字是貿易署遮的。整個新北市的電話表另外留著：登記清冊、動產擔保、商行的名單加進來時，用統編對得到就自動填電話。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
+      el('p', { className: 'muted leads-foot', textContent: '資料來源：經濟部國際貿易署「出進口廠商登記資料」（政府資料開放平臺 79641，每日更新），GitHub Actions 每月抓，只留新北市、臺北市（使用者：「都要有」）；這個分頁列原始登記在最近兩年內的（剛開始做進出口）。代表人中間字是貿易署遮的。兩個市的電話表另外留著：登記清冊、動產擔保、商行的名單加進來時，用統編對得到就自動填電話。「已在名單」是在這台瀏覽器裡比對的，名單不會上傳。' }),
     );
   }
 
