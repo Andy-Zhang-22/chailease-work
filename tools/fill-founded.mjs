@@ -26,7 +26,8 @@
  * 查的順序照契約迄日，快到期的先查：時間到了沒查完，先有的也是最要緊的那幾家。
  *
  * 出進口廠商也用（--source trade）：leads/trade/trade.csv 的「統編」查成立日期，填進「成立日期」欄，快取 leads/trade/founded.json，
- * 同樣只讀 leads/founded.json 當種子（使用者：「出進口廠商能補上成立年嗎」）。
+ * 同樣只讀 leads/founded.json 當種子（使用者：「出進口廠商能補上成立年嗎」）。同一次查詢順便拿資本總額（元）填進「資本額」欄，
+ * 快取 leads/trade/capital.json（使用者：「幫我把出進口的分頁名單補上資本額」）——資本額的快取是分開的，成立年查過但資本額還沒有的要再查一次。
  *
  * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade] [--out leads] [--minutes 240]
  *                                   [--concurrency 6] [--limit N] [--dry]
@@ -51,6 +52,7 @@ const TRADE = SOURCE === 'trade';
 const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : '';   // 自己的資料夾（快取、index 都在那裡）
 const CACHE = SUB ? path.join(OUT, SUB, 'founded.json') : path.join(OUT, 'founded.json');
 const SEED = SUB ? path.join(OUT, 'founded.json') : '';   // 只讀、不寫回
+const CAP_CACHE = TRADE ? path.join(OUT, 'trade', 'capital.json') : '';   // 統編 → 資本總額（元；0＝登記上沒有）
 const DEADLINE = Date.now() + MINUTES * 60000;
 
 // 政府網站對沒有瀏覽器 UA 的請求有時直接回空白，跟每週健檢用同一個
@@ -100,6 +102,8 @@ function toRoc(raw) {
 
 let cache = {};
 try { cache = JSON.parse(await fs.readFile(CACHE, 'utf8')) || {}; } catch (e) { console.log(`還沒有 ${CACHE}，這次從頭建`); }
+let capCache = {};
+if (CAP_CACHE) { try { capCache = JSON.parse(await fs.readFile(CAP_CACHE, 'utf8')) || {}; } catch (e) { console.log(`還沒有 ${CAP_CACHE}，這次從頭建`); } }
 let seeded = 0;
 if (SEED) {
   try {
@@ -143,13 +147,17 @@ for (const file of files) {
   if (iTax < 0) { console.log(`跳過 ${file}：欄位對不上`); continue; }
   // 動產擔保名單、出進口廠商的「成立日期」是這支加上去的欄，剛抓下來時沒有
   if (iSetup < 0) { head.push(COLS.fill); iSetup = head.length - 1; rows.forEach((r, i) => { if (i) r[iSetup] = ''; }); }
-  parsed.push({ file, rows, iTax, iName, iSetup });
+  // 出進口廠商還要「資本額」欄（元），也是這支加的
+  let iCap = -1;
+  if (TRADE) { iCap = head.indexOf('資本額'); if (iCap < 0) { head.push('資本額'); iCap = head.length - 1; rows.forEach((r, i) => { if (i) r[iCap] = ''; }); } }
+  parsed.push({ file, rows, iTax, iName, iSetup, iCap });
   for (let i = 1; i < rows.length; i++) {
     rowsTotal += 1;
     const tax = (rows[i][iTax] || '').trim();
-    if ((rows[i][iSetup] || '').trim()) continue;
     if (!/^\d{8}$/.test(tax)) continue;
-    if (cache[tax] !== undefined) continue;
+    const wantSetup = !(rows[i][iSetup] || '').trim() && cache[tax] === undefined;
+    const wantCap = iCap >= 0 && !(rows[i][iCap] || '').trim() && capCache[tax] === undefined;
+    if (!wantSetup && !wantCap) continue;
     const order = iOrder >= 0 ? (rows[i][iOrder] || '9999') : '';
     const prev = need.get(tax);
     if (!prev) need.set(tax, { name: (rows[i][iName] || '').trim(), order });
@@ -181,13 +189,15 @@ if (!DRY && todo.length) {
       catch (err) { res = { ok: false, reason: String((err && err.message) || err) }; }
       if (res.ok) {
         const roc = toRoc(res.data && res.data.founded);
-        cache[tax] = roc;
+        if (cache[tax] === undefined || roc) cache[tax] = roc;
+        if (CAP_CACHE) capCache[tax] = Number(String((res.data && res.data.capitalRaw) || '').replace(/\D/g, '')) || 0;
         if (roc) hit += 1; else miss += 1;
         fail = 0;
       } else if (/查無資料|沒有一筆的統編是|部分欄位|用名稱查到/.test(res.reason || '')
         || (res.attempts || []).some((a) => /查無資料|部分欄位/.test(a.reason || ''))) {
         // 連得上、只是登記上沒有這一家：記下來別再重查
-        cache[tax] = '';
+        if (cache[tax] === undefined) cache[tax] = '';
+        if (CAP_CACHE) capCache[tax] = 0;
         miss += 1;
         fail = 0;
       } else {
@@ -202,7 +212,7 @@ if (!DRY && todo.length) {
         const rate = done / ((Date.now() - started) / 1000);
         const left = todo.length - done;
         console.log(`  ${done.toLocaleString()} / ${todo.length.toLocaleString()}　查到 ${hit.toLocaleString()}　登記上沒有 ${miss.toLocaleString()}　${rate.toFixed(1)} 家/秒　估計還要 ${(left / rate / 60).toFixed(0)} 分鐘`);
-        if (!DRY) await fs.writeFile(CACHE, `${JSON.stringify(cache)}\n`, 'utf8');   // 中途被砍掉也不白跑
+        if (!DRY) { await fs.writeFile(CACHE, `${JSON.stringify(cache)}\n`, 'utf8'); if (CAP_CACHE) await fs.writeFile(CAP_CACHE, `${JSON.stringify(capCache)}\n`, 'utf8'); }   // 中途被砍掉也不白跑
       }
     }
   };
@@ -219,13 +229,16 @@ if (process.env.GITHUB_OUTPUT) {
 }
 if (DRY) { console.log('--dry：不寫檔'); process.exit(0); }
 await fs.writeFile(CACHE, `${JSON.stringify(cache)}\n`, 'utf8');
+if (CAP_CACHE) await fs.writeFile(CAP_CACHE, `${JSON.stringify(capCache)}\n`, 'utf8');
 
-let filled = 0; let touched = 0;
-for (const { file, rows, iTax, iSetup } of parsed) {
+let filled = 0; let touched = 0; let filledCap = 0;
+for (const { file, rows, iTax, iSetup, iCap } of parsed) {
   let changed = false;
   for (let i = 1; i < rows.length; i++) {
+    const tax = (rows[i][iTax] || '').trim();
+    if (iCap >= 0 && !(rows[i][iCap] || '').trim() && capCache[tax]) { rows[i][iCap] = String(capCache[tax]); filledCap += 1; changed = true; }
     if ((rows[i][iSetup] || '').trim()) continue;
-    const got = cache[(rows[i][iTax] || '').trim()];
+    const got = cache[tax];
     if (!got) continue;
     rows[i][iSetup] = got;
     filled += 1;
@@ -233,7 +246,7 @@ for (const { file, rows, iTax, iSetup } of parsed) {
   }
   if (changed) { await fs.writeFile(file, toCsv(rows), 'utf8'); touched += 1; }
 }
-console.log(`填了 ${filled.toLocaleString()} 列的${COLS.fill}，動到 ${touched} 個檔`);
+console.log(`填了 ${filled.toLocaleString()} 列的${COLS.fill}${CAP_CACHE ? `、${filledCap.toLocaleString()} 列的資本額` : ''}，動到 ${touched} 個檔`);
 /*
  * CSV 動了就把 index.json 的 generatedAt 一起往前推。
  * 網站抓 CSV 是用 `?t=<generatedAt>` 當快取鍵、而且 force-cache：時間戳不變，瀏覽器就一直

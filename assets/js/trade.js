@@ -42,6 +42,8 @@
   // 成立日期是 fill-founded.mjs 查商工登記填的，民國（104/04/13）；西元的也收
   const parseAnyDate = (s) => (global.Biz && global.Biz.parseAnyDate ? global.Biz.parseAnyDate(s) : parseYmd(s));
   const yearsSince = (dt, today) => (global.Biz && global.Biz.yearsSince ? global.Biz.yearsSince(dt, today) : null);
+  const money = (n) => (global.Biz && global.Biz.money ? global.Biz.money(n) : String(n));
+  const thousands = (yuan) => (yuan ? Math.round(yuan / 1000).toLocaleString() : '');
   const ageOf = (r) => (!r.founded ? 'unknown' : r.years < 5 ? 'lt5' : r.years < 10 ? '5to10' : 'ge10');
   const ymd = (dt) => (dt ? `${dt.y}/${String(dt.m).padStart(2, '0')}/${String(dt.d).padStart(2, '0')}` : '');
   /** 距今幾個月（不足一個月算 0） */
@@ -71,6 +73,7 @@
       first: parseYmd(o['原始登記日期']), issued: parseYmd(o['核發日期']),
       imp: o['進口'] === 'Y', exp: o['出口'] === 'Y',
       founded: parseAnyDate(o['成立日期']),
+      capital: Number(String(o['資本額'] || '').replace(/\D/g, '')) || 0,   // 元；fill-founded 查商工登記填的，0＝還沒查到
     };
     r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.firstMonths = r.first ? monthsSince(r.first, today) : null;
@@ -146,12 +149,13 @@
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
 
-  const criteria = () => ({ terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean), cm: customerMap() });
+  const criteria = () => ({ min: (Number($('#trade-capMin').value) || 0) * 1e4, max: (Number($('#trade-capMax').value) || 0) * 1e4 || Infinity, terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean), cm: customerMap() });
   function passes(r, c, except) {
     return (except === 'branches' || !f.branches.size || f.branches.has(r.branch.key))
       && (except === 'districts' || !f.districts.size || f.districts.has(r.district))
       && (except === 'when' || !f.when.size || f.when.has(whenOf(r)))
       && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
+      && (except === 'cap' || ((c.min <= 0 && c.max === Infinity) || (r.capital >= c.min && r.capital <= c.max)))   // 沒設門檻時沒查到資本額的也列
       && (except === 'qual' || !f.qual.size || f.qual.has(qualOf(r)))
       && (except === 'phone' || !f.phone.size || f.phone.has(r.tel ? 'Y' : 'N'))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
@@ -162,7 +166,8 @@
     const list = rows.filter((r) => passes(r, c, null));
     const sort = $('#trade-sort').value;
     const k = (dt) => (dt ? `${dt.y}${String(dt.m).padStart(2, '0')}${String(dt.d).padStart(2, '0')}` : '0');
-    list.sort((a, b) => (sort === 'issued' ? k(b.issued).localeCompare(k(a.issued)) || k(b.first).localeCompare(k(a.first))
+    list.sort((a, b) => (sort === 'capital' ? b.capital - a.capital || k(b.first).localeCompare(k(a.first))
+      : sort === 'issued' ? k(b.issued).localeCompare(k(a.issued)) || k(b.first).localeCompare(k(a.first))
       : sort === 'name' ? a.name.localeCompare(b.name, 'zh-Hant')
         : k(b.first).localeCompare(k(a.first)) || k(b.issued).localeCompare(k(a.issued))));
     return list;
@@ -187,6 +192,7 @@
       r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel })]) : el('span', { className: 'muted', textContent: '📞 登記上沒有電話' }),
       r.fax ? el('span', { textContent: `📠 ${r.fax}` }) : '',
       r.rep ? el('span', { textContent: `👤 代表人 ${r.rep}`, title: '貿易署公開檔把中間字遮掉' }) : '',
+      r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）`, title: '查商工登記來的' }) : el('span', { className: 'muted', textContent: '🎂 成立年還沒查到', title: 'Actions 每月抓完會拿統編查商工登記補上' }),
       r.first ? el('span', { textContent: `🛳 原始登記 ${ymd(r.first)}（${whenLabel(r)}）` }) : '',
       r.issued && (!r.first || ymd(r.issued) !== ymd(r.first)) ? el('span', { textContent: `🔁 最近異動 ${ymd(r.issued)}` }) : '',
@@ -257,13 +263,13 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`出進口廠商登記（貿易署）：${QUAL.find(([k]) => k === qualOf(r))[1]}`, r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : '', r.first ? `原始登記 ${ymd(r.first).replace(/\//g, '-')}` : '',
+    return [`出進口廠商登記（貿易署）：${QUAL.find(([k]) => k === qualOf(r))[1]}`, r.capital ? `資本額 ${money(r.capital)}` : '', r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : '', r.first ? `原始登記 ${ymd(r.first).replace(/\//g, '-')}` : '',
       r.issued && (!r.first || ymd(r.issued) !== ymd(r.first)) ? `最近異動 ${ymd(r.issued).replace(/\//g, '-')}` : '',
       r.fax ? `傳真 ${r.fax}` : '', r.ename || '', r.rep ? '代表人是貿易署公開檔（中間字遮掉），打前查商工登記' : ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.founded ? String(r.founded.y) : '', '', r.tel, r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.founded ? String(r.founded.y) : '', thousands(r.capital), r.tel, r.rep || '', '', '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const fromDate = () => { const v = $('#trade-from') && $('#trade-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
@@ -340,9 +346,13 @@
       group('進出口資格', el('div', { className: 'chips', id: 'trade-fQual' })),
       group('電話', el('div', { className: 'chips', id: 'trade-fPhone' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'trade-fMine' })),
+      group('資本額（萬元；查商工登記來的）', el('div', { className: 'leads-row' }, [
+        el('input', { id: 'trade-capMin', type: 'number', min: '0', step: '10', placeholder: '下限' }), '～',
+        el('input', { id: 'trade-capMax', type: 'number', min: '0', step: '10', placeholder: '上限' })])),
       group('關鍵字', el('input', { id: 'trade-q', type: 'search', placeholder: '名稱、英文名、統編、代表人、地址、電話', autocomplete: 'off' }), 'trade-q'),
       group('排序', el('select', { id: 'trade-sort' }, [
         el('option', { value: 'first', textContent: '最新登記在前' }),
+        el('option', { value: 'capital', textContent: '資本額（高到低）' }),
         el('option', { value: 'issued', textContent: '最近異動在前' }),
         el('option', { value: 'name', textContent: '名稱' })]), 'trade-sort'),
       el('div', { className: 'leads-row' }, [
@@ -387,7 +397,7 @@
         $('#trade-empty').textContent = '還沒有抓好的資料。GitHub Actions 每月會自動抓，也可以到 repo 的 Actions 頁手動執行「每月出進口廠商」。';
         return;
       }
-      $('#trade-sub').textContent = `${(index.cities || []).join('、')}的出進口廠商 ${Number(index.total || 0).toLocaleString()} 家（有電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　這裡列原始登記在最近 ${index.months || 24} 個月內的 ${Number(index.recent || 0).toLocaleString()} 家　·　貿易署檔案 ${String(index.lastModified || '').replace(/^\w+, /, '').slice(0, 11)}，上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.foundedAt ? '　·　成立年查商工登記補的' : ''}`;
+      $('#trade-sub').textContent = `${(index.cities || []).join('、')}的出進口廠商 ${Number(index.total || 0).toLocaleString()} 家（有電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　這裡列原始登記在最近 ${index.months || 24} 個月內的 ${Number(index.recent || 0).toLocaleString()} 家　·　貿易署檔案 ${String(index.lastModified || '').replace(/^\w+, /, '').slice(0, 11)}，上次抓取 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}${index.foundedAt ? '　·　成立年、資本額查商工登記補的' : ''}`;
       $('#trade-loading').hidden = false;
       $('#trade-loading').textContent = '下載資料…';
       try {
@@ -406,13 +416,14 @@
       ready = true;
       const rerender = () => { limit = PAGE; render(); };
       $('#trade-sort').onchange = rerender;
+      ['#trade-capMin', '#trade-capMax'].forEach((s) => { $(s).oninput = rerender; });
       let qt = null;
       $('#trade-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; rerender(); }, 120); };
       $('#trade-more').onclick = () => { limit += PAGE; render(); };
       $('#trade-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
       $('#trade-reset').onclick = () => {
         Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
-        $('#trade-q').value = ''; $('#trade-sort').value = 'first'; showHidden = false;
+        $('#trade-q').value = ''; $('#trade-capMin').value = ''; $('#trade-capMax').value = ''; $('#trade-sort').value = 'first'; showHidden = false;
         rerender();
       };
       $('#trade-add').onclick = () => { const c = criteria(); addToList(current.filter((r) => !mineOf(r, c.cm))); };
