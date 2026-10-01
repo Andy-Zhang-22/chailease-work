@@ -219,7 +219,7 @@
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && r.amount >= c.min && r.amount <= c.max
       && !(c.hideFin && r.custIsFin)
-      && (showHidden || !hidden.has(r.key))
+      && (showHidden || !(hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   function visible(c) {
@@ -241,6 +241,9 @@
    * 名稱旁一顆複製的點；卡片上一排 Google／地圖／104／1111；找到的電話先貼在卡片上的框，按「加入客戶名單」就一起帶進去；
    * 單張加入後直接打開那一筆。貿易署電話表對得到的不用填（會自動填），框就不出現。
    */
+  // 名單上刪掉的公司（公司排除）：各分頁一起當「藏起來」，放回來＝收回排除（app.js 的 deletedCompany／liftCompany）
+  const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
+  const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
   function phoneBox(r, key, hasAuto) {
     if (hasAuto) return '';
@@ -274,11 +277,11 @@
     const name = el('span', { className: 'card-name' }, [r.cust.id
       ? el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r.cust.id)}`, target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料' })
       : document.createTextNode(r.cust.name || '（沒有名稱）'), copyName(r.cust.name || '')]);
-    const isHidden = hidden.has(r.key);
+    const isHidden = hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
       : [el('button', { className: 'btn btn-tiny btn-primary chattel-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
-        isHidden
+        deletedOf(r.cust.name, r.cust.id) ? restoreBtn(r.cust.name, r.cust.id) : isHidden
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card chattel-card${mine ? ' is-mine' : r.days != null && r.days >= 0 && r.days <= 30 ? ' is-overdue' : r.days != null && r.days > 30 && r.days <= 90 ? ' is-due' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [
@@ -349,10 +352,11 @@
     const unknown = current.filter((r) => !r.founded).length;
     const inList = current.filter((r) => mineOf(r, c.cm)).length;
     $('#chattel-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">　／ ${soon ? `3 個月內到期 ${soon} 家` : ''}${inList ? `${soon ? '、' : ''}已在名單 ${inList} 家` : ''}${!soon && !inList ? `清冊未註銷共 ${rows.length.toLocaleString()} 筆` : ''}${unknown ? `　·　${unknown} 家還沒查到成立年` : ''}</span>`;
-    const hid = rows.filter((r) => hidden.has(r.key)).length;
+    const del = rows.filter((r) => deletedOf(r.cust.name, r.cust.id)).length;
+    const hid = rows.filter((r) => hidden.has(r.key)).length + del;
     const hb = $('#chattel-hidden');
     hb.hidden = !hid;
-    hb.textContent = showHidden ? `收起藏起來的 ${hid} 家` : `顯示藏起來的 ${hid} 家`;
+    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
     $('#chattel-more').hidden = current.length <= limit;
     $('#chattel-empty').hidden = !!current.length;
     $('#chattel-empty').textContent = rows.length ? '沒有符合條件的案件，把到期時間放寬、或把金主的籤都取消試試。' : '';
@@ -450,7 +454,7 @@
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.cust.name, r.cust.id))
       .map((r) => {
         r._checks = dailyChecks(r);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));

@@ -144,7 +144,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('.tab[data-tab="chattel"]'); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
  await pg.click('.tab[data-tab="leads"]'); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
- chk(cand.c.length===4 && cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 4（含以前刪掉的昱昌、成立年不明的老早過期），登記清冊還剩 2 家（四頁輪流拿）；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ chk(cand.c.length===3 && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 3（以前刪掉的昱昌分頁也不列了、成立年不明的老早過期還在），登記清冊還剩 2 家；跟畫面篩選無關：${JSON.stringify(cand)}`);
  // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const dueNow=await pg.evaluate(()=>window.customerViews().filter(v=>v.nextDate==='2026-10-05'&&!v.blocked).length);

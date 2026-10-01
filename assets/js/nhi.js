@@ -125,7 +125,7 @@
       && (except === 'cap' || ((c.min <= 0 && c.max === Infinity) || (r.capital >= c.min && r.capital <= c.max)))   // 沒設門檻時沒查到資本額的也列
       && (except === 'phone' || !f.phone.size || f.phone.has(r.tel ? 'Y' : 'N'))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
-      && (showHidden || !hidden.has(r.key))
+      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   const ymKey = (ym) => (ym ? `${ym.y}${String(ym.m).padStart(2, '0')}` : '0');
@@ -142,6 +142,9 @@
 
   /* ---------------- 畫面 ---------------- */
 
+  // 名單上刪掉的公司（公司排除）：各分頁一起當「藏起來」，放回來＝收回排除（app.js 的 deletedCompany／liftCompany）
+  const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
+  const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
   function phoneBox(r, key, hasAuto) {
     if (hasAuto) return '';
@@ -167,7 +170,7 @@
 
   function card(r, c) {
     const mine = mineOf(r, c.cm);
-    const isHidden = hidden.has(r.key);
+    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name), copyName(r.name)]),
       r.insMonths != null && r.insMonths < 3 ? el('span', { className: 'badge badge-up', textContent: '剛開始請人', title: '最近 3 個月才成立健保投保單位：剛開始幫員工投保' }) : '',
@@ -186,7 +189,7 @@
     ]);
     const actions = el('div', { className: 'card-actions' }, [
       mine ? '' : el('button', { className: 'btn btn-tiny btn-primary nhi-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
-      isHidden
+      deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny nhi-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
@@ -230,10 +233,11 @@
     current.slice(0, limit).forEach((r) => host.append(card(r, c)));
     const fresh = current.filter((r) => !mineOf(r, c.cm)).length;
     $('#nhi-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${current.length - fresh ? `　／ 其中 ${current.length - fresh} 家已在名單` : ''}</span>`;
-    const hid = rows.filter((r) => hidden.has(r.key)).length;
+    const del = rows.filter((r) => deletedOf(r.name, r.taxId)).length;
+    const hid = rows.filter((r) => hidden.has(r.key)).length + del;
     const hb = $('#nhi-hidden');
     hb.hidden = !hid;
-    hb.textContent = showHidden ? `收起藏起來的 ${hid} 家` : `顯示藏起來的 ${hid} 家`;
+    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
     $('#nhi-more').hidden = current.length <= limit;
     $('#nhi-empty').hidden = !!current.length;
     $('#nhi-empty').textContent = rows.length ? '沒有符合條件的，把篩選放寬試試。' : '';
@@ -308,7 +312,7 @@
     await start();
     if (!ready) return [];
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key))
+    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
       .sort(dailyCompare);
   }
