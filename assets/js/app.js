@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-229';
+  const APP_VERSION = '20261001-230';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2666,9 +2666,10 @@
    * 每天早上自動從那兩頁挑 10 家補滿（dailyFeed）；手動加進來的也算在這 10 個位子裡。
    * 後來加了商行／企業社那頁：「把這名單一樣向其他分頁一樣自動給我名單，調整為各 5 間，共 15 間」→ 三頁各 5，額度預設 15。
    * 再加出進口廠商那頁：「跟其他分頁一樣給我 5 間，每天自動給我五間，共 20 間」→ 四頁各 5，額度預設 20。
+   * 再加剛開始請人那頁：「調整成自動補 25 間」→ 五頁各 5，額度預設 25。
    */
   const DAILY_CAP_DEFAULT = 30;
-  const NEW_QUOTA_DEFAULT = 20;
+  const NEW_QUOTA_DEFAULT = 25;
   const dailyCap = () => {
     const n = Number(registryPref('daily-cap'));
     return Number.isFinite(n) && n > 0 ? Math.min(500, Math.round(n)) : DAILY_CAP_DEFAULT;
@@ -2954,7 +2955,7 @@
       const bz = bzAll.filter((r) => fresh(r.name, r.taxId));
       const tr = trAll.filter((r) => fresh(r.name, r.taxId));
       const nh = nhAll.filter((r) => fresh(r.name, r.taxId));
-      // 五頁平分（20 家＝各 4）；一頁不夠其他頁補：輪流一家一家拿，拿到額度滿或都沒得拿。剛開始請人這頁排最後，額度不整除時少拿
+      // 五頁平分（25 家＝各 5）；一頁不夠其他頁補：輪流一家一家拿，拿到額度滿或都沒得拿。剛開始請人這頁排最後，額度不整除時少拿
       const take = splitEvenly([ch.length, le.length, bz.length, tr.length, nh.length], need);
       const pickC = ch.slice(0, take[0]);
       const pickL = le.slice(0, take[1]);
