@@ -226,7 +226,7 @@
       r.reg ? '' : el('span', { className: 'badge badge-own', textContent: '只有稅籍登記', title: '沒辦商業登記（小規模營業人可免辦）：商工登記查不到、沒有負責人，資本額是稅籍上自己填的' }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       r.invoice ? el('span', { className: 'badge badge-ind', textContent: '開發票' }) : '',
-      mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
+      mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
       el('span', { textContent: `💰 資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}` }),
@@ -394,8 +394,13 @@
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
     const file = new File([toStandardCsv(fresh, dates)], `商行企業社-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
+    // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），不能再說「N 家排在…」
+    // （使用者：昨天加進去的，「昨天新增」卻看不到——其實是早就在名單上，加的那次被略過了）
+    const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
+    const lost = fresh.length - got;
     const sorted = dates.filter(Boolean).sort();
-    if (sorted.length) toast(`${fresh.length} 家排在 ${sorted[0].replace(/-/g, '/')}${sorted.length > 1 && sorted[sorted.length - 1] !== sorted[0] ? `～${sorted[sorted.length - 1].replace(/-/g, '/')}` : ''}`);
+    if (!got) toast(`${fresh.length === 1 ? '這家' : `這 ${fresh.length} 家`}早就在名單上了（同名或同統編），沒有再加一次；卡片上的「已在名單」有寫哪天加的`);
+    else if (sorted.length) toast(`${got} 家排在 ${sorted[0].replace(/-/g, '/')}${sorted.length > 1 && sorted[sorted.length - 1] !== sorted[0] ? `～${sorted[sorted.length - 1].replace(/-/g, '/')}` : ''}${lost > 0 ? `；另外 ${lost} 家早就在名單上（同名），略過` : ''}`);
     render();
   }
 

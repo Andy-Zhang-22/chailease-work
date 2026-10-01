@@ -35,7 +35,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  chk(chips==='名單裡沒有2|已在我的名單裡1|名單上禁止推廣1', `跟名單比對的籤：${chips}`);
  const c2=pg.locator('#leads-cards .card:has-text("乙二")');
  chk(await c2.evaluate(e=>e.classList.contains('is-mine')), '已在名單的卡片變綠');
- chk(/已在名單・上次 9\/12/.test(await c2.locator('.card-top').textContent()), `寫上次聯絡：${(await c2.locator('.card-top').textContent()).replace(/\s+/g,' ')}`);
+ chk(/已在名單・9\/1 加入・上次 9\/12/.test(await c2.locator('.card-top').textContent()), `寫上次聯絡：${(await c2.locator('.card-top').textContent()).replace(/\s+/g,' ')}`);
  chk(await c2.locator('button:has-text("打開名單上這一家")').count()===1, '已在名單的按鈕是打開那一筆');
  await c2.locator('button:has-text("打開名單上這一家")').click(); await pg.waitForSelector('#drawerBody h2');
  chk(/乙二機械/.test(await pg.textContent('#drawerBody h2')), '真的打開那一筆'); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);

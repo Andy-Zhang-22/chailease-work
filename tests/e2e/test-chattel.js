@@ -70,7 +70,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  const second=pg.locator('#chattel-cards .card').nth(1);
  chk(await second.evaluate(e=>e.classList.contains('is-mine')), '已在名單的卡片左邊是綠色');
  const t2=(await second.locator('.card-top').textContent()).replace(/\s+/g,' ');
- chk(/已在名單・上次 9\/12/.test(t2), `寫上次聯絡日：${t2}`);
+ chk(/已在名單・9\/1 加入・上次 9\/12/.test(t2), `寫上次聯絡日：${t2}`);
  chk(await second.locator('button:has-text("打開名單上這一家")').count()===1, '按鈕變成打開名單上那一筆');
  await second.locator('button:has-text("打開名單上這一家")').click(); await pg.waitForSelector('#drawerBody h2');
  chk(/昱昌汽車貨運/.test(await pg.textContent('#drawerBody h2')), '真的打開那一筆的詳細頁');
