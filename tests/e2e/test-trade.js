@@ -74,7 +74,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  // 沒電話的卡片上有一排找電話的連結跟貼回來的框（使用者：撈不到電話都要自己 Google）
  const yfCard=pg.locator('#cards .card:has-text("遠帆")').first();
- chk(await yfCard.locator('.phone-search a').count()===5 && await yfCard.locator('.phone-search input').count()===1, `沒電話的卡片有找電話連結：${await yfCard.locator('.phone-search a').count()}`);
+ chk(await yfCard.locator('.phone-search a').count()===4 && await yfCard.locator('.phone-search input').count()===1, `沒電話的卡片有找電話連結：${await yfCard.locator('.phone-search a').count()}`);
  chk(/google\.com\/search\?q=.*%E9%9B%BB%E8%A9%B1/.test(await yfCard.locator('.phone-search a').first().getAttribute('href')), 'Google 連結搜「公司名 電話」');
  await yfCard.locator('.phone-search input').fill('02-5555-6666'); await yfCard.locator('.phone-search input').press('Enter'); await pg.waitForTimeout(500);
  chk(/0255556666/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='遠帆國際開發有限公司').phones))), '貼回來按 Enter 就存了');

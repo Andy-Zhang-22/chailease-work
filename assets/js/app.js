@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-222';
+  const APP_VERSION = '20261001-223';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1385,7 +1385,7 @@
 
   /** 詳細頁上的那一小塊：找、看結果、採用或刪。 */
   /*
-   * 沒電話的：一鍵去 Google、地圖、104、1111、商工登記找，找到了直接貼回來存。
+   * 沒電話的：一鍵去 Google、地圖、104、1111 找，找到了直接貼回來存。（商工登記那顆拿掉了：沒有電話、又把那排撐到換行，使用者說不好看）
    * 使用者：「新增的名單有些撈不到電話，我都需要透過 google 去他的官網或求職平台上找電話」——
    * 清冊、動保、稅籍本來就沒電話，貿易署電話表對不到的只能人找；這裡省掉打字搜尋跟開編輯視窗那幾步。
    */
@@ -1410,7 +1410,6 @@
       link('地圖', `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.company || ''} ${r.address || ''}`.trim())}`, 'Google 地圖'),
       link('104', `https://www.google.com/search?q=site%3A104.com.tw+${q}`, '104 上的公司頁'),
       link('1111', `https://www.google.com/search?q=site%3A1111.com.tw+${q}`, '1111 上的公司頁'),
-      r.taxId ? link('商工登記', `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${encodeURIComponent(r.taxId)}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`, '商工登記公示資料') : '',
       input,
     ]);
   }
