@@ -6,11 +6,11 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9499);
 const TODAY='2026-10-05';
 const q=(v)=>/[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
-const HEAD='統編,名稱,英文名稱,地址,代表人,電話,傳真,原始登記日期,核發日期,進口,出口,成立日期';
+const HEAD='統編,名稱,英文名稱,地址,代表人,電話,傳真,原始登記日期,核發日期,進口,出口,成立日期,資本額';
 const ROWS=[
- ['70000001','晨光貿易有限公司','MORNING TRADE CO., LTD.','新北市新莊區中正路100號','王O明','02-2990-1234','02-2990-1235','2026/08/20','2026/09/10','Y','Y','108/10/01'],
- ['70000002','遠帆國際開發有限公司','','新北市板橋區文化路1號','李O華','0912-345-678','','2025/01/15','2025/01/15','N','Y',''],
- ['70000003','新莊好商行','','新北市新莊區中正路371號','','','','2026/09/01','2026/09/01','Y','N','114/08/20'],
+ ['70000001','晨光貿易有限公司','MORNING TRADE CO., LTD.','新北市新莊區中正路100號','王O明','02-2990-1234','02-2990-1235','2026/08/20','2026/09/10','Y','Y','108/10/01','12000000'],
+ ['70000002','遠帆國際開發有限公司','','新北市板橋區文化路1號','李O華','0912-345-678','','2025/01/15','2025/01/15','N','Y','','3000000'],
+ ['70000003','新莊好商行','','新北市新莊區中正路371號','','','','2026/09/01','2026/09/01','Y','N','114/08/20',''],
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const PHONES='﻿統編,電話,傳真,核發日期\n70000001,02-2990-1234,02-2990-1235,2026/09/10\n70000002,0912-345-678,,2025/01/15\n22222222,02-8888-0000,,2024/03/03\n';
@@ -44,7 +44,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  const top=(await first.locator('.card-top').textContent()).replace(/\s+/g,' ');
  chk(/新登記/.test(top) && /進口＋出口/.test(top) && /新莊分公司/.test(top), `卡片標籤：${top}`);
  const meta=(await first.locator('.card-meta').textContent()).replace(/\s+/g,' ');
- chk(/📞 02-2990-1234/.test(meta) && /📠 02-2990-1235/.test(meta) && /代表人 王O明/.test(meta) && /原始登記 2026\/08\/20（1 個月前）/.test(meta) && /最近異動 2026\/09\/10/.test(meta) && /🎂 成立 2019\/10（7 年）/.test(meta), `卡片內容：${meta}`);
+ chk(/📞 02-2990-1234/.test(meta) && /📠 02-2990-1235/.test(meta) && /代表人 王O明/.test(meta) && /原始登記 2026\/08\/20（1 個月前）/.test(meta) && /最近異動 2026\/09\/10/.test(meta) && /🎂 成立 2019\/10（7 年）/.test(meta) && /💰 資本額 1,200 萬/.test(meta), `卡片內容：${meta}`);
  chk(/成立年還沒查到/.test(await pg.locator('#trade-cards .card:has-text("遠帆")').locator('.card-meta').textContent()), '沒查到成立年的有寫');
  chk(await first.locator('a[href^="tel:"]').count()===1, '電話可以直接撥');
  chk(/已在名單/.test(await pg.locator('#trade-cards .card:has-text("遠帆")').locator('.card-top').textContent()), '已在名單的有標');
@@ -52,13 +52,14 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await clickChip('#trade-fWhen','3 個月內'); n=await names(); chk(n.join('|')==='新莊好商行|晨光貿易有限公司', `篩 3 個月內：${n.join('|')}`);
  await clickChip('#trade-fAge','5～10 年'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩成立 5～10 年：${n.join('|')}`); await clickChip('#trade-fAge','5～10 年');
  await clickChip('#trade-fPhone','有電話'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩有電話：${n.join('|')}`);
+ await pg.fill('#trade-capMin','500'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `資本額 500 萬以上：${n.join('|')}`);
  await pg.click('#trade-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選');
  await pg.fill('#search','MORNING'); await pg.waitForTimeout(400); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `頂端搜尋欄搜英文名：${n.join('|')}`); await pg.fill('#search',''); await pg.waitForTimeout(400);
 
  // 單家加入：電話、代表人、地址、備註一起進去，排明天
  await first.locator('button.trade-add-one').click(); await pg.waitForTimeout(1500);
- const recs=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^出進口廠商/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,owner:r.owner,phoneRaw:r.phoneRaw,founded:r.founded,nextDate:r.nextDate,notes:r.notesRaw,address:r.address})));
- chk(recs.length===1 && recs[0].company==='晨光貿易有限公司' && recs[0].taxId==='70000001' && recs[0].phoneRaw==='02-2990-1234' && recs[0].owner==='王O明' && recs[0].founded==='2019' && recs[0].address==='新北市新莊區中正路100號', `加進去的資料：${JSON.stringify(recs[0])}`);
+ const recs=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^出進口廠商/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,owner:r.owner,phoneRaw:r.phoneRaw,founded:r.founded,capital:r.capital,nextDate:r.nextDate,notes:r.notesRaw,address:r.address})));
+ chk(recs.length===1 && recs[0].company==='晨光貿易有限公司' && recs[0].taxId==='70000001' && recs[0].phoneRaw==='02-2990-1234' && recs[0].owner==='王O明' && recs[0].founded==='2019' && recs[0].capital==='12,000' && recs[0].address==='新北市新莊區中正路100號', `加進去的資料：${JSON.stringify(recs[0])}`);
  chk(recs[0] && /出進口廠商登記（貿易署）：進口＋出口/.test(recs[0].notes) && /原始登記 2026-08-20/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06', `備註、排明天：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
 
