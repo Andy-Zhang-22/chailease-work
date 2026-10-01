@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-225';
+  const APP_VERSION = '20261001-226';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3437,13 +3437,69 @@
   }
 
   /** 一支電話 = 撥號連結 + 複製鈕。複製的是純數字，貼到撥號鍵盤直接可用。 */
-  function telGroup(p) {
+  /*
+   * 開場白：照這家為什麼值得打，給一句打電話用的話（使用者：重點是「讓客戶先認識我、容易約到拜訪」，
+   * 第一句聽到跟自己公司有關的事比較不會掛）。只挑一個最強的訊號；什麼都沒有就不給，免得每張都一樣。
+   */
+  function openerFor(r) {
+    const ago = (iso) => (iso ? -dayDiff(iso) : null);
+    const branch = (() => { let b = ''; try { b = registryPref('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; })();
+    const notes = String(r.notesRaw || '');
+    const reason = (notes.match(/變更(?:登記)?[：:]([^\n，,。]*)/) || [])[1] || '';
+    if (r.chattelNext && r.chattelNext.days <= 92 && r.chattelNext.lender && !/中租/.test(r.chattelNext.lender.name || '')) {
+      return { kind: 'chattel', text: `您跟${window.Chattel ? window.Chattel.lenderShort(r.chattelNext.lender.name) : r.chattelNext.lender.name}的案子 ${r.chattelNext.end} 快到期了，之後如果有資金安排可以比較看看，我是中租${branch}的，想先過去認識一下。` };
+    }
+    const up = ago(r.regKindDate && r.regKindDate.capitalUp);
+    if ((up !== null && up <= 180) || /增資|發行新股/.test(reason)) {
+      return { kind: 'up', text: `看到貴公司最近增資，恭喜。通常這之後會開始擴充，中租有配合的週轉金跟投資額度，我是中租${branch}的，想找時間過去認識一下。` };
+    }
+    const moved = ago(r.regKindDate && r.regKindDate.address);
+    if ((moved !== null && moved <= 180) || /所在地|遷/.test(reason)) {
+      return { kind: 'move', text: `貴公司最近搬到${r.district || r.city || '這邊'}，我是中租${branch}的，就在附近，想過去打聲招呼。` };
+    }
+    const first = (notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || [])[1];
+    if (first && ago(first) !== null && ago(first) <= 365) {
+      return { kind: 'trade', text: `貴公司最近開始做進出口，開信用狀、押貨款這一段中租有週轉金額度可以配合，我是中租${branch}的，想過去認識一下。` };
+    }
+    const y = String(r.founded || '').match(/\d{2,4}/);
+    if (y) {
+      let yr = +y[0]; if (yr < 200) yr += 1911;
+      const years = +todayISO().slice(0, 4) - yr;
+      if (years >= 6 && years <= 10) return { kind: 'age', text: `貴公司成立 ${years} 年了，營運穩定，這個階段通常可以談比較大的額度，我是中租${branch}的，想過去認識一下。` };
+    }
+    return null;
+  }
+  function openerNode(r, cls) {
+    const o = openerFor(r);
+    if (!o) return '';
+    return el('p', { className: cls, title: '打電話用的開場白，照這家為什麼值得打寫的' }, [document.createTextNode(`💬 ${o.text}`), copyDot(o.text, '複製開場白', '已複製開場白')]);
+  }
+
+  /*
+   * 打完電話回來就開這家的通話紀錄（使用者：「更好用」——以前打完要自己再找卡片、開紀錄、填）。
+   * 按卡片或詳細頁的電話時先記下是哪一家；手機撥完切回網站（visibilitychange）就直接打開那一筆、捲到「記錄這通電話」。
+   * 20 分鐘內有效，超過就當沒事（可能只是看一眼號碼）。
+   */
+  const PENDING_CALL = 'pending-call';
+  const markCall = (id) => { try { localStorage.setItem(PENDING_CALL, JSON.stringify({ id, at: Date.now() })); } catch (e) { /* 無痕 */ } };
+  function resumeCall() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem(PENDING_CALL) || 'null'); localStorage.removeItem(PENDING_CALL); } catch (e) { p = null; }
+    if (!p || !p.id || Date.now() - p.at > 20 * 60000) return;
+    const r = state.records.find((x) => x.id === p.id);
+    if (!r) return;
+    openDetail(p.id, { log: true });
+    toast(`剛才打給 ${r.company}，記一下結果`);
+  }
+  window.resumeCall = resumeCall;   // 測試用
+
+  function telGroup(p, r) {
     const digits = String(p.dial || '').split(',')[0];
     const ext = String(p.dial || '').split(',')[1] || '';
 
     const link = el('a', { className: 'tel', href: `tel:${p.dial}` });
     link.append(document.createTextNode(`📞 ${p.display}${p.note ? ` · ${p.note}` : ''}`));
-    link.onclick = (e) => e.stopPropagation();
+    link.onclick = (e) => { e.stopPropagation(); if (r) markCall(r.id); };
 
     /*
      * 複製鈕是一顆灰點。
@@ -3459,7 +3515,7 @@
   }
 
   function telLinks(r, limit) {
-    return (limit ? r.phones.slice(0, limit) : r.phones).map(telGroup);
+    return (limit ? r.phones.slice(0, limit) : r.phones).map((p) => telGroup(p, r));
   }
 
   function card(r) {
@@ -3518,6 +3574,7 @@
       latest = { text: mine.text || `（${window.Normalize.outcomeLabel(mine.outcome)}）` };
     }
     if (latest) node.append(el('p', { className: 'card-notes', textContent: latest.text }));
+    { const o = openerFor(r); if (o && o.kind !== 'age') node.append(openerNode(r, 'card-opener')); }   // 成立年那種太普遍，卡片上不放
     if (r.phones.length) {
       const actions = el('div', { className: 'card-actions' });
       telLinks(r, 2).forEach((a) => actions.append(a));
@@ -3941,6 +3998,7 @@
         deleteBtn(r),
       ].filter(Boolean)),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
+      openerNode(r, 'detail-opener'),
     ].filter(Boolean)));
 
     /*
@@ -4344,6 +4402,7 @@
     }
     section.append(form);
     body.append(section);
+    const logSec = section; const logMemo = memo;
 
     // 拜訪回來記一筆：要記的欄位跟電話不一樣（見到誰、資金需求、下一步），另開一段
     const visitSec = visitSection(r, members);
@@ -4506,6 +4565,10 @@
     if (opts && opts.visit) {
       visitSec.open = true;
       requestAnimationFrame(() => visitSec.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    }
+    // 打完電話切回來：捲到「記錄這通電話」、游標放進去
+    if (opts && opts.log) {
+      requestAnimationFrame(() => { logSec.scrollIntoView({ block: 'start', behavior: 'smooth' }); logMemo.focus(); });
     }
   }
 
@@ -7428,9 +7491,11 @@ export default {
      */
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) return;
+      resumeCall();   // 剛才按了電話撥出去，回來就開那家的通話紀錄
       checkForUpdate(false);
       autoRegistryTick();   // 手機鎖了一整晚，解鎖回來就該補跑
     });
+    window.addEventListener('focus', resumeCall);   // 電腦上按 tel: 跳去別的程式再回來
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
