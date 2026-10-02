@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261002-233';
+  const APP_VERSION = '20261002-234';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -444,7 +444,7 @@
      * 今天不打了：把今天排著的全部挪到下一個上班日（使用者：「把今日提醒的 18 通名單退回去，明天再發送給我，今天不想工作了」）。
      * 禁止推廣的、今天已經處理過的不動。明天的新名單額度會把這些算進去，不會又多補 20 家上去。
      */
-    const due = allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today);
+    const due = allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate);
     if (due.length && !off) {
       const next = window.Holidays ? window.Holidays.nextWorkday(addDays(today, 1)).iso : addDays(today, 1);
       const defer = el('button', { className: 'btn btn-tiny', id: 'feedDefer', type: 'button', textContent: `今天的 ${due.length} 家挪到 ${dateLabel(next)}`, title: '今天不打了：今天排著、還沒處理的全部改到下一個上班日' });
@@ -640,7 +640,7 @@
       hint('只分析，不解釋。');
       // 未跟完的：本週排到今天為止、還沒處理的，移進下週
       const nextMon = window.Holidays ? window.Holidays.nextWorkday(addDays(monday, 7)).iso : addDays(monday, 7);
-      const undone = allViews().filter((v) => !v.blocked && inRange(v.nextDate, monday, today) && !(v.lastDate && v.lastDate >= v.nextDate) && v.dueDoneOn !== today);
+      const undone = allViews().filter((v) => !v.blocked && !v.pinDate && inRange(v.nextDate, monday, today) && !(v.lastDate && v.lastDate >= v.nextDate) && v.dueDoneOn !== today);
       const move = el('button', { className: 'btn btn-tiny', type: 'button', textContent: `未跟完的 ${undone.length} 家移到 ${dateLabel(nextMon)}`, disabled: !undone.length, title: '本週排了還沒聯絡到的，全部改到下週一' });
       move.onclick = async () => {
         if (!await askConfirm(`把本週排了、還沒聯絡到的 ${undone.length} 家全部改到 ${dateLabel(nextMon)}（週${WEEK_NUM[dow(nextMon)]}）？`, { okText: '移到下週' })) return;
@@ -1112,6 +1112,8 @@
     out.remindAt = (mine && mine.remindAt) || 0;
     // 提醒列上按過「完成」的那一天，當天就不再列出來（見 remindItems）
     out.dueDoneOn = (mine && mine.dueDoneOn) || '';
+    // 固定日期：使用者講明「這天一定要打」，照上限重排、挪到下個上班日、移到下週、關係企業連動都不動它
+    out.pinDate = !!(mine && mine.pinDate && out.nextDate);
     out.remindNote = (mine && mine.remindNote) || '';
     // 電話是從 Google 地圖找來的話，詳細頁要標明來源
     out.phoneSource = (mine && mine.phoneSource) || null;
@@ -2573,6 +2575,7 @@
         if ((m.lastDate || null) === lastDate && (m.nextDate || null) === nextDate) return;
         m.groupDatesFrom = lead.company;
         m.lastDate = lastDate;
+        if (m.pinDate) return;   // 這家固定了日期：最近聯絡跟著組，下次聯絡日留自己的
         m.nextDate = nextDate;
         m.bucket = dueBucket(nextDate);
       });
@@ -2750,8 +2753,8 @@
       const i = at(v.nextDate < today ? today : v.nextDate);
       if (i < 0) { beyond += 1; return; }
       const day = days[i];
-      // 已經跟客戶約好回撥時間的不動，但要算進那天的額度裡
-      if (v.remindAt) { fixed.set(day, (fixed.get(day) || 0) + 1); return; }
+      // 已經跟客戶約好回撥時間的、使用者固定的日期不動，但要算進那天的額度裡
+      if (v.remindAt || v.pinDate) { fixed.set(day, (fixed.get(day) || 0) + 1); return; }
       movable.push({ v, from: v.nextDate, day, pick: scorePick(v) });
     });
     return { movable, fixed, overdue, beyond };
@@ -2848,7 +2851,7 @@
       + `${plan.total} 家裡有 ${plan.moves.length} 家會被往後挪，最後排到 ${dateLabel(lastDay)}。\n`
       + (plan.leftover ? `另有 ${plan.leftover} 家連 ${dateLabel(lastDay)} 之前都排不進去，會維持原本的日期。\n` : '')
       + '\n每天留下最該打的，其餘推到下一個上班日；只會往後、不會往前。\n'
-      + '已經約好回撥時間的不會被動到，但會佔掉當天的額度。\n'
+      + '已經約好回撥時間的、你勾了「固定這天」的不會被動到，但會佔掉當天的額度。\n'
       + '週末與國定假日會跳過。原本的下次聯絡日會被蓋掉'
       + '（可以馬上按選單裡的「復原剛才的重排」還原）。',
       { okText: `重排（${plan.moves.length} 家）`, cancelText: '不要' },
@@ -3781,6 +3784,7 @@
       r.territory === '範圍外' ? el('span', { className: 'badge badge-outside', textContent: '範圍外·需協銷' }) : '',
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
+      r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
@@ -4480,6 +4484,13 @@
     const meet = el('input', { type: 'checkbox', className: 'meet-check' });
     const meetLabel = el('label', { className: 'meet-label', title: '這通約到了見面：週三的拜訪名單會列這家，本週節奏會算進「約到見面」' }, [meet, document.createTextNode(' 約到見面')]);
     /*
+     * 固定這天：使用者「打完這通電話，我確定一定要下週二再撥，但我怕會因為每天上線通數洗掉」。
+     * 勾了就記 pinDate：照上限重排、「今天的 N 家挪到下個上班日」、週五「未跟完的移到下週」、關係企業日期連動
+     * 都跳過這家；卡片標 📌。下次再記一通沒勾就解除。
+     */
+    const pin = el('input', { type: 'checkbox', className: 'pin-check', checked: !!r.pinDate });
+    const pinLabel = el('label', { className: 'meet-label', title: '這天一定要打：照上限重排、挪到下個上班日、移到下週都不會動到這家' }, [pin, document.createTextNode(' 📌 固定這天')]);
+    /*
      * 打到一半的草稿保存在這台裝置（每家各一份）。
      *
      * 打字打到一半接到另一通、關掉視窗、按了提醒或連結讓詳細頁重畫，字就不見了。
@@ -4501,8 +4512,8 @@
       return logDrafts.get(r.id) || null;
     };
     const writeDraft = () => {
-      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, meet: meet.checked, at: Date.now() };
-      const keep = d.text.trim() || d.nextDate !== (r.nextDate || '') || d.meet;
+      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, meet: meet.checked, pin: pin.checked, at: Date.now() };
+      const keep = d.text.trim() || d.nextDate !== (r.nextDate || '') || d.meet || d.pin !== !!r.pinDate;
       if (keep) logDrafts.set(r.id, d); else logDrafts.delete(r.id);
       try {
         if (keep) localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
@@ -4523,6 +4534,7 @@
       if (draft.outcome) outcomeSel.value = draft.outcome;
       if (draft.nextDate) nextInput.value = draft.nextDate;
       meet.checked = !!draft.meet;
+      if (draft.pin !== undefined) pin.checked = !!draft.pin;
       draftNote.hidden = !memo.value.trim();
       const discard = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '丟掉草稿' });
       discard.onclick = () => { memo.value = ''; nextInput.value = r.nextDate || ''; nextInput.dispatchEvent(new Event('change')); clearDraft(); draftNote.hidden = true; };
@@ -4532,6 +4544,7 @@
     outcomeSel.addEventListener('change', writeDraft);
     nextInput.addEventListener('change', writeDraft);
     meet.addEventListener('change', () => { if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted'; writeDraft(); });
+    pin.addEventListener('change', writeDraft);
     const quick = el('div', { className: 'card-actions' });
     [['今天', 0], ['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1'], ['三個月後', 'm3']].forEach(([label, days]) => {
       const b = el('button', { className: 'btn btn-tiny', type: 'button', textContent: label });
@@ -4633,6 +4646,7 @@
           outcome: outcomeSel.value,
           nextDate: picked || null,
           lastDate: today,
+          pinDate: !!(pin.checked && picked),
         });
       } catch (err) {
         fail(err, '紀錄已存好，但結果與下次聯絡日沒寫進去');
@@ -4653,7 +4667,7 @@
     };
     form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
-      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, save,
+      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, pinLabel, save,
     ]));
     form.append(quick);
     if (members.length) {
@@ -4885,6 +4899,8 @@
     const nextBox = chipRow(NEXT_OPTIONS, (n) => next === n, (n) => { next = next === n ? '' : n; });
     const chanceBox = chipRow(['有機會', '無機會'], (n) => chance === n, (n) => { chance = chance === n ? '' : n; });
     const nextInput = el('input', { type: 'date', value: r.nextDate || '' });
+    const pin = el('input', { type: 'checkbox', className: 'pin-check', checked: !!r.pinDate });
+    const pinLabel = el('label', { className: 'meet-label', title: '這天一定要打：照上限重排、挪到下個上班日、移到下週都不會動到這家' }, [pin, document.createTextNode(' 📌 固定這天')]);
 
     const DRAFT_KEY = `visit-draft:${r.id}`;
     const snapshot = () => ({ when: whenInput.value, who: who.value, text: memo.value, needs: [...needs], next, chance, nextDate: nextInput.value, at: Date.now() });
@@ -4982,7 +4998,7 @@
         return;
       }
       clearDraft();
-      const patch = { outcome: 'contacted', nextDate: picked || null };
+      const patch = { outcome: 'contacted', nextDate: picked || null, pinDate: !!(pin.checked && picked) };
       // 補記幾天前的拜訪時，不能把最近聯絡日往回拉
       if (!r.lastDate || visitDate >= r.lastDate) patch.lastDate = visitDate;
       if (chance) { patch.chance = chance === '有機會' ? 'yes' : 'no'; patch.chanceAt = Date.now(); }
@@ -5035,7 +5051,7 @@
       field('有沒有機會', chanceBox),
       saveErr,
       el('div', { className: 'row' }, [
-        el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), save, summaryBtn,
+        el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), pinLabel, save, summaryBtn,
       ]),
       quick,
     );
@@ -7550,6 +7566,7 @@ export default {
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
     window.splitEvenly = splitEvenly;   // 測試用
+    window.planDailyCap = planDailyCap;   // 測試用
     window.importQuiet = (file) => importFiles([file]);
     $('#btnPick').onclick = () => $('#filePick').click();
     $('#filePick').onchange = (e) => {
