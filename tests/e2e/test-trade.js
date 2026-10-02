@@ -59,6 +59,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await clickChip('#trade-fWhen','3 個月內'); n=await names(); chk(n.join('|')==='晨光貿易有限公司|新莊好商行', `篩 3 個月內：${n.join('|')}`);
  await clickChip('#trade-fAge','5～10 年'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩成立 5～10 年：${n.join('|')}`); await clickChip('#trade-fAge','5～10 年');
  await clickChip('#trade-fPhone','有電話'); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `再篩有電話：${n.join('|')}`);
+ await clickChip('#trade-fPhone','有電話'); await clickChip('#trade-fWhen','3 個月內'); await clickChip('#trade-fPhone','手機'); n=await names(); chk(n.join('|')==='遠帆國際開發有限公司', `只按「手機」就只剩手機的：${n.join('|')}`); await clickChip('#trade-fPhone','手機'); await clickChip('#trade-fWhen','3 個月內'); await clickChip('#trade-fPhone','有電話');
  await pg.fill('#trade-capMin','500'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `資本額 500 萬以上：${n.join('|')}`);
  await pg.click('#trade-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `「回到預設篩選」回到那組預設：${n.join('|')}`); await clearAll(); n=await names(); chk(n.length===3, '再清掉看全部');
  await pg.fill('#search','MORNING'); await pg.waitForTimeout(400); n=await names(); chk(n.join('|')==='晨光貿易有限公司', `頂端搜尋欄搜英文名：${n.join('|')}`); await pg.fill('#search',''); await pg.waitForTimeout(400);

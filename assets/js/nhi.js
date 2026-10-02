@@ -56,6 +56,12 @@
   /** 投保年月距今幾個月（同一個月＝0） */
   const monthsSinceYm = (ym, today) => { const t = today || new Date(); return Math.max(0, (t.getFullYear() - ym.y) * 12 + (t.getMonth() + 1 - ym.m)); };
   const whenOf = (r) => (r.insMonths == null ? 'y1' : r.insMonths < 1 ? 'm1' : r.insMonths < 3 ? 'm3' : r.insMonths < 6 ? 'm6' : 'y1');
+  /*
+   * 電話的種類：有電話／手機／沒電話。「手機」是「有電話」的一部分（使用者：「還有哪邊可以精準找到公司負責人的手機」——
+   * 登記上填手機當聯絡電話的，多半就是老闆本人）。籤是「或」的關係：只按「手機」就只剩手機的。
+   */
+  const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
+  const phoneKinds = (r) => (r.tel ? (isMobile(r.tel) ? new Set(['Y', 'M']) : new Set(['Y'])) : new Set(['N']));
   function branchOf(address) {
     if (!global.Rules || !global.Normalize) return { key: '', label: '', kind: '', city: '', district: '' };
     const { city, district } = global.Normalize.parseAddress(address);
@@ -123,7 +129,7 @@
       && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
       && (except === 'org' || !f.org.size || f.org.has(orgOf(r)))
       && (except === 'cap' || ((c.min <= 0 && c.max === Infinity) || (r.capital >= c.min && r.capital <= c.max)))   // 沒設門檻時沒查到資本額的也列
-      && (except === 'phone' || !f.phone.size || f.phone.has(r.tel ? 'Y' : 'N'))
+      && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKinds(r).has(k)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
@@ -179,7 +185,7 @@
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
-      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), el('small', { className: 'muted', textContent: '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 健保檔沒有電話' }),
+      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), el('small', { className: 'muted', textContent: isMobile(r.tel) ? '（出進口登記，手機，多半是老闆本人）' : '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 健保檔沒有電話' }),
       r.industry ? el('span', { textContent: `🏷 ${r.industry}${r.indCode ? ` (${r.indCode})` : ''}` }) : '',
       r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 成立日不明' }),
@@ -218,7 +224,7 @@
     chips($('#nhi-fWhen'), WHEN.map(([k, label]) => [k, label, facet('when', (r) => whenOf(r) === k)]), f.when);
     chips($('#nhi-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#nhi-fOrg'), ORG.map(([k, label]) => [k, label, facet('org', (r) => orgOf(r) === k)]), f.org);
-    chips($('#nhi-fPhone'), [['Y', '有電話'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => (r.tel ? 'Y' : 'N') === k)]), f.phone);
+    chips($('#nhi-fPhone'), [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => phoneKinds(r).has(k))]), f.phone);
     chips($('#nhi-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
   }
 
