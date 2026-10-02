@@ -46,14 +46,6 @@ const RECS=[mk('1','星辰精密工業股份有限公司'),mk('2','今天甲有�
  // 關係企業連動：6 固定 10/08，不被 5 的 10/20 蓋掉；最近聯絡日照連動
  const v6=await pg.evaluate(()=>{ const v=window.customerViews().find(v=>v.id==='6'); return {next:v.nextDate,last:v.lastDate,pin:v.pinDate}; });
  chk(v6.next==='2026-10-08' && v6.last==='2026-10-01' && v6.pin===true, `關係企業連動不動固定的下次聯絡日：${JSON.stringify(v6)}`);
- // 週五覆盤：未跟完的移到下週 → 固定的星辰（10/07 沒打）不算
- await setDay('2026-10-09');
- const mv=pg.locator('#weekBar button:has-text("未跟完的")');
- const mvText=await mv.textContent();
- chk(/未跟完的 \d+ 家/.test(mvText), `週五有未跟完的按鈕：${mvText}`);
- await mv.click(); await pg.waitForTimeout(300); await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(800);
- const fri=await pg.evaluate(async()=>{ const s=await window.Store.allStates(); return {s1:s.find(x=>x.recordId==='1').nextDate, s4:s.find(x=>x.recordId==='4').nextDate, s6:s.find(x=>x.recordId==='6').nextDate}; });
- chk(fri.s1==='2026-10-07' && fri.s6==='2026-10-08' && fri.s4==='2026-10-12', `移到下週只動沒固定的：${JSON.stringify(fri)}`);
  // 再記一通沒勾固定就解除
  await pg.locator('#cards .card:has-text("星辰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  const f2=pg.locator('#drawerBody .logform').first();
