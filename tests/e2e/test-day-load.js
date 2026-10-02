@@ -40,7 +40,7 @@ SEED.push(mk(++n,'2026-12-20'));                                // 視野之外
 
  await pg.goto('http://localhost:9461/index.html'); await pg.waitForSelector('#dropzone');
  await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-cap','20'); localStorage.setItem('daily-feed-auto','0'); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('main-cap','20'); localStorage.setItem('daily-feed-auto','0'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
 
  // --- 負載表：看得到哪幾天爆了 ---
@@ -105,7 +105,7 @@ SEED.push(mk(++n,'2026-12-20'));                                // 視野之外
  await pg.dispatchEvent('#editorBody .cap-input','change'); await pg.waitForTimeout(700);
  const r1=await rows();
  chk(r1[2].n==='3 家'&&!r1[2].over&&r1[1].over, `改上限之後重新判斷哪幾天超載：${r1.slice(0,3).map(x=>x.n+(x.over?'!':'')).join(' ')}`);
- chk(await pg.evaluate(()=>localStorage.getItem('daily-cap'))==='10', '上限記起來了');
+ chk(await pg.evaluate(()=>localStorage.getItem('main-cap'))==='10', '主力上限記起來了');
 
  console.log('ERRORS:', errs.length?errs:'none');
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

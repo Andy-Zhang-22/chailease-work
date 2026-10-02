@@ -128,9 +128,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('[data-act="day-load"]', {force:true}).catch(()=>{});
  await pg.waitForSelector('#editorBody .day-load',{timeout:5000}).catch(()=>{});
  const caps=await pg.$$eval('#editorBody .cap-input',a=>a.map(x=>x.value));
- chk(caps[0]==='30' && caps[1]==='5', `上限 30、新名單額度（測試設 5）：${caps.join('|')}`);
+ chk(caps[0]==='15' && caps[1]==='5', `主力上限預設 15、新名單額度（測試設 5）：${caps.join('|')}`);
  const first=await pg.locator('#editorBody .day-row').first().textContent();
- chk(/12 家（新 10）/.test(first.replace(/\s+/g,' ')), `今天那一列：${first.replace(/\s+/g,' ')}`);
+ chk(/12 家（主力 2／新 10）/.test(first.replace(/\s+/g,' ')), `今天那一列：${first.replace(/\s+/g,' ')}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
 
  // 幫新名單找日期：加入的最早從明天起；12 家 → 明天 10、後天 2
