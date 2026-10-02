@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-231';
+  const APP_VERSION = '20261002-233';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -293,6 +293,12 @@
     const d = new Date(ts);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return iso === todayISO() ? timeLabel(ts) : `${dateLabel(iso)} ${timeLabel(ts)}`;
+  };
+  /** 提醒列那一欄用的短標籤：今天只有時間；別天是「10/5」換行「10:30」 */
+  const remindTimeLabel = (ts) => {
+    const d = new Date(ts);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return iso === todayISO() ? timeLabel(ts) : `${d.getMonth() + 1}/${d.getDate()}\n${timeLabel(ts)}`;
   };
 
   /*
@@ -699,7 +705,8 @@
     const list = el('div', { className: 'remind-list' });
     items.forEach(({ r, kind, due, mates = [] }) => {
       const row = el('div', { className: `remind-row ${due ? 'is-due' : ''} ${kind === 'date' ? 'is-today' : ''}` });
-      const time = el('b', { className: 'remind-time', textContent: kind === 'timed' ? whenLabel(r.remindAt) : '今天' });
+      // 排在別天的回撥：「2026/10/05 10:30」塞不進那一欄、會壓到名字，改成兩行「10/5」「10:30」
+      const time = el('b', { className: 'remind-time', textContent: kind === 'timed' ? remindTimeLabel(r.remindAt) : '今天' });
       const openBtn = el('button', { className: 'remind-open', type: 'button', title: mates.length ? `同一組關係企業：${mates.map((m) => m.r.company).join('、')}` : '' }, [
         el('span', { className: 'remind-name' }, [document.createTextNode(r.company), mates.length ? el('span', { className: 'remind-mates', textContent: `＋${mates.length} 家關係企業` }) : '']),
         el('span', { className: 'remind-meta', textContent: [r.remindNote, r.keyman].filter(Boolean).join('　') }),
@@ -7390,7 +7397,32 @@ export default {
     state.records = records;
     state.logs = logs;
     state.userStates = new Map(states.map((s) => [s.recordId, s]));
+    await refreshDeleted();
   }
+
+  /*
+   * 刪掉的公司，各分頁一起藏（使用者：「挑進來的新名單如果我刪掉，請在其他分頁也都把他們隱藏起來，不然會重工」）。
+   *
+   * 刪客戶時本來就會寫公司排除（統編＋名稱的墓碑，跟著雲端同步），匯入與每日挑選都會跳過；
+   * 但分頁上那家還是照列、還是「名單裡沒有」，看起來就像沒打過。這裡把排除清單讀成一份快取，
+   * 分頁用 deletedCompany() 同步問，當成「藏起來」；在分頁按「放回來」就收回排除（liftCompany），
+   * 跟選單「管理已排除的公司」做的是同一件事。
+   */
+  let deletedKeys = new Set();
+  async function refreshDeleted() {
+    try {
+      const tombs = (await window.Store.getTombstones()).companies || {};
+      deletedKeys = new Set(Object.keys(tombs).filter((k) => tombs[k] !== undefined && !(tombs[k] && tombs[k].lifted)));
+    } catch (e) { /* 讀不到就維持上一份 */ }
+  }
+  window.deletedCompany = (company, taxId) => window.Normalize.companyKeys({ company, taxId }).some((k) => deletedKeys.has(k));
+  window.liftCompany = async (company, taxId) => {
+    const keys = window.Normalize.companyKeys({ company, taxId });
+    if (!keys.length) return;
+    await window.Store.liftCompanyTombstones(keys, { company, taxId: taxId || '' }, { force: true });
+    await refreshDeleted();
+    scheduleSync();
+  };
 
   /*
    * 頂端搜尋欄跟著目前的分頁走（使用者：「這個搜尋欄，請幫我重設為僅限各分頁使用」）：
@@ -7644,6 +7676,7 @@ export default {
         );
         if (!picked) return;
         await window.Store.liftCompanyTombstones(byName.get(picked), { company: picked });
+        await refreshDeleted();
         toast(`已收回「${picked}」，之後匯入名單會再出現`);
         scheduleSync();
         return;
