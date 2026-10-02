@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261002-235';
+  const APP_VERSION = '20261002-236';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2473,18 +2473,28 @@
    * 再加出進口廠商那頁：「跟其他分頁一樣給我 5 間，每天自動給我五間，共 20 間」→ 四頁各 5，額度預設 20。
    * 再加剛開始請人那頁：「調整成自動補 25 間」→ 五頁各 5，額度預設 25。
    */
-  const DAILY_CAP_DEFAULT = 30;
+  /*
+   * 使用者（2026/10）：「主力名單上限就是 15 通、其餘 25 通都是新名單」。兩個額度各管各的：
+   * 主力（打過的、自己加的）一天最多 main-cap 家，新名單（五頁挑進來還沒打過的）一天 new-quota 家，
+   * 一天總數＝兩個加起來。以前只有一個總上限 daily-cap：沒設過 main-cap 的從它推（總上限減新名單額度）。
+   */
+  const MAIN_CAP_DEFAULT = 15;
   const NEW_QUOTA_DEFAULT = 25;
-  const dailyCap = () => {
-    const n = Number(registryPref('daily-cap'));
-    return Number.isFinite(n) && n > 0 ? Math.min(500, Math.round(n)) : DAILY_CAP_DEFAULT;
-  };
   const newQuota = () => {
     const raw = registryPref('new-quota');
-    if (raw === '' || raw == null) return Math.min(dailyCap(), NEW_QUOTA_DEFAULT);   // 沒設過＝預設；設 0 是真的不要
+    if (raw === '' || raw == null) return NEW_QUOTA_DEFAULT;   // 沒設過＝預設；設 0 是真的不要
     const n = Number(raw);
-    return Number.isFinite(n) && n >= 0 ? Math.min(dailyCap(), Math.round(n)) : Math.min(dailyCap(), NEW_QUOTA_DEFAULT);
+    return Number.isFinite(n) && n >= 0 ? Math.min(500, Math.round(n)) : NEW_QUOTA_DEFAULT;
   };
+  const mainCap = () => {
+    const n = Number(registryPref('main-cap'));
+    if (Number.isFinite(n) && n > 0 && registryPref('main-cap') !== '') return Math.min(500, Math.round(n));
+    // 舊設定：只有總上限。總上限比新名單額度大就當「總上限減新名單」，否則整個當主力的
+    const legacy = Number(registryPref('daily-cap'));
+    if (Number.isFinite(legacy) && legacy > 0) return legacy > newQuota() ? legacy - newQuota() : Math.round(legacy);
+    return MAIN_CAP_DEFAULT;
+  };
+  const dailyCap = () => mainCap() + newQuota();
   /** 「完全新的名單」：從新公司、動產擔保或商行／企業社加進來、還沒打過。 */
   const FRESH_SOURCE_RE = /^(登記清冊|動產擔保名單|商行企業社|出進口廠商|剛開始請人|每日新名單)/;
   const isFreshLead = (v) => !v.lastDate && FRESH_SOURCE_RE.test(String(v.source || ''));
@@ -2538,7 +2548,8 @@
       return ans;
     };
     const movable = [];
-    const fixed = new Map();
+    const fixed = new Map();        // 那天不能動的總數
+    const fixedFresh = new Map();   // 其中是新名單的
     let overdue = 0;
     let beyond = 0;
     allViews().forEach((v) => {
@@ -2548,11 +2559,12 @@
       const i = at(v.nextDate < today ? today : v.nextDate);
       if (i < 0) { beyond += 1; return; }
       const day = days[i];
+      const fresh = isFreshLead(v);
       // 已經跟客戶約好回撥時間的、使用者固定的日期不動，但要算進那天的額度裡
-      if (v.remindAt || v.pinDate) { fixed.set(day, (fixed.get(day) || 0) + 1); return; }
-      movable.push({ v, from: v.nextDate, day, pick: scorePick(v) });
+      if (v.remindAt || v.pinDate) { fixed.set(day, (fixed.get(day) || 0) + 1); if (fresh) fixedFresh.set(day, (fixedFresh.get(day) || 0) + 1); return; }
+      movable.push({ v, from: v.nextDate, day, pick: scorePick(v), fresh });
     });
-    return { movable, fixed, overdue, beyond };
+    return { movable, fixed, fixedFresh, overdue, beyond };
   }
 
   /** 每個上班日各有幾家「完全新的」（逾期的算第一天，跟 bucketByWorkday 同一條規則）。 */
@@ -2571,23 +2583,20 @@
   /**
    * 幫要加進來的新名單找日子。
    *
-   * wants 是每一家「希望的日期」（沒有就是明天）：從那天起往後找第一個還有位子的上班日——
-   * 那天總數沒到上限、新名單也沒到 10 家。找不到（一整年都滿）就放最後一天，至少有日期。
+   * wants 是每一家「希望的日期」（沒有就是明天）：從那天起往後找第一個新名單還沒排滿額度的上班日
+   * （主力名單排多少不影響，兩個額度各管各的）。找不到（一整年都滿）就放最後一天，至少有日期。
    * 新公司、動產擔保兩頁「加入客戶名單」都走這裡，加進來的東西才會出現在每天的提醒列，
    * 不會沉在幾百家裡面看不到（使用者：「我發現我追蹤不完」）。
    */
   function planNewDates(wants) {
-    const cap = dailyCap();
     const quota = newQuota();
     const days = workdaysFromToday(260);
-    const { counts } = dayLoad(260);
     const fresh = freshLoad(days);
     const tomorrow = addDays(todayISO(), 1);
     return wants.map((want) => {
       const from = want && want > tomorrow ? want : tomorrow;
-      let pick = days.find((d) => d >= from && (counts.get(d) || 0) < cap && (fresh.get(d) || 0) < quota);
+      let pick = days.find((d) => d >= from && (fresh.get(d) || 0) < quota);
       if (!pick) pick = days[days.length - 1];
-      counts.set(pick, (counts.get(pick) || 0) + 1);
       fresh.set(pick, (fresh.get(pick) || 0) + 1);
       return pick;
     });
@@ -2596,25 +2605,28 @@
   /** 目前每個上班日各有幾家要打。 */
   function dayLoad(horizon) {
     const days = workdaysFromToday(horizon);
-    const { movable, fixed, overdue, beyond } = bucketByWorkday(days);
+    const { movable, fixed, fixedFresh, overdue, beyond } = bucketByWorkday(days);
     const counts = new Map(days.map((d) => [d, fixed.get(d) || 0]));
-    movable.forEach((m) => counts.set(m.day, (counts.get(m.day) || 0) + 1));
-    return { days, counts, overdue, beyond, total: movable.length + [...fixed.values()].reduce((a, b) => a + b, 0) };
+    const freshCounts = new Map(days.map((d) => [d, fixedFresh.get(d) || 0]));
+    movable.forEach((m) => { counts.set(m.day, (counts.get(m.day) || 0) + 1); if (m.fresh) freshCounts.set(m.day, (freshCounts.get(m.day) || 0) + 1); });
+    return { days, counts, freshCounts, overdue, beyond, total: movable.length + [...fixed.values()].reduce((a, b) => a + b, 0) };
   }
 
   /**
-   * 照「一天最多幾家」算出要把誰挪到哪一天。
+   * 照「主力一天最多幾家、新名單一天幾家」算出要把誰挪到哪一天。
    *
-   * 一天一天往後走：那天的池子（前一天擠下來的 ＋ 原本排那天的）照優先順序留下上限
-   * 那麼多家，其餘整批推到下一個上班日。只會往後、不會往前。
+   * 主力與新名單各自一條線，一天一天往後走：那天的池子（前一天擠下來的 ＋ 原本排那天的）照優先順序
+   * 留下額度那麼多家，其餘整批推到下一個上班日。只會往後、不會往前。約好回撥的、固定的佔額度但不動。
    */
-  function planDailyCap(cap) {
+  function planDailyCap(capMain, capFresh) {
+    const cm = Math.max(0, capMain == null ? mainCap() : capMain);
+    const cf = Math.max(0, capFresh == null ? newQuota() : capFresh);
     const first = workdaysFromToday(30);
     const rough = bucketByWorkday(first);
     // 天數要夠放，不然最後一天會擠成一坨，等於沒排
-    const need = Math.ceil((rough.movable.length || 1) / Math.max(1, cap)) + 5;
+    const need = Math.ceil((rough.movable.length || 1) / Math.max(1, cm + cf)) + 5;
     const days = workdaysFromToday(Math.min(260, Math.max(30, need)));
-    const { movable, fixed, overdue } = bucketByWorkday(days);
+    const { movable, fixed, fixedFresh, overdue } = bucketByWorkday(days);
     const byDay = new Map();
     movable.forEach((m) => {
       if (!byDay.has(m.day)) byDay.set(m.day, []);
@@ -2622,30 +2634,34 @@
     });
     const counts = new Map();
     const moves = [];
-    let carry = [];
+    let carryMain = []; let carryFresh = [];
     days.forEach((d) => {
-      const pool = carry.concat(byDay.get(d) || []);
-      pool.sort(callPriority);
-      const room = Math.max(0, cap - (fixed.get(d) || 0));
-      const keep = pool.slice(0, room);
-      carry = pool.slice(room);
-      counts.set(d, keep.length + (fixed.get(d) || 0));
-      keep.forEach((m) => { if (m.v.nextDate !== d) moves.push({ id: m.v.id, from: m.v.nextDate, to: d }); });
+      const here = byDay.get(d) || [];
+      const poolMain = carryMain.concat(here.filter((m) => !m.fresh)).sort(callPriority);
+      const poolFresh = carryFresh.concat(here.filter((m) => m.fresh)).sort(callPriority);
+      const fixedF = fixedFresh.get(d) || 0;
+      const fixedM = (fixed.get(d) || 0) - fixedF;
+      const keepMain = poolMain.slice(0, Math.max(0, cm - fixedM));
+      const keepFresh = poolFresh.slice(0, Math.max(0, cf - fixedF));
+      carryMain = poolMain.slice(keepMain.length);
+      carryFresh = poolFresh.slice(keepFresh.length);
+      counts.set(d, keepMain.length + keepFresh.length + (fixed.get(d) || 0));
+      keepMain.concat(keepFresh).forEach((m) => { if (m.v.nextDate !== d) moves.push({ id: m.v.id, from: m.v.nextDate, to: d }); });
     });
-    return { moves, days, counts, leftover: carry.length, total: movable.length, overdue };
+    return { moves, days, counts, leftover: carryMain.length + carryFresh.length, total: movable.length, overdue };
   }
 
   async function applyDailyCap() {
-    const cap = dailyCap();
-    const plan = planDailyCap(cap);
+    const cm = mainCap(); const cf = newQuota();
+    const plan = planDailyCap(cm, cf);
     if (!plan.total) { toast('目前沒有排定下次聯絡日的客戶'); return false; }
-    if (!plan.moves.length) { toast(`每天都沒超過 ${cap} 家，不用重排`); return false; }
+    if (!plan.moves.length) { toast(`每天主力都沒超過 ${cm} 家、新名單沒超過 ${cf} 家，不用重排`); return false; }
     const lastDay = [...plan.counts.entries()].filter(([, n]) => n > 0).map(([d]) => d).pop() || plan.days[0];
     const ok = await askConfirm(
-      `要照「一天最多 ${cap} 家」重排嗎？\n\n`
+      `要照「主力名單一天最多 ${cm} 家、新名單一天 ${cf} 家」重排嗎？\n\n`
       + `${plan.total} 家裡有 ${plan.moves.length} 家會被往後挪，最後排到 ${dateLabel(lastDay)}。\n`
       + (plan.leftover ? `另有 ${plan.leftover} 家連 ${dateLabel(lastDay)} 之前都排不進去，會維持原本的日期。\n` : '')
-      + '\n每天留下最該打的，其餘推到下一個上班日；只會往後、不會往前。\n'
+      + '\n主力、新名單各自算：每天留下最該打的，其餘推到下一個上班日；只會往後、不會往前。\n'
       + '已經約好回撥時間的、你勾了「固定這天」的不會被動到，但會佔掉當天的額度。\n'
       + '週末與國定假日會跳過。原本的下次聯絡日會被蓋掉'
       + '（可以馬上按選單裡的「復原剛才的重排」還原）。',
@@ -2978,28 +2994,29 @@
     const HORIZON = 20;
     const host = $('#editorBody');
     const draw = () => {
-      const cap = dailyCap();
-      const { days, counts, overdue, beyond, total } = dayLoad(HORIZON);
+      const cap = mainCap();
+      const quota = newQuota();
+      const { days, counts, freshCounts, overdue, beyond, total } = dayLoad(HORIZON);
       host.textContent = '';
       host.append(el('h2', { textContent: '每天打得完幾家' }));
 
+      // 主力、新名單各一個額度（使用者：「主力名單上限就是 15 通、其餘 25 通都是新名單」），總數是加出來的
       const capInput = el('input', { type: 'number', min: '1', max: '500', value: String(cap), className: 'cap-input' });
       const replan = el('button', { className: 'btn btn-primary', type: 'button', textContent: '照上限重排' });
       capInput.onchange = () => {
         const n = Math.max(1, Math.min(500, Math.round(Number(capInput.value) || 0)));
         capInput.value = String(n);
-        registryPref('daily-cap', String(n));
+        registryPref('main-cap', String(n));
         draw();
       };
       replan.onclick = async () => { if (await applyDailyCap()) draw(); };
       host.append(el('div', { className: 'card-actions cap-row' }, [
-        el('span', { className: 'muted', textContent: '我一天最多打' }), capInput,
-        el('span', { className: 'muted', textContent: '家' }), replan,
+        el('span', { className: 'muted', textContent: '主力名單一天最多打' }), capInput,
+        el('span', { className: 'muted', textContent: `家（加上新名單一天共 ${cap + quota} 家）` }), replan,
       ]));
-      const quota = newQuota();
-      const quotaInput = el('input', { type: 'number', min: '0', max: String(cap), value: String(quota), className: 'cap-input' });
+      const quotaInput = el('input', { type: 'number', min: '0', max: '500', value: String(quota), className: 'cap-input' });
       quotaInput.onchange = () => {
-        const n = Math.max(0, Math.min(cap, Math.round(Number(quotaInput.value) || 0)));
+        const n = Math.max(0, Math.min(500, Math.round(Number(quotaInput.value) || 0)));
         quotaInput.value = String(n);
         registryPref('new-quota', String(n));
         draw();
@@ -3009,17 +3026,20 @@
       const feedNow = el('button', { className: 'btn', type: 'button', textContent: '現在挑' });
       feedNow.onclick = async () => { feedNow.disabled = true; await dailyFeed({ force: true }); feedNow.disabled = false; draw(); };
       host.append(el('div', { className: 'card-actions cap-row' }, [
-        el('span', { className: 'muted', textContent: '其中留給完全新的名單' }), quotaInput,
-        el('span', { className: 'muted', textContent: `家（主力名單 ${Math.max(0, cap - quota)} 家）` }),
+        el('span', { className: 'muted', textContent: '完全新的名單一天' }), quotaInput,
+        el('span', { className: 'muted', textContent: '家（另外算，不佔主力的額度）' }),
       ]));
       host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人挑 ${quota} 家進名單（各五分之一）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
-      const over = days.filter((d) => (counts.get(d) || 0) > cap);
-      const extra = over.reduce((n, d) => n + ((counts.get(d) || 0) - cap), 0);
+      const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
+      const freshOf = (d) => freshCounts.get(d) || 0;
+      const over = days.filter((d) => mainOf(d) > cap || freshOf(d) > quota);
+      const extraMain = days.reduce((n, d) => n + Math.max(0, mainOf(d) - cap), 0);
+      const extraFresh = days.reduce((n, d) => n + Math.max(0, freshOf(d) - quota), 0);
       host.append(el('p', { className: `rule-verdict ${over.length ? 'is-fail' : 'is-ok'}` }, [
         el('strong', { textContent: over.length
-          ? `接下來 ${days.length} 個上班日有 ${over.length} 天超過上限，多出 ${extra} 家`
-          : `接下來 ${days.length} 個上班日都沒超過 ${cap} 家` }),
+          ? `接下來 ${days.length} 個上班日有 ${over.length} 天超過上限，多出 ${extraMain + extraFresh} 家（主力 ${extraMain}、新名單 ${extraFresh}）`
+          : `接下來 ${days.length} 個上班日主力都沒超過 ${cap} 家、新名單沒超過 ${quota} 家` }),
       ]));
       const notes = [
         `這 ${days.length} 天共 ${total} 家`,
@@ -3028,19 +3048,19 @@
       ].filter(Boolean);
       host.append(el('p', { className: 'muted', textContent: `${notes.join('；')}。點任一天可以只看那天的名單。` }));
 
-      const max = Math.max(cap, ...days.map((d) => counts.get(d) || 0), 1);
-      const freshCounts = freshLoad(days);
+      const max = Math.max(cap + quota, ...days.map((d) => counts.get(d) || 0), 1);
       const list = el('div', { className: 'day-load' });
       days.forEach((d, i) => {
         const n = counts.get(d) || 0;
-        const k = freshCounts.get(d) || 0;
-        const row = el('button', { className: `day-row${n > cap ? ' is-over' : ''}`, type: 'button' });
+        const k = freshOf(d);
+        const isOver = mainOf(d) > cap || k > quota;
+        const row = el('button', { className: `day-row${isOver ? ' is-over' : ''}`, type: 'button' });
         row.append(
           el('span', { className: 'day-when', textContent: `${ymdShort(d)}（${window.Holidays ? window.Holidays.weekLabel(d) : ''}）` }),
           el('span', { className: 'day-bar' }, [el('i', { style: `width:${Math.round((n / max) * 100)}%` })]),
-          el('span', { className: 'day-n', textContent: n ? `${n} 家${k ? `（新 ${k}）` : ''}` : '—' }),
+          el('span', { className: 'day-n', textContent: n ? `${n} 家${k ? `（主力 ${n - k}／新 ${k}）` : ''}` : '—' }),
         );
-        row.title = n > cap ? `${dateLabel(d)} 有 ${n} 家，超過上限 ${n - cap} 家` : `${dateLabel(d)} 有 ${n} 家`;
+        row.title = isOver ? `${dateLabel(d)} 主力 ${mainOf(d)} 家（上限 ${cap}）、新名單 ${k} 家（額度 ${quota}）` : `${dateLabel(d)} 有 ${n} 家`;
         row.onclick = () => {
           state.filters.due = '';
           state.filters.dueNone = false;
@@ -5725,7 +5745,7 @@ export default {
     'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
-    'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap',
+    'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
     'new-quota', 'daily-feed-on', 'daily-feed-auto']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
