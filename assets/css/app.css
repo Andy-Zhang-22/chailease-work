@@ -463,6 +463,7 @@ button, input, select { font: inherit; color: inherit; }
 .week-actions .btn-tiny { padding: 3px 8px; }
 .hot-btn.is-on { border-color: var(--danger); color: var(--danger); font-weight: 600; }
 .badge-hot { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+.badge-pin { border-color: var(--primary); color: var(--primary); font-weight: 600; }
 .meet-label { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .remind-bar { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; }
 .remind-bar.is-due { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
