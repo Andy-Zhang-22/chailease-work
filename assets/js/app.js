@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261001-232';
+  const APP_VERSION = '20261002-233';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -293,6 +293,12 @@
     const d = new Date(ts);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return iso === todayISO() ? timeLabel(ts) : `${dateLabel(iso)} ${timeLabel(ts)}`;
+  };
+  /** 提醒列那一欄用的短標籤：今天只有時間；別天是「10/5」換行「10:30」 */
+  const remindTimeLabel = (ts) => {
+    const d = new Date(ts);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return iso === todayISO() ? timeLabel(ts) : `${d.getMonth() + 1}/${d.getDate()}\n${timeLabel(ts)}`;
   };
 
   /*
@@ -699,7 +705,8 @@
     const list = el('div', { className: 'remind-list' });
     items.forEach(({ r, kind, due, mates = [] }) => {
       const row = el('div', { className: `remind-row ${due ? 'is-due' : ''} ${kind === 'date' ? 'is-today' : ''}` });
-      const time = el('b', { className: 'remind-time', textContent: kind === 'timed' ? whenLabel(r.remindAt) : '今天' });
+      // 排在別天的回撥：「2026/10/05 10:30」塞不進那一欄、會壓到名字，改成兩行「10/5」「10:30」
+      const time = el('b', { className: 'remind-time', textContent: kind === 'timed' ? remindTimeLabel(r.remindAt) : '今天' });
       const openBtn = el('button', { className: 'remind-open', type: 'button', title: mates.length ? `同一組關係企業：${mates.map((m) => m.r.company).join('、')}` : '' }, [
         el('span', { className: 'remind-name' }, [document.createTextNode(r.company), mates.length ? el('span', { className: 'remind-mates', textContent: `＋${mates.length} 家關係企業` }) : '']),
         el('span', { className: 'remind-meta', textContent: [r.remindNote, r.keyman].filter(Boolean).join('　') }),
