@@ -1,10 +1,21 @@
 {
- "generatedAt": "2026-10-03T03:30:00.000Z",
- "cities": ["新北市", "臺北市"],
+ "generatedAt": "2026-10-03T03:58:57.296Z",
+ "cities": [
+  "新北市",
+  "臺北市"
+ ],
  "years": 30,
- "taxFileDate": "",
- "total": 0,
- "byKind": {},
- "files": [{"path": "closed.csv", "rows": 0}],
- "note": "佔位：Actions「每月已停業名單」第一次跑完會換成真的資料"
+ "taxFileDate": "03-OCT-26",
+ "total": 565392,
+ "byKind": {
+  "稅籍非營業中": 522704,
+  "稅籍停業": 36619,
+  "健保投保單位註銷": 6069
+ },
+ "files": [
+  {
+   "path": "closed.csv",
+   "rows": 565392
+  }
+ ]
 }
