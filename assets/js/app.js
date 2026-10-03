@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-259';
+  const APP_VERSION = '20261003-260';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3285,9 +3285,14 @@
       if (!hosts.length && !sel) return;
       const base = baseFor(key);
       const tally = new Map();
+      // 有沒有機會：同老闆連結的關係企業算一家（整組共用，見 renderFilters）
+      const once = key === 'chance' ? new Set() : null;
       base.forEach((r) => {
         const v = FACET_VALUE[key](r);
-        (Array.isArray(v) ? v : [v]).forEach((x) => tally.set(x, (tally.get(x) || 0) + 1));
+        (Array.isArray(v) ? v : [v]).forEach((x) => {
+          if (once) { const who = `${x}|${r.group || r.id}`; if (once.has(who)) return; once.add(who); }
+          tally.set(x, (tally.get(x) || 0) + 1);
+        });
       });
       hosts.forEach((chip) => {
         const small = chip.querySelector('small');
@@ -3438,9 +3443,18 @@
     all.forEach((r) => { visitCounts[r.visitKind === 'yes' ? 0 : 1][1] += 1; });
     chips($('#fltVisit'), 'visit', visitCounts, state.filters.visit, (v) => window.Normalize.VISIT_LABEL[v]);
 
-    // 有沒有機會：固定「有機會 → 無機會 → 未判斷」，含 0 筆
+    // 有沒有機會：固定「有機會 → 無機會 → 未判斷」，含 0 筆。
+    // 同老闆連結的關係企業算一家（有沒有機會本來就是整組共用的），不然 3 家關係企業標一次有機會就算成 3 家，數字會讓人有錯覺
+    // （使用者：「這個標注裡，有幾間是關係企業不要重複計算，會有錯覺」）
     const chanceCounts = new Map(CHANCE_ORDER.map((k) => [k, 0]));
-    all.forEach((r) => { const k = r.chance || 'none'; chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1); });
+    const chanceSeen = new Set();
+    all.forEach((r) => {
+      const k = r.chance || 'none';
+      const who = `${k}|${r.group || r.id}`;
+      if (chanceSeen.has(who)) return;
+      chanceSeen.add(who);
+      chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1);
+    });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
     // 冷名單：固定兩顆，含 0 筆
     const coldCounts = [['cold', 0], ['ok', 0]];
