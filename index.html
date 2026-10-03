@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261003-248">
+<link rel="stylesheet" href="assets/css/app.css?v=20261003-249">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261003-248"></script>
+<script src="assets/js/lock.js?v=20261003-249"></script>
 </head>
 <body data-theme="auto">
 
@@ -82,6 +82,8 @@
 <!-- 分頁列只留三個：每天待的名單、找名單（七個來源收在第二排）、篩選。統計、規則搬到右上選單（使用者：分頁在版面上有點多） -->
 <nav class="tabs" id="tabs">
   <button class="tab is-active" data-tab="all">重點推廣名單 <span class="pill" id="countAll">0</span></button>
+  <!-- 行事曆：哪天要拜訪誰、打給誰（下次聯絡日攤開來看）；數字是今天還沒做的家數 -->
+  <button class="tab" data-tab="cal">行事曆 <span class="pill" id="countCal" hidden></span></button>
   <button class="tab" data-tab="sources">找名單</button>
   <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
 </nav>
@@ -194,6 +196,8 @@
       <button id="btnMore" class="btn btn-block" hidden>載入更多</button>
     </div>
 
+    <!-- 行事曆：畫面由 app.js renderCal 長出來 -->
+    <div id="paneCal" class="cal" hidden></div>
     <div id="paneStats" class="stats" hidden></div>
     <div id="paneRules" class="rules" hidden></div>
     <!-- 新公司：經濟部每月登記清冊，畫面由 leads.js 長出來；客戶名單的邏輯完全不碰 -->
@@ -326,25 +330,25 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261003-248"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261003-248"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261003-249"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261003-249"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261003-248"></script>
-<script src="assets/js/normalize.js?v=20261003-248"></script>
-<script src="assets/js/holidays.js?v=20261003-248"></script>
-<script src="assets/js/registry.js?v=20261003-248"></script>
-<script src="assets/js/ocr.js?v=20261003-248"></script>
-<script src="assets/js/rules.js?v=20261003-248"></script>
-<script src="assets/js/store.js?v=20261003-248"></script>
-<script src="assets/js/sync.js?v=20261003-248"></script>
-<script src="assets/js/leads.js?v=20261003-248"></script>
-<script src="assets/js/chattel.js?v=20261003-248"></script>
-<script src="assets/js/listed.js?v=20261003-248"></script>
-<script src="assets/js/biz.js?v=20261003-248"></script>
-<script src="assets/js/trade.js?v=20261003-248"></script>
-<script src="assets/js/nhi.js?v=20261003-248"></script>
-<script src="assets/js/einv.js?v=20261003-248"></script>
-<script src="assets/js/closed.js?v=20261003-248"></script>
-<script src="assets/js/app.js?v=20261003-248"></script>
+<script src="assets/js/pdf-table.js?v=20261003-249"></script>
+<script src="assets/js/normalize.js?v=20261003-249"></script>
+<script src="assets/js/holidays.js?v=20261003-249"></script>
+<script src="assets/js/registry.js?v=20261003-249"></script>
+<script src="assets/js/ocr.js?v=20261003-249"></script>
+<script src="assets/js/rules.js?v=20261003-249"></script>
+<script src="assets/js/store.js?v=20261003-249"></script>
+<script src="assets/js/sync.js?v=20261003-249"></script>
+<script src="assets/js/leads.js?v=20261003-249"></script>
+<script src="assets/js/chattel.js?v=20261003-249"></script>
+<script src="assets/js/listed.js?v=20261003-249"></script>
+<script src="assets/js/biz.js?v=20261003-249"></script>
+<script src="assets/js/trade.js?v=20261003-249"></script>
+<script src="assets/js/nhi.js?v=20261003-249"></script>
+<script src="assets/js/einv.js?v=20261003-249"></script>
+<script src="assets/js/closed.js?v=20261003-249"></script>
+<script src="assets/js/app.js?v=20261003-249"></script>
 </body>
 </html>
