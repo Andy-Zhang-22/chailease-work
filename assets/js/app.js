@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-250';
+  const APP_VERSION = '20261003-251';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -853,7 +853,7 @@
     /*
      * 有沒有實際拜訪過：跟往來情形一樣，網站上記的通話也算。
      *
-     * 用「記錄這次拜訪」存的紀錄是明講的（kind='visit'），先看它；沒有才回頭從字面猜。
+     * 以前用「記錄這次拜訪」表單存的紀錄是明講的（kind='visit'，表單已拿掉、舊紀錄還在），先看它；沒有才回頭從字面猜。
      * 字面判讀會漏（寫「到廠看了設備」就抓不到），明講的不該再被猜錯。
      */
     const visitLog = bundle.logs.find((l) => l.kind === 'visit');
@@ -4107,8 +4107,8 @@
   /*
    * 行事曆（使用者：「能在我的電推系統內內建一個行事曆嗎 … 我這樣才能看到我哪天要拜訪誰」）：
    * 整月一格一天，每格列那天要聯絡的客戶——下次聯絡日落在那天的（🚗 要拜訪、📞 要打電話），
-   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，看最近一則紀錄有沒有明講：拜訪表單選了
-   * 「下一步：再約拜訪」、或寫了「約到拜訪」：是就 🚗，其他一律 📞（不放寬猜字面，免得提到「拜訪」就被當成要去）。
+   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，看最近一則紀錄有沒有明講：通話紀錄勾了
+   * 「約到拜訪」、或寫了「約到拜訪」：是就 🚗，其他一律 📞（不放寬猜字面，免得提到「拜訪」就被當成要去）。
    * 點一天，下面列那天的行程：拜訪的同區排一起（同一條路相鄰），每家帶電話、導航、記拜訪；
    * 電話的帶上次談的重點。日期還是在詳細頁改，行事曆只是把現有的下次聯絡日攤開來看，不另存一套，
    * 兩邊不會打架。週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週行程變成文字貼 LINE。
@@ -4117,7 +4117,7 @@
   const cal = { month: '', sel: '' };
   const calYm = (iso) => String(iso || '').slice(0, 7);   // yyyy-mm（既有的 monthOf 回的是整個月的頭尾）
   const calMd = (iso) => String(iso || '').slice(5).replace('-', '/');
-  // 只認明講的：拜訪表單「下一步」選了「再約拜訪」，或紀錄裡寫「約到拜訪」「約好拜訪」「約了拜訪」「約拜訪」（使用者：「我有約到拜訪會特別說」）。
+  // 只認明講的：通話紀錄勾了「約到拜訪」（meeting）、以前拜訪表單「下一步」選的「再約拜訪」，或紀錄裡寫「約到拜訪」「約好拜訪」「約了拜訪」「約拜訪」（使用者：「我有約到拜訪會特別說」）。
   // 不再放寬到「約…（幾個字）…拜訪」：「跟之前拜訪過的…」這種也會中（使用者：「為什麼我沒排這間拜訪卻有他在上面？」）
   const VISIT_NEXT_RE = /下一步：再約拜訪|約(到|好|了|定)?拜訪/;
   const stepOf = (text) => { const m = String(text || '').match(/下一步：([^\n]+)/); return m ? m[1].trim() : ''; };
@@ -4150,7 +4150,7 @@
       const noteText = text.replace(/下一步：[^\n]*/g, '').replace(/\s+/g, ' ').trim();   // 下一步另外做成籤，不重複
       const note = noteText ? `上次 ${calMd((last && last.date) || '')}：${noteText.slice(0, 40)}` : '';
       const step = stepOf(text);
-      const kind = VISIT_NEXT_RE.test(text) ? 'visit' : 'call';
+      const kind = (last && last.meeting) || VISIT_NEXT_RE.test(text) ? 'visit' : 'call';
       const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
       if (v.nextDate) {
         const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
@@ -4237,10 +4237,7 @@
       : done.length ? `做完 ${done.length} 家` : off ? `${off}，沒排` : '沒有排';
     box.append(el('h3', { textContent: `${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）${what}` }));
     const openBtn = (v, label) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: label || '打開', onclick: () => openDetail(v.id) });
-    const visitBtn = (v) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '記拜訪', onclick: () => {
-      openDetail(v.id);
-      setTimeout(() => { const d = [...document.querySelectorAll('#drawerBody details')].find((x) => /記錄這次拜訪/.test(x.textContent)); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 60);
-    } });
+    const visitBtn = (v) => logBtn(v);
     const addrOf = (v) => (v.addressActual || v.address || '');
     const shortAddr = (v) => addrOf(v).replace(/^.{2,3}[市縣]/, '');
     const nameBtn = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) });
@@ -4335,6 +4332,8 @@
       .filter((x) => x.tier >= 0)
       .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.tier - b.tier || (b.v.lastDate || '').localeCompare(a.v.lastDate || '') || a.v.company.localeCompare(b.v.company, 'zh-Hant'));
   }
+  /** 「記錄」：開那家的詳細頁、捲到「記錄這通電話」、游標放進內容框（拜訪回來也記在這裡，拜訪表單拿掉了） */
+  const logBtn = (v) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '記錄', title: '打開這家，直接記這通電話／這次拜訪', onclick: () => openDetail(v.id, { log: true }) });
   const navLink = (from, to) => el('a', { className: 'btn btn-tiny', href: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from || '')}&destination=${encodeURIComponent(to || '')}&travelmode=driving`, target: '_blank', rel: 'noopener', textContent: '導航', title: '從現在這家出發的 Google 地圖路線' });
   function nearbySection(r) {
     const origin = r.addressActual || r.address || '';
@@ -4345,10 +4344,7 @@
     const host = el('div');
     if (!list.length) host.append(el('p', { className: 'muted', textContent: `名單上沒有其他在${r.district}、可以打的客戶。` }));
     list.forEach(({ v, tier, sameRoad }) => {
-      const visit = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '記拜訪', onclick: () => {
-        openDetail(v.id);
-        setTimeout(() => { const d = [...document.querySelectorAll('#drawerBody details')].find((x) => /記錄這次拜訪/.test(x.textContent)); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 60);
-      } });
+      const visit = logBtn(v);
       host.append(el('div', { className: 'nearby-row' }, [
         el('button', { className: 'link-btn nearby-name', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) }),
         sameRoad ? el('span', { className: 'badge badge-up', textContent: '同一條路' }) : '',
@@ -4706,12 +4702,12 @@
     outcomeSel.value = r.outcome === 'new' ? 'noanswer' : r.outcome;
     const nextInput = el('input', { type: 'date', value: r.nextDate || '' });
     /*
-     * 約到見面了：「業務的一週」裡週二只做一件事——約見面。勾了就記在這則紀錄上
-     * （meeting、meetingDate＝下次聯絡日），本週節奏那條會算「這週約到幾個」、
-     * 週三列「今天要去拜訪誰」。不勾就跟以前一模一樣。
+     * 約到拜訪：勾了就記在這則紀錄上（meeting、meetingDate＝下次聯絡日），行事曆那天標 🚗、列在拜訪組，
+     * 附近可以順訪的算「約過見面」。這是判斷拜訪的唯一正式入口（使用者：「紀錄這次拜訪那個功能我用不到，
+     * 請刪掉並且將判斷拜訪的能力在訪談紀錄內」）；內容裡寫「約到拜訪」也認得，當備援。不勾就跟以前一模一樣。
      */
     const meet = el('input', { type: 'checkbox', className: 'meet-check' });
-    const meetLabel = el('label', { className: 'meet-label', title: '這通約到了見面：週三的拜訪名單會列這家，本週節奏會算進「約到見面」' }, [meet, document.createTextNode(' 約到見面')]);
+    const meetLabel = el('label', { className: 'meet-label', title: '這通約到了拜訪：下次聯絡日那天行事曆標 🚗、列在拜訪組' }, [meet, document.createTextNode(' 🚗 約到拜訪')]);
     /*
      * 固定這天：使用者「打完這通電話，我確定一定要下週二再撥，但我怕會因為每天上線通數洗掉」。
      * 勾了就記 pinDate：照上限重排、「今天的 N 家挪到下個上班日」、週五「未跟完的移到下週」、關係企業日期連動
@@ -4922,10 +4918,6 @@
     body.append(section);
     const logSec = section; const logMemo = memo;
 
-    // 拜訪回來記一筆：要記的欄位跟電話不一樣（見到誰、資金需求、下一步），另開一段
-    const visitSec = visitSection(r, members);
-    body.append(visitSec);
-
     // 回撥提醒放在記通話的下面、往來情形的上面：掛了電話先記錄、再設提醒
     body.append(reminderSection(r));
 
@@ -5079,233 +5071,17 @@
 
     $('#drawer').hidden = false;
     document.body.style.overflow = 'hidden';
-    // 從拜訪準備頁按「記錄拜訪結果」進來的：把拜訪表單攤開、捲到眼前
-    if (opts && opts.visit) {
-      visitSec.open = true;
-      requestAnimationFrame(() => visitSec.scrollIntoView({ block: 'start', behavior: 'smooth' }));
-    }
-    // 打完電話切回來：捲到「記錄這通電話」、游標放進去
-    if (opts && opts.log) {
+    // 打完電話切回來、拜訪準備頁按「記錄拜訪結果」、行事曆／附近順訪按「記錄」：捲到「記錄這通電話」、游標放進去
+    // （拜訪表單拿掉了，拜訪也記在這裡）
+    if (opts && (opts.log || opts.visit)) {
       requestAnimationFrame(() => { logSec.scrollIntoView({ block: 'start', behavior: 'smooth' }); logMemo.focus(); });
     }
   }
 
-  /* ---------------- 拜訪：出門前一頁紙、回來記一筆 ---------------- */
+  /* ---------------- 拜訪：出門前一頁紙 ---------------- */
 
-  const NEED_OPTIONS = ['週轉金', '購置設備', '擴廠／購置不動產', '備料／存貨', '代償／轉貸', '暫無需求'];
-  const NEXT_OPTIONS = ['送資料評估', '再約拜訪', '電話追蹤', '先不追'];
-  // 拜訪表單的草稿（每家各一份），理由跟通話紀錄的草稿一樣：localStorage 失效時靠這個撐過重畫
-  const visitDrafts = new Map();
-
-  /**
-   * 拜訪回來記一筆。
-   *
-   * 跟「記錄這通電話」分開：電話記的是講了什麼、下次何時打；拜訪要記的是見到誰、
-   * 資金需求落在哪、下一步是送件還是再約。塞進同一個框只會又變成一坨字，
-   * 之後要找「上次拜訪誰說要買設備」還是得整篇讀。
-   *
-   * 存成一則 kind='visit' 的紀錄：時間軸、匯出、關係企業互通都跟通話一樣走；
-   * 「有拜訪」的判讀直接認這個標記，不用再從字面猜。內容開頭固定寫「實地拜訪」，
-   * 匯出 Excel 再匯回來（標記會掉）時，字面判讀也還認得出這是一次拜訪。
-   */
-  function visitSection(r, members) {
-    const sec = el('details', { className: 'detail-section visit-section' });
-    sec.append(el('summary', {}, [el('h3', { textContent: '記錄這次拜訪' })]));
-    const form = el('div', { className: 'logform visitform' });
-    const whenInput = el('input', { type: 'date', value: todayISO() });
-    // 見到誰：KEYMAN 與負責人先列進候選，多半就是其中一位
-    const who = el('input', { type: 'text', placeholder: '見到誰（例如：財務長 王小姐）', autocomplete: 'off' });
-    const whoList = el('datalist', { id: `visit-who-${r.id}` });
-    [...new Set([r.keyman, r.owner].filter(Boolean))].forEach((n) => whoList.append(el('option', { value: n })));
-    who.setAttribute('list', whoList.id);   // input.list 是唯讀屬性，只能走 setAttribute
-    const memo = el('textarea', { placeholder: '談了什麼？（現場看到的、對方在意的、答應要給的資料…）' });
-    const needs = new Set();
-    let next = '';
-    let chance = '';
-    let writeDraft = () => {};
-    const chipRow = (options, isOn, onPick) => {
-      const box = el('div', { className: 'chips' });
-      const refresh = () => [...box.children].forEach((c) => c.setAttribute('aria-pressed', String(isOn(c.textContent))));
-      options.forEach((name) => {
-        const chip = el('button', { className: 'chip', type: 'button', textContent: name });
-        chip.setAttribute('aria-pressed', 'false');
-        chip.onclick = () => { onPick(name); refresh(); writeDraft(); };
-        box.append(chip);
-      });
-      box.refresh = refresh;
-      return box;
-    };
-    const needBox = chipRow(NEED_OPTIONS, (n) => needs.has(n), (n) => {
-      // 「暫無需求」跟其他選項互斥
-      if (n === '暫無需求') { if (needs.has(n)) needs.clear(); else { needs.clear(); needs.add(n); } return; }
-      needs.delete('暫無需求');
-      if (needs.has(n)) needs.delete(n); else needs.add(n);
-    });
-    const nextBox = chipRow(NEXT_OPTIONS, (n) => next === n, (n) => { next = next === n ? '' : n; });
-    const chanceBox = chipRow(['有機會', '無機會'], (n) => chance === n, (n) => { chance = chance === n ? '' : n; });
-    const nextInput = el('input', { type: 'date', value: r.nextDate || '' });
-    const pin = el('input', { type: 'checkbox', className: 'pin-check', checked: !!r.pinDate });
-    const pinLabel = el('label', { className: 'meet-label', title: '這天一定要打：照上限重排、挪到下個上班日、移到下週都不會動到這家' }, [pin, document.createTextNode(' 📌 固定這天')]);
-
-    const DRAFT_KEY = `visit-draft:${r.id}`;
-    const snapshot = () => ({ when: whenInput.value, who: who.value, text: memo.value, needs: [...needs], next, chance, nextDate: nextInput.value, at: Date.now() });
-    const isBlank = (d) => !d.who.trim() && !d.text.trim() && !d.needs.length && !d.next && !d.chance && d.nextDate === (r.nextDate || '');
-    const clearDraft = () => {
-      visitDrafts.delete(r.id);
-      try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* 無痕模式 */ }
-    };
-    writeDraft = () => {
-      const d = snapshot();
-      if (isBlank(d)) { clearDraft(); return; }
-      visitDrafts.set(r.id, d);
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch (e) { /* 無痕模式 */ }
-    };
-    const readDraft = () => {
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY);
-        if (raw) return JSON.parse(raw);
-      } catch (e) { /* 無痕模式 */ }
-      return visitDrafts.get(r.id) || null;
-    };
-    const draft = readDraft();
-    if (draft) {
-      if (draft.when) whenInput.value = draft.when;
-      who.value = draft.who || '';
-      memo.value = draft.text || '';
-      (draft.needs || []).forEach((n) => needs.add(n));
-      next = draft.next || '';
-      chance = draft.chance || '';
-      if (draft.nextDate) nextInput.value = draft.nextDate;
-      needBox.refresh(); nextBox.refresh(); chanceBox.refresh();
-      sec.open = true;   // 寫到一半的要攤開給人看，收著會以為不見了
-    }
-    [whenInput, who, memo, nextInput].forEach((i) => i.addEventListener('input', writeDraft));
-    nextInput.addEventListener('change', writeDraft);
-
-    const quick = el('div', { className: 'card-actions' });
-    [['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1']].forEach(([label, days]) => {
-      const b = el('button', { className: 'btn btn-tiny', type: 'button', textContent: label });
-      b.onclick = () => {
-        const want = typeof days === 'string' ? addMonths(todayISO(), Number(days.slice(1))) : addDays(todayISO(), days);
-        const got = window.Holidays ? window.Holidays.nextWorkday(want) : { iso: want, moved: false };
-        nextInput.value = got.iso;
-        nextInput.dispatchEvent(new Event('change'));
-        if (got.moved) toast(`${dateLabel(got.from)} 是${got.reason}，順延到 ${dateLabel(got.iso)}（${window.Holidays.weekLabel(got.iso)}）`);
-      };
-      quick.append(b);
-    });
-    const saveErr = el('p', { className: 'save-err', hidden: true });
-    const save = el('button', { className: 'btn btn-primary', type: 'button', textContent: '儲存拜訪紀錄' });
-    save.onclick = async () => {
-      saveErr.hidden = true;
-      const whoText = who.value.trim();
-      const memoText = memo.value.trim();
-      if (!whoText && !memoText && !needs.size && !next) { toast('至少填一項：見到誰、談了什麼、資金需求或下一步'); return; }
-      const visitDate = whenInput.value || todayISO();
-      const today = todayISO();
-      const lines = [`實地拜訪${whoText ? `，見到 ${whoText}` : ''}。${memoText}`.replace(/\s+$/, '')];
-      if (needs.size) lines.push(`資金需求：${NEED_OPTIONS.filter((n) => needs.has(n)).join('、')}`);
-      if (next) lines.push(`下一步：${next}`);
-      const text = lines.join('\n');
-      // 日期欄沒填但內容寫了「約10/20再談」，就照內容補；跟通話紀錄同一套
-      let picked = nextInput.value;
-      let auto = null;
-      if (!picked && memoText) {
-        auto = window.Normalize.findFollowUp(memoText, today);
-        if (auto) {
-          const got = window.Holidays ? window.Holidays.nextWorkday(auto.iso) : { iso: auto.iso, moved: false };
-          auto = { ...auto, iso: got.iso, movedFrom: got.moved ? got.from : '', reason: got.reason };
-          picked = auto.iso;
-        }
-      }
-      save.disabled = true;
-      const wasLabel = save.textContent;
-      save.textContent = '儲存中…';
-      const flushNote = remindNoteFlush.get(r.id);
-      if (flushNote) { try { await flushNote(); } catch (e) { console.error('備註寫入失敗', e); } }
-      const fail = (err, what) => {
-        console.error(what, err);
-        const why = err && err.message ? err.message : String(err);
-        saveErr.textContent = `${what}：${why}。你填的內容還留著，直接再按一次「儲存拜訪紀錄」就好。`;
-        saveErr.hidden = false;
-        toast(`${what}：${why}`);
-      };
-      const createdAt = Date.now();
-      try {
-        await window.Store.addLog({ recordId: r.id, date: visitDate, text, outcome: 'contacted', kind: 'visit', createdAt });
-        state.logs = await window.Store.allLogs();
-        if (!state.logs.some((l) => l.recordId === r.id && l.createdAt === createdAt)) {
-          throw new Error('寫得進去卻讀不回來');
-        }
-      } catch (err) {
-        fail(err, '拜訪紀錄存不進去');
-        save.disabled = false; save.textContent = wasLabel;
-        return;
-      }
-      clearDraft();
-      const patch = { outcome: 'contacted', nextDate: picked || null, pinDate: !!(pin.checked && picked) };
-      // 補記幾天前的拜訪時，不能把最近聯絡日往回拉
-      if (!r.lastDate || visitDate >= r.lastDate) patch.lastDate = visitDate;
-      if (chance) { patch.chance = chance === '有機會' ? 'yes' : 'no'; patch.chanceAt = Date.now(); }
-      try {
-        await saveState(r.id, patch);
-      } catch (err) {
-        fail(err, '紀錄已存好，但下次聯絡日與狀態沒寫進去');
-        save.disabled = false; save.textContent = wasLabel;
-        render();
-        return;
-      }
-      save.disabled = false; save.textContent = wasLabel;
-      const extra = members.length ? `（同老闆的 ${members.length} 家一起看得到）` : '';
-      let msg = `已儲存拜訪紀錄${extra}`;
-      if (auto) msg += `，並依內容把下次聯絡日設為 ${dateLabel(auto.iso)}${auto.movedFrom ? `（${dateLabel(auto.movedFrom)} 是${auto.reason}，順延了）` : ''}`;
-      else if (!picked && next && next !== '先不追') msg += '。還沒排下次聯絡日，這家不會出現在今日待打';
-      toast(msg);
-      render();
-      openDetail(r.id);
-      scheduleSync();
-    };
-    /*
-     * 會後摘要：「見完 30 分鐘內寫會後摘要發客戶」（業務的一週・週三）。
-     * 照表單現在填的內容組一段可以直接貼到 LINE 的文字：見到誰、談了什麼、資金需求、下一步、哪天再聯絡。
-     * 不另外存，拜訪紀錄本身就是底稿；存紀錄前後都能按。
-     */
-    const summaryBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製會後摘要給客戶', title: '照上面填的內容組一段文字，貼到 LINE 給客戶' });
-    summaryBtn.onclick = async () => {
-      const whoText = who.value.trim();
-      const memoText = memo.value.trim();
-      if (!memoText && !needs.size && !next) { toast('先填談了什麼、資金需求或下一步，才有東西可以摘要'); return; }
-      const lines = [`${whoText || r.company}${whoText ? ' ' : ''}您好，謝謝今天撥空。`];
-      if (memoText) lines.push(`今天談到：${memoText}`);
-      if (needs.size) lines.push(`資金需求：${NEED_OPTIONS.filter((n) => needs.has(n)).join('、')}`);
-      if (next && next !== '先不追') lines.push(`下一步：${next}${nextInput.value ? `，${dateLabel(nextInput.value)} 再跟您聯繫` : ''}`);
-      else if (nextInput.value) lines.push(`${dateLabel(nextInput.value)} 再跟您聯繫`);
-      lines.push('有任何問題隨時找我。');
-      const ok = await copyText(lines.join('\n'));
-      toast(ok ? '會後摘要已複製，貼到 LINE 給客戶' : '這個瀏覽器不讓網頁複製，請長按內容手動複製');
-    };
-    const field = (label, control) => el('div', { className: 'visit-field' }, [el('span', { className: 'muted', textContent: label }), control]);
-    form.append(
-      el('div', { className: 'row' }, [
-        el('span', { className: 'muted', textContent: '拜訪日期' }), withDateHint(whenInput),
-        el('span', { className: 'muted', textContent: '見到' }), who, whoList,
-      ]),
-      memo,
-      field('資金需求', needBox),
-      field('下一步', nextBox),
-      field('有沒有機會', chanceBox),
-      saveErr,
-      el('div', { className: 'row' }, [
-        el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), pinLabel, save, summaryBtn,
-      ]),
-      quick,
-    );
-    if (members.length) {
-      form.append(el('p', { className: 'muted apply-group', textContent: `這次拜訪同老闆的 ${members.length} 家也會一起看到，日期與狀態一起連動。` }));
-    }
-    sec.append(form);
-    return sec;
-  }
+  /* 「記錄這次拜訪」表單拿掉了（使用者：「紀錄這次拜訪那個功能我用不到，請刪掉」）：拜訪一律記在「記錄這通電話」，
+   * 約到拜訪勾那裡的「約到拜訪」。以前存的 kind='visit' 紀錄照舊顯示（時間軸標「我的拜訪」、算已拜訪）。 */
 
   /**
    * 這次要問什麼：從名單與訪談內容推出來的提問清單。
