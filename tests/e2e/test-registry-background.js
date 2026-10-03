@@ -17,7 +17,7 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9193/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-proxy-url','https://x.workers.dev/'); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-proxy-url','https://x.workers.dev/'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
 
  await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');

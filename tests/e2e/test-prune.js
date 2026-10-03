@@ -19,7 +19,7 @@ const SEED=[
  const ctx=await br.newContext({acceptDownloads:true}); const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg, true);
  await pg.goto('http://localhost:9487/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); await window.Store.setState({recordId:'D',outcome:'blocked',updatedAt:1}); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); await window.Store.setState({recordId:'D',outcome:'blocked',updatedAt:1}); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  // 打開選單裡的整理
  await pg.evaluate(()=>document.querySelector('[data-act="prune-unscheduled"]').click()); await pg.waitForSelector('#pruneGo'); await pg.waitForTimeout(200);

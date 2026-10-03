@@ -16,7 +16,7 @@ const mk=(id,company)=>({id,source:'A.csv',company,aliases:[],taxId:'',grade:'',
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1100,height:1000}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9493/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); },[mk('1','甲一有限公司'),mk('2','乙二有限公司'),mk('3','丙三有限公司'),mk('4','丁四有限公司')]);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); },[mk('1','甲一有限公司'),mk('2','乙二有限公司'),mk('3','丙三有限公司'),mk('4','丁四有限公司')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1200);
  const card=(name)=>pg.locator('#cards .card',{hasText:name}).first();
  chk(await pg.locator('.card-quick').count()===0, '卡片上沒有一鍵通話結果（使用者：沒幫助，拿掉）');

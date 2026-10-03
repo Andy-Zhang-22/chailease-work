@@ -14,7 +14,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9206/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords([r]); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },rec);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords([r]); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },rec);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 

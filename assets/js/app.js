@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-261';
+  const APP_VERSION = '20261003-262';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2566,6 +2566,9 @@
    * 算到下一個上班日——那天本來就打不了電話，列在那裡只會讓當天看起來是空的。
    * 排在視野之外的不算，那已經不是「短期內太多」的問題。
    */
+  /** 最近一則通話紀錄勾了「約到拜訪」、約的就是現在的下次聯絡日（跟行事曆同一條規則）：重排不能動它 */
+  const visitBooked = (v) => { const last = latestLog(v.id); return !!(last && last.meeting && last.meetingDate && last.meetingDate === v.nextDate); };
+
   function bucketByWorkday(days) {
     const today = todayISO();
     const at = (iso) => {
@@ -2586,8 +2589,8 @@
       if (i < 0) { beyond += 1; return; }
       const day = days[i];
       const fresh = isFreshLead(v);
-      // 已經跟客戶約好回撥時間的、使用者固定的日期不動，但要算進那天的額度裡
-      if (v.remindAt || v.pinDate) { fixed.set(day, (fixed.get(day) || 0) + 1); if (fresh) fixedFresh.set(day, (fixedFresh.get(day) || 0) + 1); return; }
+      // 已經跟客戶約好回撥時間的、使用者固定的日期、約到拜訪的那天不動，但要算進那天的額度裡
+      if (v.remindAt || v.pinDate || visitBooked(v)) { fixed.set(day, (fixed.get(day) || 0) + 1); if (fresh) fixedFresh.set(day, (fixedFresh.get(day) || 0) + 1); return; }
       movable.push({ v, from: v.nextDate, day, pick: scorePick(v), fresh });
     });
     return { movable, fixed, fixedFresh, overdue, beyond };
@@ -2676,6 +2679,36 @@
     });
     return { moves, days, counts, leftover: carryMain.length + carryFresh.length, total: movable.length, overdue };
   }
+
+  /*
+   * 每天開網站時自動照上限重排（使用者：「為什麼這個還是超過主力名單的限制？」→ 選「每天開網站時自動重排」）。
+   * 上限只在按「照上限重排」那一刻才排，之後逾期的、自己填的日期、行事曆排的都會疊上去。所以每個上班日第一次
+   * 打開網站（新名單挑完之後）跑一次 planDailyCap：哪天超過，就把最不急的往後推。固定的、約好回撥的、約到拜訪的不動；
+   * 只會往後、不會往前。一天只跑一次（auto-rebalance-on，跟著同步，手機電腦不會各跑一次）；選單「復原剛才的重排」可以還原。
+   * 每天打得完幾家的畫面可以關掉（auto-rebalance＝'0'）。
+   */
+  const autoRebalanceOn = () => registryPref('auto-rebalance') !== '0';
+  async function autoRebalance() {
+    if (!autoRebalanceOn() || !state.records.length) return 0;
+    const today = todayISO();
+    if (registryPref('auto-rebalance-on') === today) return 0;
+    registryPref('auto-rebalance-on', today);
+    const plan = planDailyCap(mainCap(), newQuota());
+    if (!plan.moves.length) return 0;
+    const undo = [];
+    for (const m of plan.moves) {
+      try { await saveState(m.id, { nextDate: m.to }); undo.push({ id: m.id, nextDate: m.from }); } catch (err) { console.error('自動重排失敗', err); break; }
+    }
+    lastSpread = undo.length ? { items: undo, at: Date.now() } : null;
+    const undoBtn = $('#menu') && $('#menu').querySelector('[data-act="spread-undo"]');
+    if (undoBtn) undoBtn.hidden = !lastSpread;
+    await reload();
+    render();
+    scheduleSync();
+    toast(`有幾天超過上限（主力 ${mainCap()}／新名單 ${newQuota()}），已自動把 ${undo.length} 家最不急的往後挪；不要的話選單按「復原剛才的重排」`);
+    return undo.length;
+  }
+  window.autoRebalance = autoRebalance;   // 測試用
 
   async function applyDailyCap() {
     const cm = mainCap(); const cf = newQuota();
@@ -3075,6 +3108,9 @@
         el('span', { className: 'muted', textContent: '主力名單一天最多打' }), capInput,
         el('span', { className: 'muted', textContent: `家（加上新名單一天共 ${cap + quota} 家）` }), replan,
       ]));
+      const autoReb = el('input', { type: 'checkbox', className: 'auto-rebalance', checked: autoRebalanceOn() });
+      autoReb.onchange = () => { registryPref('auto-rebalance', autoReb.checked ? '' : '0'); };
+      host.append(el('label', { className: 'cap-auto' }, [autoReb, ' 每天第一次開網站時自動照上限重排：哪天超過，就把最不急的往後推（📌 固定的、約好回撥的、🚗 約到拜訪的不動；只往後不往前；選單「復原剛才的重排」可以還原）']));
       const quotaInput = el('input', { type: 'number', min: '0', max: '500', value: String(quota), className: 'cap-input' });
       quotaInput.onchange = () => {
         const n = Math.max(0, Math.min(500, Math.round(Number(quotaInput.value) || 0)));
@@ -6108,7 +6144,9 @@ export default {
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
-    'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares']);
+    'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
+    // 每天自動照上限重排：開關、今天跑過了沒
+    'auto-rebalance', 'auto-rebalance-on']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
   const registryAutoOn = () => registryPref('registry-auto') !== '0';
   const registryPref = (key, value) => {
@@ -7998,12 +8036,12 @@ export default {
     if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
-      runSync({ quiet: true }).then(() => dailyFeed()).catch(() => dailyFeed());
+      runSync({ quiet: true }).then(() => dailyFeed()).catch(() => dailyFeed()).then(() => autoRebalance()).catch(console.error);
     } else {
-      dailyFeed().catch(console.error);
+      dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error);
     }
-    // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）
-    setInterval(() => { dailyFeed().catch(console.error); }, 60000);
+    // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）；挑完再照上限重排（一天一次）
+    setInterval(() => { dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error); }, 60000);
     /*
      * 沒人接住的失敗至少要讓使用者看到。
      *

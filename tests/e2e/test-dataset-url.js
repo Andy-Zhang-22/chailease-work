@@ -28,7 +28,7 @@ const SEED=[{id:'D1',source:'名單.pdf',company:'甲工程有限公司',aliases
  await pg.route('**/data.gcis.nat.gov.tw/od/data/api/CORRECT-ID**',(r)=>
    r.fulfill({status:200,contentType:'application/json',body:JSON.stringify([ROW])}));
 
- await pg.goto('http://localhost:9031/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}});
+ await pg.goto('http://localhost:9031/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}});
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900);

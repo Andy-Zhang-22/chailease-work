@@ -30,7 +30,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk(t.沒資料的年份===false, '沒有行事曆資料的年份會講實話');
 
  // UI：把「今天」當成中秋前一天（9/24），按「明天」要跳到 9/29
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords([r]); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },rec);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords([r]); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },rec);
  await pg.clock.install({ time: new Date('2026-09-24T10:00:00') });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.clock.resume(); await pg.waitForTimeout(600);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);

@@ -17,7 +17,7 @@ const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,g
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9514/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async({r,now})=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.removeItem('closed-undo-done');
+ await pg.evaluate(async({r,now})=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.removeItem('closed-undo-done');
    await window.Store.setState({recordId:'1',group:'g1',groupIds:['1','2'],groupAt:now,updatedAt:now});
    // 証宇：以前打過一通、然後被「已停業整批標禁止推廣」（那時下次聯絡日被清掉）
    await window.Store.addLog({recordId:'2',date:'2026-09-20',text:'有興趣，等報價，10/20 再聯絡',outcome:'contacted',createdAt:now-9e8});

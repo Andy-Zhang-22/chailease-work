@@ -13,7 +13,7 @@ const SEED=[mk(1,'甲公司','2024/01/05'),mk(2,'乙公司','2026/04/02'),mk(3,'
  const ctx=await br.newContext({viewport:{width:1280,height:1000}}); const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9202/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 

@@ -18,7 +18,7 @@ const REG={ '11111111':{Business_Accounting_NO:'11111111',Company_Name:'甲公�
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9069/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ localStorage.setItem('daily-feed-auto','0'); await window.Store.saveRecords(r); localStorage.setItem('registry-auto','1'); localStorage.setItem('registry-proxy-url','https://x.workers.dev/'); },SEED);
+ await pg.evaluate(async(r)=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); await window.Store.saveRecords(r); localStorage.setItem('registry-auto','1'); localStorage.setItem('registry-proxy-url','https://x.workers.dev/'); },SEED);
  calls=0; await pg.reload(); await pg.waitForSelector('#btnImport');
  await pg.waitForFunction(()=>/商工登記自動更新/.test(document.querySelector('#toast')?.textContent||''),{timeout:30000}).catch(()=>{});
  const toast=await pg.textContent('#toast');

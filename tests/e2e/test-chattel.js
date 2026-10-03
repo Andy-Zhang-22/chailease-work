@@ -39,7 +39,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
 
  await pg.goto('http://localhost:9482/index.html'); await pg.waitForSelector('#dropzone');
  await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
 
  // 分頁在，切過去會抓清冊

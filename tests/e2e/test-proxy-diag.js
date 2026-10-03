@@ -22,7 +22,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
    return route.fulfill({status:200,contentType:'application/json',body:'[]'});
  });
 
- await pg.goto('http://localhost:8891/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}});
+ await pg.goto('http://localhost:8891/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}});
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async()=>{await window.Store.saveRecords([{id:'P1',source:'x',company:'甲工程有限公司',
    aliases:[],taxId:'11111111',grade:'A',founded:'2010',capital:'5,000',phoneRaw:'',phones:[],owner:'王',
