@@ -30,6 +30,19 @@ test('抓資料腳本：稅籍停業／非營業中、健保停歇業各一列�
   assert.deepEqual(m.HEAD, ['統編', '名稱', '狀態', '日期']);
 });
 
+test('抓資料腳本：只留有出現在 leads/ 名單裡的統編（表頭叫統編／統一編號／客戶統編那欄；不看 closed 自己）', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'fetch-closed.mjs'));
+  const fs = require('node:fs/promises'); const os = require('node:os');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'closed-'));
+  await fs.mkdir(path.join(root, 'trade')); await fs.mkdir(path.join(root, 'closed')); await fs.mkdir(path.join(root, '11508'));
+  await fs.writeFile(path.join(root, 'trade', 'trade.csv'), '\ufeff統編,名稱\n22667534,甲\n"02198779",乙\n');
+  await fs.writeFile(path.join(root, '11508', '新北市-setup.csv'), '統一編號,公司名稱\n11111111,丙\n1234567,壞的\n');
+  await fs.writeFile(path.join(root, 'closed', 'closed.csv'), '統編,名稱,狀態,日期\n99999999,不算,稅籍停業,\n');
+  await fs.writeFile(path.join(root, 'index.json'), '{}');
+  const ids = await m.repoTaxIds(root);
+  assert.deepEqual([...ids].sort(), ['02198779', '11111111', '22667534']);
+});
+
 test('瀏覽器端：載停業表、用統編比、沒統編才比名稱、還沒載就當沒停業', async () => {
   const CSV = '﻿統編,名稱,狀態,日期\n22667534,中南生物科技股份有限公司,稅籍停業,2026/05/23\n02198779,蓮莊香舖,健保投保單位註銷,2026/05/31\n';
   const fetchStub = async (url) => (/index\.json/.test(url) ? { ok: true, json: async () => ({ generatedAt: 'x', total: 2 }) } : { ok: true, text: async () => CSV });

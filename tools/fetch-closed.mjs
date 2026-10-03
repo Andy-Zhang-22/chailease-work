@@ -7,8 +7,10 @@
  *   - 健保停歇業投保單位：data.gov.tw 26767，一年一個 ODS（跟新成立那份同格式）：年月,投保單位代號,單位名稱,統一編號,證照地址,行業別代碼,行業別中文,註銷生效日
  * 只留 --cities 的；非營業中那份是歷年累積的，只留設立日期在最近 --years（預設 30）年內的，太老的不會在任何名單上。
  * 同一個統編幾個來源都有的留一筆：稅籍停業 > 稅籍非營業中 > 健保投保單位註銷。
+ * 第一次跑新北＋臺北有 56 萬家（30 MB），網頁載不動；所以只留「有出現在 leads/ 底下任何一份名單裡的統編」（登記清冊、動保、商行、
+ * 上市櫃、出進口與電話表、剛開始請人、剛開電子發票）——分頁要藏的只會是這些；客戶名單上不在這些名單裡的那幾家就標不到。
  *
- * 寫 closed.csv（統編,名稱,狀態,日期）、index.json。用法：node tools/fetch-closed.mjs [--out leads/closed] [--cities 新北市,臺北市] [--years 30]
+ * 寫 closed.csv（統編,名稱,狀態,日期）、index.json。用法：node tools/fetch-closed.mjs [--out leads/closed] [--cities 新北市,臺北市] [--years 30] [--all]
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -21,6 +23,7 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[
 const OUT = opt('out', 'leads/closed');
 const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const YEARS = Number(opt('years', '30')) || 30;
+const ALL = args.includes('--all');   // 不限名單裡的統編（檔會很大，平常不要）
 const SUSPENDED = 'https://eip.fia.gov.tw/data/BGMOPEN1X.csv';
 const INACTIVE = 'https://eip.fia.gov.tw/data/BGMOPEN1Y.csv';
 const NHI_META = 'https://data.gov.tw/api/v2/rest/dataset/26767';
@@ -80,6 +83,28 @@ export function merge(lists) {
   return [...m.values()].sort((a, b) => a.taxId.localeCompare(b.taxId));
 }
 export const toRow = (r) => [r.taxId, r.name, KINDS[r.kind] || r.kind, r.date];
+/** leads/ 底下每份 CSV 裡的統編（表頭叫 統編／統一編號／客戶統編 的那欄），不看 closed 自己 */
+export async function repoTaxIds(root, { skip = /[\\/]closed[\\/]/ } = {}) {
+  const ids = new Set();
+  async function walk(dir) {
+    let ents = [];
+    try { ents = await fs.readdir(dir, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of ents) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { await walk(p); continue; }
+      if (!/\.csv$/i.test(e.name) || skip.test(`${path.sep}${path.relative(root, p)}`) || skip.test(p)) continue;
+      let text = '';
+      try { text = await fs.readFile(p, 'utf8'); } catch (err) { continue; }
+      const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+      const head = parseLine(lines[0] || '').map((h) => h.trim());
+      const ci = head.findIndex((h) => /^(統編|統一編號|客戶統編)$/.test(h));
+      if (ci < 0) continue;
+      for (let i = 1; i < lines.length; i++) { if (!lines[i]) continue; const v = String(parseLine(lines[i])[ci] || '').replace(/\D/g, ''); if (v.length === 8) ids.add(v); }
+    }
+  }
+  await walk(root);
+  return ids;
+}
 
 async function streamTax(url, kind, now) {
   console.log(`下載 ${url}（串流）`);
@@ -132,12 +157,18 @@ async function main() {
   const sus = await streamTax(SUSPENDED, 'suspended', now);
   const ina = await streamTax(INACTIVE, 'inactive', now);
   const nhi = await nhiClosed(now);
-  const list = merge([sus.kept, ina.kept, nhi]);
-  if (list.length < 1000) throw new Error('留下來的太少，欄位或縣市對不上');
+  const all = merge([sus.kept, ina.kept, nhi]);
+  if (all.length < 1000) throw new Error('留下來的太少，欄位或縣市對不上');
+  let list = all;
+  if (!ALL) {
+    const known = await repoTaxIds(path.dirname(OUT));
+    list = all.filter((r) => known.has(r.taxId));
+    console.log(`名單裡的統編 ${known.size.toLocaleString()} 個；${CITIES.join('、')} 已停業 ${all.length.toLocaleString()} 家裡有出現在名單的 ${list.length.toLocaleString()} 家（只留這些，網頁才載得動）`);
+  }
   const byKind = {};
   list.forEach((r) => { const k = KINDS[r.kind]; byKind[k] = (byKind[k] || 0) + 1; });
   await fs.writeFile(path.join(OUT, 'closed.csv'), `﻿${[HEAD, ...list.map(toRow)].map((r) => r.map(csvCell).join(',')).join('\n')}\n`, 'utf8');
-  const index = { generatedAt: new Date().toISOString(), cities: CITIES, years: YEARS, taxFileDate: sus.fileDate || ina.fileDate, total: list.length, byKind, files: [{ path: 'closed.csv', rows: list.length }] };
+  const index = { generatedAt: new Date().toISOString(), cities: CITIES, years: YEARS, taxFileDate: sus.fileDate || ina.fileDate, total: list.length, allInCities: all.length, onlyKnown: !ALL, byKind, files: [{ path: 'closed.csv', rows: list.length }] };
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
   console.log(`\n已停業 ${list.length.toLocaleString()} 家（${Object.entries(byKind).map(([k, v]) => `${k} ${v.toLocaleString()}`).join('、')}）→ ${OUT}/closed.csv`);
 }
