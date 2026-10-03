@@ -59,10 +59,10 @@ const SEED=[
  chk(/同一條路/.test(rows[0]) && /有機會／談過/.test(rows[0]) && /📞/.test(rows[0]) && /沒打過/.test(rows[1]) && /打過還沒約/.test(rows[3]), `籤：${rows[0].replace(/\s+/g,' ')} ／ ${rows[3].replace(/\s+/g,' ')}`);
  const nav=await det.locator('.nearby-row').first().locator('a:has-text("導航")').getAttribute('href');
  chk(/origin=.*%E4%B8%AD%E6%AD%A3%E8%B7%AF100/.test(nav) && /destination=.*200/.test(nav), `導航從現在這家出發：${nav}`);
- // 記拜訪：打開那家、拜訪表單展開
- await det.locator('.nearby-row').first().locator('button:has-text("記拜訪")').click(); await pg.waitForTimeout(500);
- chk(/談過同路/.test(await pg.textContent('#drawerBody h2')), '記拜訪打開那一家');
- chk(await pg.evaluate(()=>{ const d=[...document.querySelectorAll('#drawerBody details')].find(x=>/記錄這次拜訪/.test(x.textContent)); return !!(d&&d.open); }), '拜訪表單展開');
+ // 記錄：打開那家、游標在「記錄這通電話」的內容框（拜訪表單拿掉了，拜訪也記在這）
+ await det.locator('.nearby-row').first().locator('button:has-text("記錄")').click(); await pg.waitForTimeout(500);
+ chk(/談過同路/.test(await pg.textContent('#drawerBody h2')), '記錄打開那一家');
+ chk(await pg.evaluate(()=>document.activeElement && document.activeElement.tagName==='TEXTAREA' && !!document.activeElement.closest('.logform')) && (await pg.locator('#drawerBody details:has-text("記錄這次拜訪")').count())===0, '游標在記這通電話的內容框、沒有拜訪表單');
  // 連找名單的也列：出進口（晨光 中正路 有電話）、商行（協玖 中正路）；沒電話貿易不列（出進口要有電話）、遠帆別區不列
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  await pg.locator('#cards .card:has-text("現在這家") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);

@@ -1,5 +1,5 @@
 // 行事曆分頁：哪天要拜訪誰、打給誰（下次聯絡日攤開）、做完的打勾、假日灰掉、點一天列行程（拜訪同區排一起、電話另列）、
-// 記拜訪開那家、複製這週、分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天、?tab=cal
+// 記錄開那家（游標在記這通電話）、複製這週、分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天、?tab=cal
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -32,7 +32,8 @@ const SEED=[
    const now=Date.now();
    // 甲、乙：拜訪表單寫了「下一步：再約拜訪」、下次聯絡日今天 → 🚗；丙：通話、下次今天 → 📞；丁：週三拜訪；戊：昨天打過沒約；禁止推廣不列；己：今天排了也做了
    await window.Store.addLog({recordId:'1',date:'2026-09-28',text:'實地拜訪，見到 王老闆。看了廠房\n下一步：再約拜訪',outcome:'contacted',kind:'visit',createdAt:now-7e8});
-   await window.Store.addLog({recordId:'2',date:'2026-09-29',text:'實地拜訪，見到 李老闆\n下一步：再約拜訪',outcome:'contacted',kind:'visit',createdAt:now-6e8});
+   // 乙：通話紀錄勾了「約到拜訪」（meeting）→ 🚗；甲是舊的拜訪表單存的（表單拿掉了，舊紀錄還要認）
+   await window.Store.addLog({recordId:'2',date:'2026-09-29',text:'電話聊過，老闆說可以過去',outcome:'contacted',meeting:true,meetingDate:'2026-10-05',createdAt:now-6e8});
    // 文字提到「拜訪」但不是拜訪表單選的：只算 📞（使用者：「為什麼我沒排這間拜訪卻有他在上面？」）
    await window.Store.addLog({recordId:'8',date:'2026-09-29',text:'電話聊過，之前拜訪過的顏老闆也認識，約了再聊',outcome:'contacted',createdAt:now-6e8});
    // 通話紀錄明講「約到拜訪」：算 🚗（使用者：「我有約到拜訪會特別說」）
@@ -59,25 +60,32 @@ const SEED=[
  const caps=await pg.locator('#paneCal .cal-cap').allTextContents();
  chk(caps.join('|')==='🚗 拜訪・新莊區（同區排一起）|📞 電話|✓ 做完的', `分組：${caps.join('|')}`);
  const r0=pg.locator('#paneCal .cal-row').first();
- chk(/今天拜訪甲/.test(await r0.textContent()) && /再約拜訪/.test(await r0.textContent()) && (await r0.locator('a:has-text("導航")').count())===1 && (await r0.locator('a.tel').count())===1 && (await r0.locator('button:has-text("記拜訪")').count())===1, `拜訪列：下一步、電話、導航、記拜訪：${(await r0.textContent()).replace(/\s+/g,' ')}`);
+ chk(/今天拜訪甲/.test(await r0.textContent()) && /再約拜訪/.test(await r0.textContent()) && (await r0.locator('a:has-text("導航")').count())===1 && (await r0.locator('a.tel').count())===1 && (await r0.locator('button:has-text("記錄")').count())===1, `拜訪列：下一步、電話、導航、記錄：${(await r0.textContent()).replace(/\s+/g,' ')}`);
+ chk(/今天拜訪乙/.test(await pg.locator('#paneCal .cal-row.is-visit').nth(1).textContent()), '通話紀錄勾約到拜訪的在拜訪組');
  chk(/上次 09\/30：有興趣，等報價/.test(await pg.locator('#paneCal .cal-row.is-call').first().textContent()), '電話列帶上次談的重點');
  chk(/文字提到拜訪有限公司/.test(await pg.locator('#paneCal .cal-row.is-call').nth(1).textContent()) && /通話寫約到拜訪/.test(await pg.locator('#paneCal .cal-row.is-visit').nth(2).textContent()), '只提到拜訪的在電話組、寫約到拜訪的在拜訪組');
  // 點週三
  await cell('2026-10-07').click(); await pg.waitForTimeout(300);
  ag=await pg.locator('#paneCal .cal-agenda').textContent();
  chk(/10\/07（三）要跑 1 家、打 0 家/.test(ag) && /週三拜訪有限公司/.test(ag) && /泰山區/.test(ag), `點週三列丁：${ag.slice(0,60)}`);
- // 記拜訪：開那家、拜訪表單展開
- await pg.locator('#paneCal .cal-row button:has-text("記拜訪")').first().click(); await pg.waitForTimeout(500);
- chk(/週三拜訪/.test(await pg.textContent('#drawerBody h2')) && await pg.evaluate(()=>{ const d=[...document.querySelectorAll('#drawerBody details')].find(x=>/記錄這次拜訪/.test(x.textContent)); return !!(d&&d.open); }), '記拜訪打開那家、表單展開');
+ // 記錄：開那家、游標在「記錄這通電話」的內容框；通話紀錄表單有「約到拜訪」勾選、沒有拜訪表單
+ await pg.locator('#paneCal .cal-row button:has-text("記錄")').first().click(); await pg.waitForTimeout(500);
+ chk(/週三拜訪/.test(await pg.textContent('#drawerBody h2')) && await pg.evaluate(()=>document.activeElement && document.activeElement.tagName==='TEXTAREA' && !!document.activeElement.closest('.logform')), '記錄打開那家、游標在內容框');
+ chk(/約到拜訪/.test(await pg.locator('#drawerBody label:has(.meet-check)').textContent()) && (await pg.locator('#drawerBody details:has-text("記錄這次拜訪")').count())===0, '通話紀錄有「約到拜訪」勾選、拜訪表單拿掉了');
+ // 勾約到拜訪、填下週二存起來 → 行事曆 10/13 標 🚗
+ await pg.check('#drawerBody .meet-check'); await pg.fill('#drawerBody .logform textarea','老闆說下週二可以'); await pg.fill('#drawerBody input[type="date"]','2026-10-13'); await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(700);
+ await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
+ await pg.evaluate(()=>window.openCalendar('2026-10-13')); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await evs('2026-10-13'))==='["🚗 週三拜訪有限公司"]' && (await evs('2026-10-07')).length===0, `勾約到拜訪存起來：10/13 標 🚗、10/7 不再有：${JSON.stringify(await evs('2026-10-13'))}`);
  // 詳細頁「看行事曆」跳到下次聯絡日那天
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(300);
  await pg.locator('#cards .card:has-text("週三拜訪") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody .cal-jump'); await pg.waitForTimeout(400);
- chk(await pg.locator('#paneCal').isVisible() && await pg.locator('#drawer').isHidden() && await cell('2026-10-07').evaluate(e=>e.classList.contains('is-sel')), '看行事曆：關掉詳細頁、跳到行事曆那一天');
+ chk(await pg.locator('#paneCal').isVisible() && await pg.locator('#drawer').isHidden() && await cell('2026-10-13').evaluate(e=>e.classList.contains('is-sel')), '看行事曆：關掉詳細頁、跳到行事曆那一天（剛改成 10/13）');
  // 複製這週
  const wk=await pg.evaluate(()=>window.weekText('2026-10-07'));
- chk(/^10\/05～10\/11 行程\n10\/05（一）\n  🚗 今天拜訪甲有限公司（再約拜訪）　新北市新莊區中正路100號　02-2222-3331\n  🚗 今天拜訪乙有限公司/.test(wk) && /10\/07（三）\n  🚗 週三拜訪有限公司/.test(wk) && !/做完/.test(wk), `這週的文字：${wk.split('\n').slice(0,4).join(' / ')}`);
+ chk(/^10\/05～10\/11 行程\n10\/05（一）\n  🚗 今天拜訪甲有限公司（再約拜訪）　新北市新莊區中正路100號　02-2222-3331\n  🚗 今天拜訪乙有限公司/.test(wk) && !/週三拜訪/.test(wk) && !/做完/.test(wk) && /10\/13（二）\n  🚗 週三拜訪有限公司/.test(await pg.evaluate(()=>window.weekText('2026-10-13'))), `這週的文字：${wk.split('\n').slice(0,4).join(' / ')}`);
  await pg.click('#paneCal button:has-text("複製這週")'); await pg.waitForTimeout(300);
  chk(/已複製這週的行程/.test(await pg.textContent('#toast')), `複製提示：${await pg.textContent('#toast')}`);
  // 上下月、今天

@@ -815,21 +815,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .lock-msg { margin: 14px 0 0; color: var(--danger); font-size: 14px; }
 .lock-note { margin: 14px 0 0; font-size: 13px; }
 
-/* ---------- 拜訪：出門前一頁紙、回來記一筆 ---------- */
-/* 拜訪表單預設收著：不是每次開詳細頁都是剛拜訪回來，攤開只會把記通話的框往下推 */
-.visit-section summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
-.visit-section summary::-webkit-details-marker { display: none; }
-.visit-section summary::before { content: '▸'; color: var(--muted); font-size: 12px; width: 10px; }
-.visit-section[open] summary::before { content: '▾'; }
-.visit-section summary h3 { margin: 0; }
-.visit-section[open] summary { margin-bottom: 8px; }
-.visitform .row input[type="text"] {
-  flex: 1; min-width: 160px; padding: 7px 10px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-}
-.visitform textarea { margin-top: 10px; }
-.visit-field { margin-top: 10px; }
-.visit-field > .muted { display: block; font-size: 12px; margin-bottom: 6px; }
+/* ---------- 拜訪 ---------- */
+/* 拜訪表單拿掉了（記在「記錄這通電話」）；舊的拜訪紀錄在時間軸上還是標出來 */
 /* 時間軸上拜訪那幾則的點換個顏色，捲的時候一眼分得出哪幾次是真的去過 */
 .timeline li.is-visit::before { background: var(--warn); }
 .timeline li.is-visit time.is-mine { color: var(--warn); }
