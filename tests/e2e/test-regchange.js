@@ -21,7 +21,7 @@ const REG={'11111111':row('11111111','增資甲',{Capital_Stock_Amount:'8000000'
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9072/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },SEED);   // 這一段要看「還沒查核」的樣子，先別讓它邊跑邊寫
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },SEED);   // 這一段要看「還沒查核」的樣子，先別讓它邊跑邊寫
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const chips=async()=>pg.evaluate(()=>[...document.querySelectorAll('#fltRegChange .chip')].map(c=>c.textContent.trim()));
  chk(JSON.stringify(await chips())===JSON.stringify(['0 增資','0 減資','0 變更登記地址','0 負責人異動','0 其他','0 無變更','7 未查核']), `還沒查核：七顆固定順序，全部未查核：${await chips()}`);

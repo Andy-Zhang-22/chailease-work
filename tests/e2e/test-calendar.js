@@ -30,7 +30,7 @@ const SEED=[
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await ctx.grantPermissions(['clipboard-read','clipboard-write']);
  await pg.goto('http://localhost:9516/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0');
    const now=Date.now();
    // 只有通話紀錄勾了「約到拜訪」（meeting）、約的那天＝下次聯絡日才列：乙（今天 09:30 出發 10:00 到）、丁（週三）
    await window.Store.addLog({recordId:'1',date:'2026-09-28',text:'實地拜訪，見到 王老闆\n下一步：再約拜訪',outcome:'contacted',kind:'visit',createdAt:now-7e8});   // 舊拜訪表單：不算

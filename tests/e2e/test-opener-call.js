@@ -21,7 +21,7 @@ const RECS=[
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1200,height:1000}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9501/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },RECS);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },RECS);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 

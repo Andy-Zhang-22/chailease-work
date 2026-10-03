@@ -13,7 +13,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  const pg=await br.newPage({viewport:{width:1100,height:1200}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg,true);
  await pg.goto('http://localhost:9085/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async({r,now})=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
+ await pg.evaluate(async({r,now})=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
    await window.Store.setState({recordId:'1',group:'g1',groupIds:['1','2'],groupAt:now,updatedAt:now});
    await window.Store.setState({recordId:'2',group:'g1',groupIds:['1','2'],groupAt:now,updatedAt:now}); },{r:[mk('1','甲公司'),mk('2','乙公司'),mk('3','丙公司')],now:Date.now()});
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);

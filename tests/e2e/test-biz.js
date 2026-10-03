@@ -28,7 +28,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n87493071,0912345678,,2026/01/01\n91214059,02-2277-0000,,2026/01/01\n'}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9488/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },[mk('1','樹德醫療器材行','91214059')]);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },[mk('1','樹德醫療器材行','91214059')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  chk(await pg.locator('.subtab[data-tab=\"biz\"]').count()===1, '找名單底下有「商行／企業社」');
  await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForSelector('#biz-cards .card'); await pg.waitForTimeout(400);

@@ -43,7 +43,7 @@ const SEED=[
  await ctx.route('**/leads/biz/biz.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:BCSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9515/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0');
    // 撥打狀態是記在使用者狀態裡的，名單檔上的 outcome 不算
    const now=Date.now();
    for (const [id,outcome,lastDate] of [['a','contacted','2026-09-20'],['b','contacted','2026-09-25'],['f','contacted','2026-09-28'],['g','noanswer','2026-09-30'],['e','blocked','2026-09-01']]) await window.Store.setState({recordId:id,outcome,lastDate,updatedAt:now});

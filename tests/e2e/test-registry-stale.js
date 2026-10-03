@@ -18,7 +18,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  await pg.route('**/data.gcis.nat.gov.tw/**',(r)=>r.abort('failed'));
  await pg.route('**/my-worker.test/**',(route)=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(API)}));
  await pg.goto('http://localhost:8972/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
+ await pg.evaluate(async(r)=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
    await window.Store.setState({recordId:'A1',edits:{regChanged:'2026/09/17'},editsAt:Date.now(),updatedAt:Date.now()}); },SEED);
  await pg.reload(); await pg.waitForTimeout(900);
  const run=async(api)=>{ API=api; await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');

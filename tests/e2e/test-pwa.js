@@ -15,7 +15,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(await pg.evaluate(async()=>(await fetch('assets/icons/apple-touch-icon.png')).ok), 'iPhone 主畫面圖示在');
  await pg.evaluate(()=>navigator.serviceWorker.ready); await pg.reload(); await pg.waitForSelector('#dropzone'); await pg.waitForTimeout(800);
  chk(await pg.evaluate(()=>!!navigator.serviceWorker.controller), 'service worker 接手了');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); },
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); },
    [{id:'1',source:'A.csv',company:'離線測試有限公司',aliases:[],taxId:'',phoneRaw:'02-2222-3333',phones:[],address:'新北市新莊區中正路1號',notesRaw:'',timeline:[],outcome:'new',importedAt:1}]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  await ctx.setOffline(true);

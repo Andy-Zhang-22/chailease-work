@@ -14,7 +14,7 @@ const PW='83uxyvihhm';
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
 
  // 本機不鎖：不然自己開發、跑測試每次都卡在門口（原始碼本來就公開，鎖本機沒擋到誰）
- await pg.goto('http://localhost:9279/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForTimeout(800);
+ await pg.goto('http://localhost:9279/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForTimeout(800);
  chk(await pg.locator('#lockGate').count()===0, '本機（localhost）不鎖');
  chk(await pg.isVisible('#btnImport'), '而且網站正常可用');
 

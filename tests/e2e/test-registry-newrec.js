@@ -39,7 +39,7 @@ const REG={'12345678':row('12345678','查得到甲',{Capital_Stock_Amount:'90000
  const chips=await pg.evaluate(()=>[...document.querySelectorAll('#fltRegChange .chip')].map(c=>c.textContent.trim()));
  chk(chips.includes('1 未查核'), `篩選：查不到的仍算未查核：${chips}`);
  // 沒開自動更新就不查
- await pg.evaluate(()=>{ localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); });
+ await pg.evaluate(()=>{ localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(400);
  await addManual('沒開自動丙','55556666'); await pg.waitForTimeout(1500);   // 統編要跟前面兩筆都不一樣，不然會被「同一家不重複新增」擋下來
  d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');

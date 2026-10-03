@@ -10,7 +10,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'12345678'
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const pg=await br.newPage({viewport:{width:1100,height:1200}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
- await pg.goto('http://localhost:9191/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.goto('http://localhost:9191/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  // 名單留一筆，並造一個舊版徵信資料庫 crm-db（裡面塞一份徵信資料）
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); }, [mk('1','測試股份有限公司')]);
  const before = await pg.evaluate(async()=>{

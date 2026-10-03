@@ -15,7 +15,7 @@ const RECS=[mk('1','星辰精密工業股份有限公司'),mk('2','今天甲有�
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1200,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9505/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('daily-cap','1');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('daily-cap','1');
    const st=(o)=>window.Store.setState({updatedAt:Date.now(),...o});
    await st({recordId:'2',outcome:'contacted',nextDate:'2026-10-05',lastDate:'2026-09-20'});
    await st({recordId:'3',outcome:'contacted',nextDate:'2026-10-05',lastDate:'2026-09-20',pinDate:true});

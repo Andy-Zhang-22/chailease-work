@@ -40,7 +40,7 @@ SEED.push(mk(++n,'2026-12-20'));                                // 視野之外
 
  await pg.goto('http://localhost:9461/index.html'); await pg.waitForSelector('#dropzone');
  await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('main-cap','20'); localStorage.setItem('daily-feed-auto','0'); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('main-cap','20'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
 
  // --- 負載表：看得到哪幾天爆了 ---

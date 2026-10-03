@@ -21,7 +21,7 @@ const RECS=[
  const ctx=await br.newContext(); await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1100,height:1000}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
  await pg.goto('http://localhost:9494/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0');
    const now=Date.now();
    await window.Store.setState({recordId:'c1',outcome:'contacted',chance:'yes',chanceAt:now,lastDate:'2026-09-29'});
    await window.Store.setState({recordId:'c2',outcome:'noanswer',lastDate:'2026-09-29'});

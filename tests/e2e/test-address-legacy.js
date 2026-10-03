@@ -11,7 +11,7 @@ const SEED=[mk('1','迅德興業','桃園市龜山區民生北路一段38之1號
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const pg=await br.newPage({viewport:{width:1100,height:1400}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
- await pg.goto('http://localhost:9077/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.goto('http://localhost:9077/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  const P=(a)=>pg.evaluate((a)=>window.Normalize.parseAddress(a),a);
  const cases=[['桃園縣龜山鄉民生北路一段38-1號','桃園市','龜山區'],['臺北縣板橋市文化路1號','新北市','板橋區'],['台北縣三重市重新路1號','新北市','三重區'],['臺中縣豐原市中正路1號','臺中市','豐原區'],['高雄縣鳳山市','高雄市','鳳山區'],['新竹縣竹北市光明六路','新竹縣','竹北市'],['新北市新莊區中正路1號','新北市','新莊區'],['台北市內湖區行善路','臺北市','內湖區']];
  for(const [a,c,d] of cases){ const r=await P(a); chk(r.city===c&&r.district===d, `${a} → ${r.city} ${r.district}（期望 ${c} ${d}）`); }

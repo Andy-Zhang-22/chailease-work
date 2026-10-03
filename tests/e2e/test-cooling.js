@@ -15,7 +15,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9512/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0');
    // 晨光已經連續未接 2 次
    await window.Store.addLog({recordId:'1',date:'2026-10-01',text:'未接',outcome:'noanswer',createdAt:1000});
    await window.Store.addLog({recordId:'1',date:'2026-10-02',text:'未接',outcome:'noanswer',createdAt:2000}); },

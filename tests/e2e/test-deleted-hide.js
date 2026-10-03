@@ -31,7 +31,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.route('**/leads/nhi/nhi.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:NCSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9504/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','晨光貿易有限公司','70000001')]);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','晨光貿易有限公司','70000001')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  // 從名單刪掉晨光（卡片上的「刪除這筆」走的就是 Store.deleteRecord，會寫公司排除）
  await pg.locator('#cards .card:has-text("晨光") .card-name').click(); await pg.waitForSelector('#drawerBody h2');

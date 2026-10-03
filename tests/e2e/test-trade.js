@@ -29,7 +29,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9499/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  // 名單裡：遠帆已在名單但沒電話（統編對得到）、另一家沒電話統編對不到、一家有電話
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },
    [mk('1','遠帆國際開發有限公司','70000002'), mk('2','律森科技股份有限公司','33333333'), mk('3','星辰精密工業股份有限公司','22222222',{phoneRaw:'02-1111-1111',phones:[{digits:'0211111111',ext:'',note:''}]})]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
 

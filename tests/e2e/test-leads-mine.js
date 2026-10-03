@@ -26,7 +26,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n11111111,0933000111,,2026/01/01\n22222222,02-2200-1111,,2026/01/01\n'}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9484/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForSelector('#leads-cards .card'); await pg.waitForTimeout(500);
  // 停掉背景查成立年（不影響測試但省時間）

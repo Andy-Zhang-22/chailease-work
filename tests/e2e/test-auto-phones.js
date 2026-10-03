@@ -17,7 +17,7 @@ const mk=(id,company,address,phoneRaw='')=>({id,source:SRC,company,aliases:[],ta
    r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({places})}); });
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
  await pg.goto('http://localhost:9495/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); },
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); },
    [mk('1','甲一精密有限公司','新北市新莊區中正路1號'),mk('2','乙二機械有限公司','新北市新莊區中正路2號'),mk('3','丙三工程有限公司','新北市新莊區中正路3號','02-2222-3333')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  const none=await pg.evaluate((s)=>window.autoPhones(s),SRC);

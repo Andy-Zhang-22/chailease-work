@@ -18,7 +18,7 @@ const SEED=[
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const pg=await br.newPage({viewport:{width:1200,height:1400}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
- await pg.goto('http://localhost:9083/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.goto('http://localhost:9083/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  // 純函式：本餘解析
  const pb=await pg.evaluate(()=>['本餘 300 萬','本於1200萬','本餘約 5,000 仟','本餘 8,000,000','本餘 350','沒有本餘'].map(t=>window.Rules.parseBalance(t)));
  chk(JSON.stringify(pb)==='[3000,12000,5000,8000,3500,null]', `本餘解析成仟元：${JSON.stringify(pb)}`);

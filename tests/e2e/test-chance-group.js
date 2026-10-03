@@ -17,7 +17,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9521/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  // 甲乙丙同一組（同老闆），整組標有機會；丁自己標有機會；戊無機會；己未判斷
- await pg.evaluate(async({r,now})=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0');
+ await pg.evaluate(async({r,now})=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0');
    for (const id of ['1','2','3']) await window.Store.setState({recordId:id,group:'g1',groupIds:['1','2','3'],groupAt:now,outcome:'contacted',lastDate:'2026-09-01',nextDate:'2026-10-20',updatedAt:now});
    await window.Store.setState({recordId:'1',group:'g1',groupIds:['1','2','3'],groupAt:now,outcome:'contacted',lastDate:'2026-09-01',nextDate:'2026-10-20',chance:'yes',chanceAt:now,updatedAt:now});
    await window.Store.setState({recordId:'4',outcome:'contacted',lastDate:'2026-09-01',nextDate:'2026-10-20',chance:'yes',chanceAt:now,updatedAt:now});

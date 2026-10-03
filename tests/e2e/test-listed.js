@@ -48,7 +48,7 @@ const SEED=[mk('1','安達投資有限公司','12345679')];
  await ctx.route('**/leads/listed/pledge.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(PLEDGE)}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9486/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },SEED);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  chk(await pg.locator('.subtab[data-tab=\"listed\"]').count()===1, '找名單底下有「上市櫃公司」');
  await pg.evaluate(()=>window.switchTab('listed')); await pg.waitForSelector('#listed-cards .card'); await pg.waitForTimeout(400);
