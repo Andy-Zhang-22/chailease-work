@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-241';
+  const APP_VERSION = '20261003-242';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -76,7 +76,7 @@
     sort: 'regchanged',
     limit: PAGE_SIZE,
     hideBlocked: true,
-    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), industry: '' },
+    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), closed: new Set(), industry: '' },
   };
 
   /* ---------------- 工具 ---------------- */
@@ -757,6 +757,13 @@
   // 每筆客戶最新的一則通話紀錄（依建立時間），跟著資料版本快取
   let lastLogKey = '';
   let lastLogMap = new Map();
+  /** 這家最近連續未接幾次（從最新一則往回數，碰到不是未接的就停） */
+  function missedStreak(recordId) {
+    const logs = state.logs.filter((l) => l.recordId === recordId && l.kind !== 'visit').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    let n = 0;
+    for (const l of logs) { if (window.Normalize.normalizeOutcome(l.outcome) === 'noanswer') n += 1; else break; }
+    return n;
+  }
   function latestLog(recordId) {
     const key = String(dataVersion);
     if (lastLogKey !== key) {
@@ -909,6 +916,8 @@
     out.dueDoneOn = (mine && mine.dueDoneOn) || '';
     // 固定日期：使用者講明「這天一定要打」，照上限重排、挪到下個上班日、移到下週、關係企業連動都不動它
     out.pinDate = !!(mine && mine.pinDate && out.nextDate);
+    // 冷名單：連續未接太多次自動移出每日名單（哪天移的）；打通一次就清掉
+    out.cold = (mine && mine.cold) || '';
     out.remindNote = (mine && mine.remindNote) || '';
     // 電話是從 Google 地圖找來的話，詳細頁要標明來源
     out.phoneSource = (mine && mine.phoneSource) || null;
@@ -2483,6 +2492,13 @@
    */
   const MAIN_CAP_DEFAULT = 15;
   const NEW_QUOTA_DEFAULT = 25;
+  /*
+   * 沒接幾次自動降溫（使用者：「沒接幾次自動降溫」）：連續未接 3 次、記錄時沒自己填日期 → 自動排到兩週後；
+   * 連續 5 次 → 冷名單（不排日期，從每日名單移出，卡片標 ❄，篩選有一顆「冷名單」）。打通一次就解除。
+   */
+  const COOL_AFTER = 3;
+  const COOL_DAYS = 14;
+  const COLD_AFTER = 5;
   const newQuota = () => {
     const raw = registryPref('new-quota');
     if (raw === '' || raw == null) return NEW_QUOTA_DEFAULT;   // 沒設過＝預設；設 0 是真的不要
@@ -2707,6 +2723,36 @@
   let feeding = false;
   const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
+  /** 六個來源的配額比例（'feed-shares'，"5,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分 */
+  function feedShares() {
+    const raw = registryPref('feed-shares');
+    if (!raw) return null;
+    const a = String(raw).split(',').map((x) => Math.max(0, Math.round(Number(x) || 0)));
+    return a.length === 6 && a.some((x) => x > 0) ? a : null;
+  }
+  /**
+   * 照比例分：先依比例算每頁該拿幾家（最大餘數法），哪一頁不夠的，缺的讓有比例的其他頁輪流補；比例 0 的頁最後才補位。
+   * 沒比例就平分（splitEvenly）。
+   */
+  function splitByShares(avail, need, shares) {
+    if (!shares || shares.length !== avail.length) return splitEvenly(avail, need);
+    const sum = shares.reduce((a, b) => a + b, 0) || 1;
+    const exact = shares.map((s) => (Math.max(0, need) * s) / sum);
+    const target = exact.map(Math.floor);
+    let rest = Math.max(0, need) - target.reduce((a, b) => a + b, 0);
+    exact.map((x, i) => [x - target[i], i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => { if (rest > 0 && shares[i] > 0) { target[i] += 1; rest -= 1; } });
+    const take = target.map((t, i) => Math.min(t, avail[i]));
+    const fill = (allowZero) => {
+      let left = Math.max(0, need) - take.reduce((a, b) => a + b, 0);
+      while (left > 0) {
+        let got = false;
+        for (let i = 0; i < avail.length && left > 0; i++) { if ((allowZero || shares[i] > 0) && take[i] < avail[i]) { take[i] += 1; left -= 1; got = true; } }
+        if (!got) break;
+      }
+    };
+    fill(false); fill(true);
+    return take;
+  }
   function splitEvenly(avail, need) {
     const take = avail.map(() => 0);
     let left = Math.max(0, need);
@@ -2782,7 +2828,7 @@
       const nh = nhAll.filter((r) => fresh(r.name, r.taxId));
       const ei = eiAll.filter((r) => fresh(r.name, r.taxId));
       // 六頁平分；一頁不夠其他頁補：輪流一家一家拿，拿到額度滿或都沒得拿。剛開始請人、剛開電子發票排最後，額度不整除時少拿
-      const take = splitEvenly([ch.length, le.length, bz.length, tr.length, nh.length, ei.length], need);
+      const take = splitByShares([ch.length, le.length, bz.length, tr.length, nh.length, ei.length], need, feedShares());
       const pickC = ch.slice(0, take[0]);
       const pickL = le.slice(0, take[1]);
       const pickB = bz.slice(0, take[2]);
@@ -3038,7 +3084,27 @@
         el('span', { className: 'muted', textContent: '完全新的名單一天' }), quotaInput,
         el('span', { className: 'muted', textContent: '家（另外算，不佔主力的額度）' }),
       ]));
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分）。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份；剛開電子發票＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛導入 3 個月內，再比導入月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
+      {
+        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票'];
+        const cur = feedShares();
+        const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
+        const hint = el('span', { className: 'muted share-hint' });
+        const refresh = () => {
+          const vals = inputs.map((x) => Math.max(0, Math.round(Number(x.value) || 0)));
+          const any = inputs.some((x) => x.value !== '') && vals.some((v) => v > 0);
+          const preview = splitByShares(Array(6).fill(999), quota, any ? vals : null);
+          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝平分（${preview.join('、')}）`;
+        };
+        inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
+        refresh();
+        host.append(el('div', { className: 'card-actions cap-row share-row' }, [
+          el('span', { className: 'muted', textContent: '新名單六個來源的比例：' }),
+          ...names.flatMap((n, i) => [el('span', { className: 'muted share-name', textContent: n }), inputs[i]]),
+          hint,
+        ]));
+      }
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份；剛開電子發票＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛導入 3 個月內，再比導入月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -3137,6 +3203,8 @@
     chattel: (r) => r.chattelKinds,
     branch: (r) => r.branchKey,
     added: (r) => r.addedBucket,
+    cold: (r) => (r.cold ? 'cold' : 'ok'),
+    closed: (r) => (r.closed ? 'closed' : 'ok'),
   };
   const facetHas = (set, value) => (Array.isArray(value) ? value.some((v) => set.has(v)) : set.has(value));
   /** 這筆有沒有通過目前的條件；skip 指定「不算哪一組」，算該組晶片家數時用。 */
@@ -3303,7 +3371,7 @@
      * 縣市、客戶規模、洽談狀態、變更登記維持複選——那幾組疊起來是有意義的
      * （台北＋新北、微企＋一般組、增資＋減資）。
      */
-    const SINGLE_PICK = new Set(['taxKind', 'phoneKind', 'visit', 'relation', 'chance', 'added']);
+    const SINGLE_PICK = new Set(['taxKind', 'phoneKind', 'visit', 'relation', 'chance', 'added', 'cold', 'closed']);
     const chips = (host, filter, items, setRef, labelOf) => {
       host.textContent = '';
       items.forEach(([value, count]) => {
@@ -3369,6 +3437,13 @@
     const chanceCounts = new Map(CHANCE_ORDER.map((k) => [k, 0]));
     all.forEach((r) => { const k = r.chance || 'none'; chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1); });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
+    // 冷名單、已停業：固定兩顆，含 0 筆
+    const coldCounts = [['cold', 0], ['ok', 0]];
+    all.forEach((r) => { coldCounts[r.cold ? 0 : 1][1] += 1; });
+    chips($('#fltCold'), 'cold', coldCounts, state.filters.cold, (v) => (v === 'cold' ? '冷名單（未接太多次）' : '正常'));
+    const closedCounts = [['closed', 0], ['ok', 0]];
+    all.forEach((r) => { closedCounts[r.closed ? 0 : 1][1] += 1; });
+    chips($('#fltClosed'), 'closed', closedCounts, state.filters.closed, (v) => (v === 'closed' ? '已停業' : '還在營業'));
 
     // 統編：固定「有統編 → 無統編」兩顆，含 0 筆
     const taxCounts = [['yes', 0], ['no', 0]];
@@ -3614,6 +3689,7 @@
       r.closed ? el('span', { className: 'badge badge-blocked', textContent: `已停業・${r.closed.kind}${r.closed.date ? ` ${r.closed.date}` : ''}`, title: '財政部稅籍／健保署的公開資料說這家停業或註銷了（Actions 每月抓）；名單上的這筆沒動，只是標出來' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
+      r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
@@ -3681,6 +3757,13 @@
     list.slice(0, state.limit).forEach((r) => host.append(card(r)));
 
     $('#listSummary').textContent = `顯示 ${Math.min(state.limit, list.length)} / ${list.length} 筆`;
+    // 已停業還沒標禁止推廣的：一顆鈕整批標（使用者：「名單上已停業的一鍵整批處理」）
+    {
+      const btn = $('#btnBlockClosed');
+      const n = allViews().filter((v) => v.closed && !v.blocked).length;
+      btn.hidden = !n;
+      btn.textContent = `已停業 ${n} 家整批標禁止推廣`;
+    }
     $('#btnMore').hidden = list.length <= state.limit;
     const empty = $('#emptyState');
     if (list.length) {
@@ -4422,6 +4505,20 @@
         }
       }
       /*
+       * 沒接幾次自動降溫：連續未接（含這一通）滿 COLD_AFTER 次、沒自己填日期 → 冷名單，不排日期；
+       * 滿 COOL_AFTER 次、沒自己填日期 → 排到 COOL_DAYS 天後。自己填了日期一律尊重。不是未接就把冷名單清掉。
+       */
+      const streak = outcomeSel.value === 'noanswer' ? missedStreak(r.id) + 1 : 0;
+      // 日期欄預設帶著原本的下次聯絡日，那不算「自己填的」；跟原本不一樣才是
+      const userPicked = !!nextInput.value && nextInput.value !== (r.nextDate || '');
+      let cooled = '';
+      if (streak >= COLD_AFTER && !userPicked) { picked = ''; auto = null; cooled = 'cold'; }
+      else if (streak >= COOL_AFTER && !userPicked) {
+        const want = addDays(today, COOL_DAYS);
+        picked = window.Holidays ? window.Holidays.nextWorkday(want).iso : want;
+        auto = null; cooled = 'cool';
+      }
+      /*
        * 寫進去之後要讀回來確認。
        *
        * 存不進去的情況是有的（瀏覽器空間滿了、無痕模式、另一個分頁正在升級資料庫），
@@ -4481,6 +4578,7 @@
           nextDate: picked || null,
           lastDate: today,
           pinDate: !!(pin.checked && picked),
+          ...(cooled === 'cold' ? { cold: today } : outcomeSel.value !== 'noanswer' ? { cold: '' } : {}),
         });
       } catch (err) {
         fail(err, '紀錄已存好，但結果與下次聯絡日沒寫進去');
@@ -4494,7 +4592,8 @@
         ? `已儲存${extra}，並依內容把下次聯絡日設為 ${dateLabel(auto.iso)}`
           + (auto.movedFrom ? `（${dateLabel(auto.movedFrom)} 是${auto.reason}，順延了）` : '')
         : '';
-      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + (meet.checked ? (picked ? `，約到 ${dateLabel(picked)} 見面 🎯` : '，約到見面了（記得把日期填在下次聯絡）') : ''));
+      const coolNote = cooled === 'cold' ? `；連續未接 ${streak} 次，移到冷名單、不再排日期（打通一次就解除）` : cooled === 'cool' ? `；連續未接 ${streak} 次，自動排到兩週後 ${dateLabel(picked)}` : '';
+      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? (picked ? `，約到 ${dateLabel(picked)} 見面 🎯` : '，約到見面了（記得把日期填在下次聯絡）') : ''));
       render();
       openDetail(r.id);
       scheduleSync();
@@ -5767,7 +5866,7 @@ export default {
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
-    'new-quota', 'daily-feed-on', 'daily-feed-auto']);
+    'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
   const registryAutoOn = () => registryPref('registry-auto') !== '0';
   const registryPref = (key, value) => {
@@ -7329,6 +7428,22 @@ export default {
     $('#sortBy').value = state.sort;
     $('#sortBy').onchange = (e) => { state.sort = e.target.value; render(); };
     $('#hideBlocked').onchange = (e) => { state.hideBlocked = e.target.checked; render(); };
+    $('#btnBlockClosed').onclick = async () => {
+      const targets = allViews().filter((v) => v.closed && !v.blocked);
+      if (!targets.length) return;
+      const ok = await askConfirm(`把名單上已停業的 ${targets.length} 家整批標成「禁止推廣」？每家會記一則通話紀錄寫明停業的依據（稅籍／健保的公開資料），之後不再排日期。`, { okText: '整批標禁止推廣' });
+      if (!ok) return;
+      const today = todayISO();
+      for (const v of targets) {
+        const label = `${v.closed.kind}${v.closed.date ? ` ${v.closed.date}` : ''}`;
+        await window.Store.addLog({ recordId: v.id, date: today, text: `已停業（${label}），整批標禁止推廣`, outcome: 'blocked', createdAt: Date.now() });
+        await saveState(v.id, { outcome: 'blocked', nextDate: null, lastDate: today, pinDate: false });
+      }
+      state.logs = await window.Store.allLogs();
+      touch(); render();
+      scheduleSync();
+      toast(`已把 ${targets.length} 家已停業的標成禁止推廣`);
+    };
     $('#btnMore').onclick = () => { state.limit += PAGE_SIZE; renderList(); };
     $('#fltIndustry').oninput = (e) => { state.filters.industry = e.target.value.trim(); state.limit = PAGE_SIZE; render(); };
     $('#btnResetFilters').onclick = () => {
@@ -7402,6 +7517,7 @@ export default {
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
     window.splitEvenly = splitEvenly;   // 測試用
+    window.splitByShares = splitByShares;
     window.planDailyCap = planDailyCap;   // 測試用
     window.importQuiet = (file) => importFiles([file]);
     $('#btnPick').onclick = () => $('#filePick').click();

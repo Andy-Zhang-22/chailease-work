@@ -445,6 +445,11 @@ button, input, select { font: inherit; color: inherit; }
 /* 回撥提醒 */
 .feed-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
 .feed-bar .feed-text { color: var(--muted); }
+.badge-cold { background: #e8f1fb; color: #2b5a8a; }
+.share-row { flex-wrap: wrap; align-items: center; }
+.share-name { font-size: 12px; margin-left: 6px; }
+.share-input { width: 54px; }
+.share-hint { flex-basis: 100%; }
 .badge-pin { border-color: var(--primary); color: var(--primary); font-weight: 600; }
 .meet-label { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .remind-bar { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; }
