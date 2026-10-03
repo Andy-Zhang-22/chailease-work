@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-257';
+  const APP_VERSION = '20261003-258';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4301,6 +4301,33 @@
     host.append(calAgenda(cal.sel, events.get(cal.sel) || []));
   }
 
+  /**
+   * 整天導航（使用者：「2也幫我做」——一天跑好幾家，Google 地圖一次串好，不用一家一家按導航）。
+   * 順序就是行程列的順序（有抵達時間的照時間，沒填的照區、路、門牌）。起點不填＝Google 用現在位置。
+   * Google 地圖網址在手機瀏覽器最多只吃 3 個中途點，所以每 4 家切一段：第 1 段 1→4、第 2 段從第 4 家出發 →8……
+   * 一段一個連結，跑完一段按下一段。
+   * @param {string[]} stops 依序的地址
+   * @returns {{label:string, href:string}[]}
+   */
+  function routeLinks(stops) {
+    const list = stops.filter(Boolean);
+    const PER = 4;
+    const out = [];
+    const enc = (t) => encodeURIComponent(t);
+    for (let i = 0, seg = 1; i < list.length; seg += 1) {
+      const from = i ? list[i - 1] : '';
+      const part = list.slice(i, i + PER);
+      const dest = part[part.length - 1];
+      const mid = part.slice(0, -1);
+      const href = `https://www.google.com/maps/dir/?api=1${from ? `&origin=${enc(from)}` : ''}&destination=${enc(dest)}${mid.length ? `&waypoints=${mid.map(enc).join('%7C')}` : ''}&travelmode=driving`;
+      const a = i + 1; const b = i + part.length;
+      out.push({ label: list.length <= PER ? `🗺 整天導航（${list.length} 家）` : `🗺 第 ${seg} 段（第 ${a === b ? a : `${a}–${b}`} 家）`, href });
+      i += part.length;
+    }
+    return out;
+  }
+  window.routeLinks = routeLinks;   // 測試用
+
   function calAgenda(iso, list) {
     const H = window.Holidays;
     const box = el('div', { className: 'cal-agenda' });
@@ -4319,11 +4346,20 @@
     const shortAddr = (v) => addrOf(v).replace(/^.{2,3}[市縣]/, '');
     const nameBtn = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) });
     const timesBadge = (x) => (x.depart || x.arrive ? el('span', { className: 'badge badge-pin', textContent: `${x.depart ? `出發 ${x.depart}` : ''}${x.depart && x.arrive ? '・' : ''}${x.arrive ? `抵達 ${x.arrive}` : ''}` }) : '');
+    // 整天導航：照下面的順序串起來；兩家以上才編號
+    const routes = routeLinks(planned.map((x) => addrOf(x.v)));
+    if (routes.length) {
+      box.append(el('div', { className: 'cal-route' }, [
+        ...routes.map((r) => el('a', { className: 'btn btn-tiny btn-primary', href: r.href, target: '_blank', rel: 'noopener', textContent: r.label, title: '從現在位置出發，照下面的順序一次串好（Google 地圖）' })),
+        planned.length > 1 ? el('span', { className: 'muted', textContent: routes.length > 1 ? '照下面的順序；手機上一段最多 4 家，跑完一段按下一段' : '照下面的順序' } ) : '',
+      ]));
+    }
     let lastDist = null;
-    planned.forEach((x) => {
+    planned.forEach((x, i) => {
       const dist = x.v.district || '沒有區';
       if (dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 ${dist}（同區排一起）` })); lastDist = dist; }
       box.append(el('div', { className: 'cal-row is-visit' }, [
+        planned.length > 1 ? el('span', { className: 'cal-no', textContent: String(i + 1) }) : '',
         nameBtn(x.v),
         timesBadge(x),
         ...telLinks(x.v, 1),

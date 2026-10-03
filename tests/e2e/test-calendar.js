@@ -126,6 +126,16 @@ const SEED=[
  chk(/改期：今天打電話有限公司/.test(await pg.textContent('#editorBody h2')) && (await pg.inputValue('#editorBody input[type="time"] >> nth=1'))==='10:30' && (await pg.locator('#editorBody input[type="search"]').count())===0, '改期對話框帶原本的時間、不用再挑客戶');
  await pg.fill('#editorBody input[type="date"]','2026-10-14'); await pg.fill('#editorBody input[type="time"] >> nth=1','14:00'); await pg.click('#editorBody button:has-text("改好了")'); await pg.waitForTimeout(700);
  chk((await evs('2026-10-08')).length===0 && JSON.stringify(await evs('2026-10-14'))==='["🚗 14:00 今天打電話有限公司"]' && (await pg.evaluate(()=>window.customerViews().find(v=>v.company==='今天打電話有限公司').nextDate))==='2026-10-14', `改期：10/8 沒了、10/14 有、下次聯絡日跟著改：${JSON.stringify(await evs('2026-10-14'))}`);
+ // 整天導航：今天只有乙一家 → 一個連結、目的地是乙、沒有中途點、不編號
+ await pg.evaluate(()=>window.openCalendar('2026-10-05')); await pg.waitForTimeout(300);
+ const rt=pg.locator('#paneCal .cal-route a');
+ chk((await rt.count())===1 && /整天導航（1 家）/.test(await rt.textContent()) && /destination=.*%E4%B8%AD%E6%AD%A3%E8%B7%AF300/.test(await rt.getAttribute('href')) && !/waypoints=|origin=/.test(await rt.getAttribute('href')) && (await pg.locator('#paneCal .cal-no').count())===0, `整天導航一家：${await rt.getAttribute('href')}`);
+ // 六家：切兩段，第 1 段 1→4（中途 1、2、3），第 2 段從第 4 家出發 → 6（中途 5）
+ const segs=await pg.evaluate(()=>window.routeLinks(['A1','A2','A3','A4','A5','A6']));
+ chk(segs.length===2 && segs[0].label==='🗺 第 1 段（第 1–4 家）' && /destination=A4&waypoints=A1%7CA2%7CA3&/.test(segs[0].href) && !/origin=/.test(segs[0].href)
+   && segs[1].label==='🗺 第 2 段（第 5–6 家）' && /origin=A4&destination=A6&waypoints=A5&/.test(segs[1].href), `六家切兩段：${JSON.stringify(segs)}`);
+ const three=await pg.evaluate(()=>window.routeLinks(['B1','','B2','B3']));
+ chk(three.length===1 && three[0].label==='🗺 整天導航（3 家）' && /destination=B3&waypoints=B1%7CB2&/.test(three[0].href), `沒地址的跳過、三家一段：${JSON.stringify(three)}`);
  // 上下月、今天
  await pg.click('#paneCal button[title="下個月"]'); await pg.waitForTimeout(200);
  chk(/2026 年 11 月/.test(await pg.textContent('#paneCal h2')) && (await cell('2026-11-01').count())===1, '切到下個月');
