@@ -1,12 +1,10 @@
-// 沒接幾次自動降溫（3 次兩週後、5 次冷名單）、已停業整批標禁止推廣、六個來源的配額比例
+// 沒接幾次自動降溫（3 次兩週後、5 次冷名單）、六個來源的配額比例
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9512);
 const TODAY='2026-10-05';   // 週一
-const CCSV='﻿統編,名稱,狀態,日期\n70000002,遠帆國際開發有限公司,稅籍停業,2026/05/23\n';
-const CINDEX={generatedAt:'2026-10-03T03:00:00.000Z',cities:['新北市'],years:30,total:1,byKind:{'稅籍停業':1},files:[{path:'closed.csv',rows:1}]};
 const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2019',capital:'12,000',phoneRaw:'02-2990-1234',phones:[{digits:'0229901234',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路100號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:TODAY,lastDate:'',addedDate:'2026-09-01'});
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
@@ -15,8 +13,6 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
- await ctx.route('**/leads/closed/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(CINDEX)}));
- await ctx.route('**/leads/closed/closed.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CCSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9512/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0');
@@ -47,16 +43,6 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
  v=await pg.evaluate(()=>{ const x=window.customerViews().find(v=>v.company==='晨光貿易有限公司'); return {cold:x.cold}; });
  chk(!v.cold, `接通之後冷名單解除：${JSON.stringify(v)}`);
-
- // 已停業整批標禁止推廣：遠帆在停業表裡
- const btn=pg.locator('#btnBlockClosed');
- chk(await btn.isVisible() && /已停業 1 家整批標禁止推廣/.test(await btn.textContent()), `有整批鈕：${await btn.textContent()}`);
- const closedChips=await pg.$$eval('#fltClosed .chip',a=>a.map(x=>x.textContent.replace(/\s+/g,'')).join('|'));
- chk(/1已停業\|1還在營業/.test(closedChips), `篩選有已停業籤：${closedChips}`);
- await btn.click(); await pg.waitForTimeout(300); await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(800);
- const yf=await pg.evaluate(async()=>{ const x=window.customerViews().find(v=>v.company==='遠帆國際開發有限公司'); const logs=(await window.Store.allLogs()).filter(l=>l.recordId===x.id); return {blocked:x.blocked,next:x.nextDate,reason:x.blockedReason,n:logs.length}; });
- chk(yf.blocked && !yf.next && /已停業（稅籍停業 2026\/05\/23）/.test(yf.reason) && yf.n===1, `遠帆標成禁止推廣、記了原因：${JSON.stringify(yf)}`);
- chk(await btn.isHidden(), '標完鈕消失');
 
  // 六個來源的配額比例
  const sp=await pg.evaluate(()=>[window.splitByShares([99,99,99,99,99,99],25,[10,5,5,0,2,3]), window.splitByShares([2,9,9,9,9,9],25,[10,5,5,0,2,3]), window.splitByShares([9,9,9,9,9,9],25,null), window.splitByShares([1,1,1,1,1,1],25,[10,0,0,0,0,0])]);

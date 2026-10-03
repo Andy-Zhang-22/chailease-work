@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-255';
+  const APP_VERSION = '20261003-256';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -76,7 +76,7 @@
     sort: 'regchanged',
     limit: PAGE_SIZE,
     hideBlocked: true,
-    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), closed: new Set(), industry: '' },
+    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), industry: '' },
   };
 
   /* ---------------- 工具 ---------------- */
@@ -944,8 +944,6 @@
      * 那位客戶就悄悄回到待打名單裡。所以以訪談內容為準，再把使用者自己選的
      * 「禁止推廣」也算進來——兩邊任一成立就是禁打，只能加不能減。
      */
-    // 已停業（leads/closed，每月抓；統編對不到才比名稱）：只標，不改資料；六個名單分頁那邊是直接藏
-    out.closed = window.Closed && window.Closed.ready() ? window.Closed.of(record.company, record.taxId) : null;
     out.blockedInfo = window.Normalize.detectBlocked(out.notesRaw);
     out.blocked = out.blockedInfo.blocked || out.outcome === 'blocked';
     // 禁止推廣的原因與日期：最近一則標禁止推廣的通話紀錄（個資法：不要打的名單要留得住為什麼、什麼時候）
@@ -2952,7 +2950,6 @@
     { key: 'trade', name: '出進口廠商（貿易署，含電話）', url: 'leads/trade/index.json', every: '每月 9 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，有電話 ${Number(j.withPhone || 0).toLocaleString()}` },
     { key: 'nhi', name: '剛開始請人（健保新成立投保單位）', url: 'leads/nhi/index.json', every: '每月 10 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
     { key: 'einv', name: '剛開電子發票（財政部導入電子發票營業人）', url: 'leads/einv/index.json', every: '每月 11 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛導入 ${Number(j.newTotal || 0).toLocaleString()}，起算 ${j.baseline || ''}` },
-    { key: 'closed', name: '已停業（稅籍停業／非營業中、健保停歇業）', url: 'leads/closed/index.json', every: '每月 12 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家${j.taxFileDate ? `，稅籍檔 ${j.taxFileDate}` : ''}` },
     { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
   ];
   async function openDataStatus() {
@@ -3213,7 +3210,6 @@
     branch: (r) => r.branchKey,
     added: (r) => r.addedBucket,
     cold: (r) => (r.cold ? 'cold' : 'ok'),
-    closed: (r) => (r.closed ? 'closed' : 'ok'),
   };
   const facetHas = (set, value) => (Array.isArray(value) ? value.some((v) => set.has(v)) : set.has(value));
   /** 這筆有沒有通過目前的條件；skip 指定「不算哪一組」，算該組晶片家數時用。 */
@@ -3380,7 +3376,7 @@
      * 縣市、客戶規模、洽談狀態、變更登記維持複選——那幾組疊起來是有意義的
      * （台北＋新北、微企＋一般組、增資＋減資）。
      */
-    const SINGLE_PICK = new Set(['taxKind', 'phoneKind', 'visit', 'relation', 'chance', 'added', 'cold', 'closed']);
+    const SINGLE_PICK = new Set(['taxKind', 'phoneKind', 'visit', 'relation', 'chance', 'added', 'cold']);
     const chips = (host, filter, items, setRef, labelOf) => {
       host.textContent = '';
       items.forEach(([value, count]) => {
@@ -3446,13 +3442,10 @@
     const chanceCounts = new Map(CHANCE_ORDER.map((k) => [k, 0]));
     all.forEach((r) => { const k = r.chance || 'none'; chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1); });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
-    // 冷名單、已停業：固定兩顆，含 0 筆
+    // 冷名單：固定兩顆，含 0 筆
     const coldCounts = [['cold', 0], ['ok', 0]];
     all.forEach((r) => { coldCounts[r.cold ? 0 : 1][1] += 1; });
     chips($('#fltCold'), 'cold', coldCounts, state.filters.cold, (v) => (v === 'cold' ? '冷名單（未接太多次）' : '正常'));
-    const closedCounts = [['closed', 0], ['ok', 0]];
-    all.forEach((r) => { closedCounts[r.closed ? 0 : 1][1] += 1; });
-    chips($('#fltClosed'), 'closed', closedCounts, state.filters.closed, (v) => (v === 'closed' ? '已停業' : '還在營業'));
 
     // 統編：固定「有統編 → 無統編」兩顆，含 0 筆
     const taxCounts = [['yes', 0], ['no', 0]];
@@ -3695,7 +3688,6 @@
       // 「優先區域」拿掉：新莊一帶幾乎每筆都是，標了等於沒標，只是讓卡片更擠
       r.territory === '範圍外' ? el('span', { className: 'badge badge-outside', textContent: '範圍外·需協銷' }) : '',
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
-      r.closed ? el('span', { className: 'badge badge-blocked', textContent: `已停業・${r.closed.kind}${r.closed.date ? ` ${r.closed.date}` : ''}`, title: '財政部稅籍／健保署的公開資料說這家停業或註銷了（Actions 每月抓）；名單上的這筆沒動，只是標出來' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
@@ -3766,13 +3758,6 @@
     list.slice(0, state.limit).forEach((r) => host.append(card(r)));
 
     $('#listSummary').textContent = `顯示 ${Math.min(state.limit, list.length)} / ${list.length} 筆`;
-    // 已停業還沒標禁止推廣的：一顆鈕整批標（使用者：「名單上已停業的一鍵整批處理」）
-    {
-      const btn = $('#btnBlockClosed');
-      const n = allViews().filter((v) => v.closed && !v.blocked).length;
-      btn.hidden = !n;
-      btn.textContent = `已停業 ${n} 家整批標禁止推廣`;
-    }
     $('#btnMore').hidden = list.length <= state.limit;
     const empty = $('#emptyState');
     if (list.length) {
@@ -4314,7 +4299,7 @@
   /*
    * 附近可以順訪的（使用者：「拜訪完客戶後我想在同區找可以順訪且聯絡的客戶」）：
    * 名單上同一區的客戶，同一條路的排最前面，再照值得去的程度：有機會／談過 → 約過見面 → 打過還沒約 → 沒打過但有電話。
-   * 已停業、禁止推廣、冷名單不列。每家帶電話、導航（起點是現在這家）、記拜訪。
+   * 禁止推廣、冷名單不列。每家帶電話、導航（起點是現在這家）、記錄。
    * 勾「連找名單的也列」就把出進口廠商（有電話）、商行同區的也排進來當陌生拜訪的候選。
    * 名單上只有地址沒有座標，「附近」是用區和路名判斷。
    */
@@ -4330,7 +4315,7 @@
     if (!r.district) return [];
     const road = roadOf(r.addressActual || r.address);
     return allViews()
-      .filter((v) => v.id !== r.id && v.district === r.district && (!r.city || !v.city || v.city === r.city) && !v.blocked && !v.closed && !v.cold)
+      .filter((v) => v.id !== r.id && v.district === r.district && (!r.city || !v.city || v.city === r.city) && !v.blocked && !v.cold)
       .map((v) => ({ v, tier: nearbyTier(v), sameRoad: !!road && roadOf(v.addressActual || v.address) === road }))
       .filter((x) => x.tier >= 0)
       .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.tier - b.tier || (b.v.lastDate || '').localeCompare(a.v.lastDate || '') || a.v.company.localeCompare(b.v.company, 'zh-Hant'));
@@ -4359,7 +4344,7 @@
         visit,
       ]));
     });
-    det.append(el('p', { className: 'muted', textContent: '同一區的客戶，同一條路的排前面，再照有機會／談過 → 約過見面 → 打過 → 沒打過。先打一通「我剛好在附近，方便過去一下嗎」。已停業、禁止推廣、冷名單不列。' }), host);
+    det.append(el('p', { className: 'muted', textContent: '同一區的客戶，同一條路的排前面，再照有機會／談過 → 約過見面 → 打過 → 沒打過。先打一通「我剛好在附近，方便過去一下嗎」。禁止推廣、冷名單不列。' }), host);
     // 連找名單的也列：出進口廠商（有電話）、商行同區的，當陌生拜訪的候選
     let leadsOn = false;
     try { leadsOn = localStorage.getItem('nearby-leads') === '1'; } catch (e) { leadsOn = false; }
@@ -7533,22 +7518,6 @@ export default {
     $('#sortBy').value = state.sort;
     $('#sortBy').onchange = (e) => { state.sort = e.target.value; render(); };
     $('#hideBlocked').onchange = (e) => { state.hideBlocked = e.target.checked; render(); };
-    $('#btnBlockClosed').onclick = async () => {
-      const targets = allViews().filter((v) => v.closed && !v.blocked);
-      if (!targets.length) return;
-      const ok = await askConfirm(`把名單上已停業的 ${targets.length} 家整批標成「禁止推廣」？每家會記一則通話紀錄寫明停業的依據（稅籍／健保的公開資料），之後不再排日期。`, { okText: '整批標禁止推廣' });
-      if (!ok) return;
-      const today = todayISO();
-      for (const v of targets) {
-        const label = `${v.closed.kind}${v.closed.date ? ` ${v.closed.date}` : ''}`;
-        await window.Store.addLog({ recordId: v.id, date: today, text: `已停業（${label}），整批標禁止推廣`, outcome: 'blocked', createdAt: Date.now() });
-        await saveState(v.id, { outcome: 'blocked', nextDate: null, lastDate: today, pinDate: false });
-      }
-      state.logs = await window.Store.allLogs();
-      touch(); render();
-      scheduleSync();
-      toast(`已把 ${targets.length} 家已停業的標成禁止推廣`);
-    };
     $('#btnMore').onclick = () => { state.limit += PAGE_SIZE; renderList(); };
     $('#fltIndustry').oninput = (e) => { state.filters.industry = e.target.value.trim(); state.limit = PAGE_SIZE; render(); };
     $('#btnResetFilters').onclick = () => {
@@ -7617,8 +7586,6 @@ export default {
      */
     window.customerViews = () => allViews();
     window.openCustomer = (id) => openDetail(id);
-    // 停業表（leads/closed）：載好之後名單上的卡片才標得出「已停業」，所以載完重算一次
-    if (window.Closed) window.Closed.ensure().then(() => { if (window.Closed.count()) { touch(); renderList(); } }).catch(() => {});
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
     window.splitEvenly = splitEvenly;   // 測試用
@@ -7824,6 +7791,48 @@ export default {
   }
   window.switchTab = switchTab;   // 測試用：直接切到某個來源
 
+  /**
+   * 一次性復原：以前「已停業整批標禁止推廣」標的那些家。
+   *
+   * 版本 240–255 有一份停業表（稅籍停業／非營業中、健保投保單位註銷），名單上對到的會標「已停業」、
+   * 一鍵整批標成禁止推廣。使用者發現那份資料不準（「這家客戶還是在營業中」），整個拿掉。
+   * 當時每家都記了一則「已停業（…），整批標禁止推廣」的紀錄：把那則刪掉，狀態從剩下的紀錄推回來
+   * （使用者：「並且恢復這些名單的狀態」）。當時被清掉的下次聯絡日沒有存底，盡量推：
+   *   1. 剩下最近那則紀錄的內容寫了「10/20 再聯絡」這種日期，就用它（跟記通話時的補日期同一套）；
+   *   2. 不然名單檔本來的下次聯絡日比最近聯絡日晚，就用檔案的；
+   *   3. 都沒有就排今天，讓它回到「該回撥」那條線上，使用者打一通再排。
+   * 跑過就記在這台裝置上，不重跑；別台裝置同步後那些紀錄已經不在了，也就不會再動。
+   */
+  const CLOSED_UNDO_KEY = 'closed-undo-done';
+  async function undoClosedBatch() {
+    try { if (localStorage.getItem(CLOSED_UNDO_KEY) === '1') return 0; } catch (e) { /* 無痕 */ }
+    const batch = state.logs.filter((l) => /^已停業（.*），整批標禁止推廣$/.test(String(l.text || '')));
+    const ids = new Set();
+    for (const l of batch) {
+      try { await window.Store.deleteLog(l.logId, l.uid); ids.add(l.recordId); } catch (err) { console.error('復原停業標記失敗', err); }
+    }
+    if (ids.size) {
+      state.logs = await window.Store.allLogs();
+      const today = todayISO();
+      for (const id of ids) {
+        const rest = state.logs.filter((l) => l.recordId === id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        const last = rest[0];
+        const mine = state.userStates.get(id);
+        if (!mine || mine.outcome !== 'blocked') continue;
+        const rec = state.records.find((r) => r.id === id) || {};
+        const lastDate = last ? (last.date || '') : '';
+        const found = last && last.text ? window.Normalize.findFollowUp(last.text, lastDate || today) : null;
+        let next = found && found.iso ? found.iso : (rec.nextDate && rec.nextDate !== rec.lastDate && (!lastDate || rec.nextDate > lastDate) ? rec.nextDate : today);
+        if (window.Holidays && next !== today) next = window.Holidays.nextWorkday(next).iso;
+        await saveState(id, { outcome: last ? (window.Normalize.normalizeOutcome(last.outcome) || 'contacted') : 'new', lastDate, nextDate: next, pinDate: false, cold: '' });
+      }
+      touch();
+      scheduleSync();
+    }
+    try { localStorage.setItem(CLOSED_UNDO_KEY, '1'); } catch (e) { /* 無痕 */ }
+    return ids.size;
+  }
+
   async function init() {
     // 深淺色切換拿掉了（使用者說用不到），一律跟著系統；以前手動選過的清掉，不然會永遠卡在那一色
     try { localStorage.removeItem('theme'); } catch (e) { /* 無痕模式 */ }
@@ -7831,7 +7840,9 @@ export default {
     $('#menuVersion').textContent = `版本 ${APP_VERSION}`;
     wireEvents();
     await reload();
+    const undone = await undoClosedBatch();
     render();
+    if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
     if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到

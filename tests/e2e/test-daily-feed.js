@@ -65,7 +65,6 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
- await ctx.route('**/leads/closed/**',r=>r.fulfill({status:404,body:''}));   // 測試不要載到 repo 裡真的停業表（裡面有測試拿來當樣本的真公司）
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(LINDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:LCSV}));
  await ctx.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(CINDEX)}));
@@ -173,7 +172,6 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx2.addInitScript(`{ const real=Date; window.__now=new real('2026-10-10T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
- await ctx2.route('**/leads/closed/**',r=>r.fulfill({status:404,body:''}));   // 測試不要載到 repo 裡真的停業表（裡面有測試拿來當樣本的真公司）
  await ctx2.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(LINDEX)}));
  await ctx2.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:LCSV}));
  await ctx2.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(CINDEX)}));
