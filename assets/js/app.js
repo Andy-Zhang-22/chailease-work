@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-245';
+  const APP_VERSION = '20261003-246';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2374,12 +2374,19 @@
           m.chanceFrom = lead.company;
         });
       }
-      const lead = members.reduce((a, b) => ((b.lastDate || '') > (a.lastDate || '') ? b : a));
+      /*
+       * 帶頭的那家：最近聯絡的。但禁止推廣的那家不帶頭（還有別家沒禁的話）——
+       * 使用者回報：同老闆兩家，一家已停業被整批標禁止推廣，另一家跟著變成「禁止推廣」的樣子（outcome 被抄過去）、
+       * 下次聯絡日也被洗掉，可是它本身沒被禁，「隱藏禁止推廣」藏不到它。禁打是一家一家判的，不該帶著整組走。
+       */
+      const live = members.filter((m) => !m.blocked);
+      const lead = (live.length ? live : members).reduce((a, b) => ((b.lastDate || '') > (a.lastDate || '') ? b : a));
       const lastDate = lead.lastDate || null;
-      const nextDate = lead.nextDate || members.map((m) => m.nextDate).filter(Boolean).sort().pop() || null;
+      const nextDate = lead.nextDate || (live.length ? live : members).map((m) => m.nextDate).filter(Boolean).sort().pop() || null;
       members.forEach((m) => {
-        // 撥打狀態也跟著最近聯絡的那家：打給老闆談完，整組都算已聯絡（禁止推廣的那家不動）
-        if (lastDate && !m.blocked && m.outcome !== lead.outcome) { m.outcome = lead.outcome; m.groupDatesFrom = lead.company; }
+        if (m.blocked) return;   // 禁止推廣的那家：狀態、日期都不跟組（不會再排它）
+        // 撥打狀態也跟著最近聯絡的那家：打給老闆談完，整組都算已聯絡
+        if (lastDate && m.outcome !== lead.outcome) { m.outcome = lead.outcome; m.groupDatesFrom = lead.company; }
         if ((m.lastDate || null) === lastDate && (m.nextDate || null) === nextDate) return;
         m.groupDatesFrom = lead.company;
         m.lastDate = lastDate;
