@@ -35,7 +35,7 @@ const RECS=[
  chk(JSON.stringify(f.byOrigin['登記清冊'])===JSON.stringify({n:2,called:1,reached:1,chance:1,blocked:0}), `登記清冊：${JSON.stringify(f.byOrigin['登記清冊'])}`);
  chk(f.byOrigin['商行／企業社'].n===1 && f.byOrigin['商行／企業社'].called===0, `商行：${JSON.stringify(f.byOrigin['商行／企業社'])}`);
  chk(f.byRule['動產擔保｜成立 5 年內'].n===3 && f.byRule['動產擔保｜成立 5 年內'].called===3 && f.byRule['登記清冊｜增資'].chance===1, `依條件：${JSON.stringify(f.byRule)}`);
- await pg.click('.tab[data-tab="stats"]'); await pg.waitForTimeout(500);
+ await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(500);
  const txt=(await pg.innerText('#paneStats .funnel')).replace(/\s+/g,' ');
  chk(/新名單成效/.test(txt) && /動產擔保 4 4（100%） 50% 25% 1/.test(txt) && /登記清冊 2 1（50%） 100% 100% 0/.test(txt), `統計頁表格：${txt.slice(0,260)}`);
  chk(/動產擔保・成立 5 年內/.test(txt), '打過 3 家以上的條件有列出來');

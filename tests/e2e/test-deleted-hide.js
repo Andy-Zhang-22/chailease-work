@@ -39,7 +39,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await pg.evaluate(async()=>(await window.Store.allRecords()).length))===0, '名單上刪掉了');
  chk(await pg.evaluate(()=>window.deletedCompany('晨光貿易有限公司','70000001')) && !(await pg.evaluate(()=>window.deletedCompany('遠帆國際開發有限公司','70000002'))), '刪掉的公司有記到（統編／名稱）');
  // 出進口分頁：晨光藏起來，遠帆照列
- await pg.click('.tab[data-tab="trade"]'); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(300);
+ await pg.evaluate(()=>window.switchTab('trade')); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(300);
  await pg.click('#trade-reset'); await pg.fill('#trade-capMin',''); await pg.fill('#trade-capMax',''); await pg.locator('#trade-fPhone .chip:has-text("有電話")').click(); await pg.locator('#trade-fBranch .chip:has-text("新莊分公司")').click(); await pg.waitForTimeout(300);
  let names=await pg.$$eval('#trade-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===1 && /遠帆/.test(names[0]), `出進口分頁只剩遠帆：${names.join('|')}`);
@@ -47,7 +47,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(/顯示藏起來的 1 家（含名單刪過的 1 家）/.test(hb), `藏起來的按鈕：${hb}`);
  chk(!(await pg.evaluate(async()=>(await window.Trade.dailyCandidates()).some(r=>r.name==='晨光貿易有限公司'))), '每日挑選也不挑刪過的');
  // 剛開始請人分頁一樣
- await pg.click('.tab[data-tab="nhi"]'); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
+ await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
  await pg.click('#nhi-reset'); await pg.fill('#nhi-capMin',''); await pg.fill('#nhi-capMax',''); await pg.locator('#nhi-fOrg .chip:has-text("公司")').click(); await pg.locator('#nhi-fBranch .chip:has-text("新莊分公司")').click(); await pg.waitForTimeout(300);
  names=await pg.$$eval('#nhi-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===1 && /宇駿/.test(names[0]), `剛開始請人只剩宇駿：${names.join('|')}`);
@@ -60,7 +60,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.click('#nhi-hidden').catch(()=>{}); await pg.waitForTimeout(300);
  names=await pg.$$eval('#nhi-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===2 && (await pg.locator('#nhi-cards .card:has-text("晨光") .nhi-add-one').count())===1, `放回來後正常列出、可以再加入：${names.join('|')}`);
- await pg.click('.tab[data-tab="trade"]'); await pg.waitForTimeout(300);
+ await pg.evaluate(()=>window.switchTab('trade')); await pg.waitForTimeout(300);
  names=await pg.$$eval('#trade-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===2, `出進口分頁也回來了：${names.join('|')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

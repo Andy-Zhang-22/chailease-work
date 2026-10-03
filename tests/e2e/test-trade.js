@@ -34,8 +34,8 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
    [mk('1','遠帆國際開發有限公司','70000002'), mk('2','律森科技股份有限公司','33333333'), mk('3','星辰精密工業股份有限公司','22222222',{phoneRaw:'02-1111-1111',phones:[{digits:'0211111111',ext:'',note:''}]})]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
 
- chk(await pg.locator('.tab[data-tab="trade"]').count()===1, '分頁列上有「出進口廠商」');
- await pg.click('.tab[data-tab="trade"]'); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(400);
+ chk(await pg.locator('.subtab[data-tab=\"trade\"]').count()===1, '找名單底下有「出進口廠商」');
+ await pg.evaluate(()=>window.switchTab('trade')); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(400);
  const sub=await pg.textContent('#trade-sub');
  chk(/新北市的出進口廠商 75,454 家（有電話 70,514）/.test(sub) && /最近 24 個月內的 3 家/.test(sub), `副標：${sub}`);
  const names=async()=>pg.$$eval('#trade-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));

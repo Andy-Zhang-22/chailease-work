@@ -44,8 +44,8 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
 
  // 分頁在，切過去會抓清冊
- chk(await pg.locator('.tab[data-tab="chattel"]').count()===1, '分頁列上有「動產擔保名單」');
- await pg.click('.tab[data-tab="chattel"]'); await pg.waitForSelector('#chattel-cards .card'); await pg.waitForTimeout(400);
+ chk(await pg.locator('.subtab[data-tab=\"chattel\"]').count()===1, '找名單底下有「動產擔保名單」');
+ await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.waitForTimeout(400);
  const sub=await pg.textContent('#chattel-sub');
  chk(/資料截到 2026\/07/.test(sub) && /2026\/09\/26/.test(sub), `副標寫資料截到哪、何時抓的：${sub}`);
  chk(await pg.locator('#filters').isHidden(), '左側客戶篩選收起來，整個寬度給清冊');
@@ -112,7 +112,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await pg.locator('#chattel-cards .card:has-text("泓宇")').locator('button.chattel-hide').click(); await pg.waitForTimeout(250);
  n=await names(); chk(!n.includes('泓宇塑膠射出有限公司'), `藏起來了：${n.join('|')}`);
  chk((await pg.textContent('#chattel-hidden')).includes('顯示藏起來的 1 家'), `有「顯示藏起來的」按鈕：${await pg.textContent('#chattel-hidden')}`);
- await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.click('.tab[data-tab="chattel"]'); await pg.waitForSelector('#chattel-cards .card'); await pg.waitForTimeout(300);
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.waitForTimeout(300);
  n=await names(); chk(!n.includes('泓宇塑膠射出有限公司'), `重新整理之後還是藏著：${n.join('|')}`);
  await pg.click('#chattel-hidden'); await pg.waitForTimeout(250); n=await names();
  chk(n.includes('泓宇塑膠射出有限公司'), `按一下就看得到藏起來的：${n.join('|')}`);
@@ -132,7 +132,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  chk(ht && /新莊區/.test(ht.address), `標的物所在地當地址：${ht&&ht.address}`);
  chk(ht && ht.founded==='2012', `成立年一起匯進去：${ht&&ht.founded}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
- await pg.click('.tab[data-tab="chattel"]'); await pg.waitForTimeout(400);
+ await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForTimeout(400);
  const mineNow=await pg.locator('#chattel-cards .card.is-mine').count();
  chk(mineNow===4, `匯進去之後卡片變成已在名單：${mineNow}`);
  chk(/（/.test(await pg.textContent('#chattel-add'))===false, `全部都在名單了，按鈕不再寫家數：${await pg.textContent('#chattel-add')}`);

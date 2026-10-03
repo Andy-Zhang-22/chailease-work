@@ -43,7 +43,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(/已停業・稅籍停業 2026\/05\/23/.test(top), `名單卡片標已停業：${top}`);
  chk(!/已停業/.test(await pg.locator('#cards .card:has-text("還在營業")').textContent()), '沒停業的不標');
  // 出進口分頁：遠帆藏起來，晨光照列；藏起來的按鈕寫「已停業 1 家」；打開看得到原因、沒有放回來
- await pg.click('.tab[data-tab="trade"]'); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(300);
+ await pg.evaluate(()=>window.switchTab('trade')); await pg.waitForSelector('#trade-cards .card'); await pg.waitForTimeout(300);
  await pg.click('#trade-reset'); await pg.fill('#trade-capMin',''); await pg.fill('#trade-capMax',''); await pg.locator('#trade-fPhone .chip:has-text("有電話")').click(); await pg.locator('#trade-fBranch .chip:has-text("新莊分公司")').click(); await pg.waitForTimeout(300);
  let names=await pg.$$eval('#trade-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===1 && /晨光/.test(names[0]), `出進口分頁只剩晨光：${names.join('|')}`);
@@ -55,7 +55,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await card.count())===1 && /已停業（稅籍停業 2026\/05\/23），自動藏起來/.test(await card.textContent()) && (await card.locator('button:has-text("放回來")').count())===0, `打開藏起來的：寫原因、沒有放回來：${(await card.textContent()).replace(/\s+/g,' ').slice(0,160)}`);
  await pg.click('#trade-hidden'); await pg.waitForTimeout(300);
  // 剛開始請人分頁：健保註銷的宇駿也藏
- await pg.click('.tab[data-tab="nhi"]'); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
+ await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
  await pg.click('#nhi-reset'); await pg.fill('#nhi-capMin',''); await pg.fill('#nhi-capMax',''); await pg.locator('#nhi-fOrg .chip:has-text("公司")').click(); await pg.locator('#nhi-fBranch .chip:has-text("新莊分公司")').click(); await pg.waitForTimeout(300);
  names=await pg.$$eval('#nhi-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===1 && /晨光/.test(names[0]), `剛開始請人只剩晨光：${names.join('|')}`);

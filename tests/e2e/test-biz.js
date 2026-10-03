@@ -31,8 +31,8 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9488/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },[mk('1','樹德醫療器材行','91214059')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk(await pg.locator('.tab[data-tab="biz"]').count()===1, '分頁列上有「商行／企業社」');
- await pg.click('.tab[data-tab="biz"]'); await pg.waitForSelector('#biz-cards .card'); await pg.waitForTimeout(400);
+ chk(await pg.locator('.subtab[data-tab=\"biz\"]').count()===1, '找名單底下有「商行／企業社」');
+ await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForSelector('#biz-cards .card'); await pg.waitForTimeout(400);
  const sub=await pg.textContent('#biz-sub');
  chk(/新北市的商行、企業社 3 家（獨資 2、合夥 1）/.test(sub) && /50 萬 以上/.test(sub) && /查到負責人的 2 家/.test(sub), `副標：${sub}`);
  const names=async()=>pg.$$eval('#biz-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
@@ -72,7 +72,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(recs.length===1 && recs[0].company==='協玖裝潢企業社' && recs[0].taxId==='91712817' && recs[0].capital==='1,000' && recs[0].founded==='2022' && recs[0].industry==='室內裝潢工程', `加進去的資料：${JSON.stringify(recs[0])}`);
  chk(recs[0] && /商行／企業社（稅籍登記）：獨資/.test(recs[0].notes) && /只有稅籍登記/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06' && recs[0].addedDate===TODAY, `備註、排明天、名單新增日期：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
- await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200); await pg.click('.tab[data-tab="biz"]'); await pg.waitForTimeout(400);
+ await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200); await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForTimeout(400);
  chk(/已在名單/.test(await pg.locator('#biz-cards .card:has-text("協玖")').locator('.card-top').textContent()), '切回來變成已在名單');
  chk(/把篩出來的加入客戶名單（1 家）/.test(await pg.textContent('#biz-add')), `整批按鈕算還不在名單的：${await pg.textContent('#biz-add')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

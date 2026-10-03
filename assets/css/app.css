@@ -116,6 +116,13 @@ button, input, select { font: inherit; color: inherit; }
 }
 .tab.is-active { color: var(--text); border-bottom-color: var(--primary); font-weight: 600; }
 .tab-filters { display: none; margin-left: auto; }
+/* 找名單底下的第二排：七個來源 */
+.subtabs { display: flex; gap: 4px; padding: 6px 16px 0; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); background: var(--bg); }
+.subtabs::-webkit-scrollbar { display: none; }
+.subtabs[hidden] { display: none; }
+.subtab { background: none; border: 1px solid transparent; border-radius: 999px; padding: 4px 10px; margin-bottom: 6px; cursor: pointer; color: var(--muted); white-space: nowrap; font-size: 14px; }
+.subtab.is-active { color: var(--text); border-color: var(--primary); font-weight: 600; background: var(--surface); }
+.subtab .pill { margin-left: 2px; margin-right: 0; }
 .tab-filters[hidden] { display: none !important; }
 .pill {
   display: inline-block; min-width: 20px; padding: 0 6px; margin-right: 4px;
