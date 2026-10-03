@@ -20,7 +20,6 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const ctx=await br.newContext();
- await ctx.route('**/leads/closed/**',r=>r.fulfill({status:404,body:''}));   // 測試不要載到 repo 裡真的停業表（裡面有測試拿來當樣本的真公司）
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:'{"generatedAt":"x"}'}));

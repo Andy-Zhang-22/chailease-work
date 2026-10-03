@@ -335,7 +335,7 @@
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
-      && (showHidden || !(hidden.has(keyOf(r)) || delOf(r) || cloOf(r)))
+      && (showHidden || !(hidden.has(keyOf(r)) || delOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
       && c.terms.every((t) => r.blob.includes(t));
@@ -364,8 +364,6 @@
   const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const delOf = (r) => deletedOf(r['公司名稱'], r['統一編號']);
-  // 已停業（leads/closed）：一樣當藏起來的，卡片上寫原因；沒有「放回來」，資料更新才會變
-  const cloOf = (r) => (global.Closed ? global.Closed.of(r['公司名稱'], r['統一編號']) : null);
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
   function phoneBox(r, key, hasAuto) {
     if (hasAuto) return '';
@@ -400,11 +398,11 @@
     const inds = r.classes.filter((c) => IND[c]).slice(0, 2).map((c) => el('span', { className: 'badge badge-ind', textContent: IND[c] }));
     const items = (r['營業項目'] || '').split('；').filter(Boolean);
     const all = $('#leads-period').value === 'all';
-    const isHidden = hidden.has(keyOf(r)) || delOf(r) || !!cloOf(r);
+    const isHidden = hidden.has(keyOf(r)) || delOf(r);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
       : [el('button', { className: 'btn btn-tiny btn-primary leads-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
-        cloOf(r) ? el('span', { className: 'muted', textContent: `已停業（${global.Closed.label(cloOf(r))}），自動藏起來` }) : delOf(r) ? restoreBtn(r['公司名稱'], r['統一編號']) : isHidden
+        delOf(r) ? restoreBtn(r['公司名稱'], r['統一編號']) : isHidden
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(keyOf(r)); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(keyOf(r)); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card${mine ? ' is-mine' : r.rk === 'up' ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
@@ -492,11 +490,10 @@
     const inList = current.filter((r) => mineOf(r, c.cm)).length;
     $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}${inList ? `、已在名單 ${inList} 家` : ''}<span class="muted">　／ ${period === 'all' ? '全部期別' : '本期'}已載入 ${rows.filter((r) => period === 'all' || r['期別'] === period).length.toLocaleString()} 家</span>`;
     const del = rows.filter(delOf).length;
-    const clo = rows.filter(cloOf).length;
-    const hid = rows.filter((r) => hidden.has(keyOf(r))).length + del + clo;
+    const hid = rows.filter((r) => hidden.has(keyOf(r))).length + del;
     const hb = $('#leads-hidden');
     hb.hidden = !hid;
-    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}${clo ? `（已停業 ${clo} 家）` : ''}`;
+    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
     const addable = current.length - inList;
     $('#leads-add').textContent = `加入客戶名單${addable ? `（${addable} 家）` : ''}`;
     $('#leads-more').hidden = current.length <= limit;
@@ -627,9 +624,8 @@
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
-    if (global.Closed) { try { await global.Closed.ensure(); } catch (e) { /* 沒停業表就當都沒停業 */ } }
     const cm = customerMap();
-    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)) && !delOf(r) && !cloOf(r))
+    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)) && !delOf(r))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
@@ -723,7 +719,6 @@
     $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     ready = true;
     if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
-    if (global.Closed) global.Closed.ensure().then(() => { if (ready) render(); }).catch(() => {});   // 停業表載好再藏
     const rerender = async () => { limit = PAGE; await ensureLoaded(); render(); };
     $('#leads-period').onchange = async () => { await rerender(); };
     $('#leads-capMin').oninput = () => { limit = PAGE; render(); };

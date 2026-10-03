@@ -208,7 +208,7 @@
       && (except === 'pledge' || !f.pledge.size || [...f.pledge].some((k) => r.dynKeys && r.dynKeys.has(k)))
       && r.capital >= c.min && r.capital <= c.max
       && (!c.hideBig || r.capital < BIG_CAPITAL)
-      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId) || closedOf(r.name, r.taxId)))
+      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   function visible(c) {
@@ -225,9 +225,6 @@
   /* ---------------- 畫面 ---------------- */
   // 名單上刪掉的公司（公司排除）：各分頁一起當「藏起來」，放回來＝收回排除（app.js 的 deletedCompany／liftCompany）
   const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
-  // 已停業（leads/closed，稅籍停業／非營業中、健保投保單位註銷）：一樣當藏起來的，卡片上寫原因；沒有「放回來」，資料更新才會變
-  const closedOf = (name, tax) => (global.Closed ? global.Closed.of(name, tax) : null);
-  const closedNote = (name, tax) => el('span', { className: 'muted', textContent: `已停業（${global.Closed.label(closedOf(name, tax))}），自動藏起來` });
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
 
   const findbiz = (taxId, text, title) => el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(taxId)}`, target: '_blank', rel: 'noopener', textContent: text, title: title || '商工登記公示資料' });
@@ -258,7 +255,7 @@
 
   function card(r, c) {
     const mine = mineOfTax(r.taxId, r.name, c.cm);
-    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId) || !!closedOf(r.name, r.taxId);
+    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [r.taxId ? findbiz(r.taxId, r.name) : document.createTextNode(r.name), typeof global.copyDot === 'function' ? global.copyDot(r.name, '複製公司名稱', `已複製：${r.name}`) : '']),
       el('span', { className: 'badge badge-new', textContent: `${r.market} ${r.code}` }),
@@ -298,7 +295,7 @@
     const dynBox = dynBoxOf(r);
     // 使用者：整張卡的「把 N 家投資公司加入客戶名單」用不到；要加就在展開的清單裡一家一家加，或用上面的整批按鈕
     const actions = el('div', { className: 'card-actions' }, [
-      closedOf(r.name, r.taxId) ? closedNote(r.name, r.taxId) : deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
+      deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny listed-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
@@ -398,11 +395,10 @@
     const fresh = current.reduce((n, r) => n + r.invest.filter((x) => !mineOfTax(x.taxId, x.name, c.cm)).length, 0);
     $('#listed-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家上市櫃公司<span class="muted">　／ 名下投資公司 ${invest.toLocaleString()} 家${invest - fresh ? `，其中 ${invest - fresh} 家已在名單` : ''}</span>`;
     const del = rows.filter((r) => deletedOf(r.name, r.taxId)).length;
-    const clo = rows.filter((r) => closedOf(r.name, r.taxId)).length;
-    const hid = rows.filter((r) => hidden.has(r.key)).length + del + clo;
+    const hid = rows.filter((r) => hidden.has(r.key)).length + del;
     const hb = $('#listed-hidden');
     hb.hidden = !hid;
-    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}${clo ? `（已停業 ${clo} 家）` : ''}`;
+    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
     $('#listed-more').hidden = current.length <= limit;
     $('#listed-empty').hidden = !!current.length;
     $('#listed-empty').textContent = rows.length ? '沒有符合條件的公司，把篩選放寬試試。' : '';
@@ -512,7 +508,6 @@
     if (started) return;
     started = true;
     build();
-    if (global.Closed) { try { await global.Closed.ensure(); } catch (e) { /* 沒停業表就當都沒停業 */ } }
     try {
       const res = await fetch(`${DATA_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

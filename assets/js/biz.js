@@ -194,7 +194,7 @@
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.capital >= c.min && r.capital <= c.max
-      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId) || closedOf(r.name, r.taxId)))
+      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   function visible(c) {
@@ -218,9 +218,6 @@
    */
   // 名單上刪掉的公司（公司排除）：各分頁一起當「藏起來」，放回來＝收回排除（app.js 的 deletedCompany／liftCompany）
   const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
-  // 已停業（leads/closed，稅籍停業／非營業中、健保投保單位註銷）：一樣當藏起來的，卡片上寫原因；沒有「放回來」，資料更新才會變
-  const closedOf = (name, tax) => (global.Closed ? global.Closed.of(name, tax) : null);
-  const closedNote = (name, tax) => el('span', { className: 'muted', textContent: `已停業（${global.Closed.label(closedOf(name, tax))}），自動藏起來` });
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
   /*
@@ -260,7 +257,7 @@
 
   function card(r, c) {
     const mine = mineOf(r, c.cm);
-    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId) || !!closedOf(r.name, r.taxId);
+    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [r.reg ? findbiz(r.taxId, r.name) : el('span', { textContent: r.name, title: '只有稅籍登記，商工登記查不到' }), copyName(r.name)]),
       r.org ? el('span', { className: 'badge badge-new', textContent: r.org }) : '',
@@ -287,7 +284,7 @@
     ]);
     const actions = el('div', { className: 'card-actions' }, [
       mine ? '' : el('button', { className: 'btn btn-tiny btn-primary biz-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
-      closedOf(r.name, r.taxId) ? closedNote(r.name, r.taxId) : deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
+      deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny biz-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
@@ -398,11 +395,10 @@
     const fresh = current.filter((r) => !mineOf(r, c.cm)).length;
     $('#biz-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${current.length - fresh ? `　／ 其中 ${current.length - fresh} 家已在名單` : ''}</span>`;
     const del = pool().filter((r) => deletedOf(r.name, r.taxId)).length;
-    const clo = pool().filter((r) => closedOf(r.name, r.taxId)).length;
-    const hid = pool().filter((r) => hidden.has(r.key)).length + del + clo;
+    const hid = pool().filter((r) => hidden.has(r.key)).length + del;
     const hb = $('#biz-hidden');
     hb.hidden = !hid;
-    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}${clo ? `（已停業 ${clo} 家）` : ''}`;
+    hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
     $('#biz-more').hidden = current.length <= limit;
     $('#biz-empty').hidden = !!current.length;
     $('#biz-empty').textContent = pool().length ? '沒有符合條件的，把篩選放寬試試。' : '';
@@ -509,7 +505,7 @@
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
     const tel = (r) => (foundOf(r) ? foundOf(r).tel : '') || typed.get(r.key) || (global.Trade && global.Trade.telOf ? global.Trade.telOf(r.taxId) : '') || '';
-    return rows.filter((r) => r.district === district && !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId) && !closedOf(r.name, r.taxId))
+    return rows.filter((r) => r.district === district && !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
       .map((r) => ({ kind: '商行', name: r.name, taxId: r.taxId, address: r.address, tel: tel(r), note: [r.inds[0] || '', r.owner ? `負責人 ${r.owner}` : ''].filter(Boolean).join('・'), add: () => addToList([r]) }))
       .sort((a, b) => Number(!!b.tel) - Number(!!a.tel))
       .slice(0, limit || 50);
@@ -529,7 +525,7 @@
       const minCap = (index && index.minCapital) || 500000;
       extra = [...mrows[p].setup, ...mrows[p].change].filter((r) => { if (!r.taxId || seen.has(r.taxId) || r.capital < minCap) return false; seen.add(r.taxId); return true; });
     } catch (e) { extra = []; }
-    return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId) && !closedOf(r.name, r.taxId))
+    return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
       .sort(dailyCompare);
   }
@@ -600,7 +596,6 @@
     starting = (async () => {
       started = true;
       build();
-      if (global.Closed) { try { await global.Closed.ensure(); } catch (e) { /* 沒停業表就當都沒停業 */ } }
       try {
         const res = await fetch(`${DATA_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
