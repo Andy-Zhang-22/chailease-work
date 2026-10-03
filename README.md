@@ -3533,3 +3533,18 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
 使用者截圖（有機會 18）：「這個標注裡，有幾間是關係企業不要重複計算，會有錯覺」。有沒有機會本來就是整組共用
 （同老闆連結的關係企業標一次全組跟著），計數改成同一組只算一次；標題改「有沒有機會（自己標的，關係企業算一家）」。
 點下去篩出來的名單照舊列每一家。`test-chance-group.js`。
+
+## 商行的「最近異動日期」照商業登記；詳細頁欄名改「最近異動日期」（版本 261）
+
+使用者截圖（findbiz 商業登記頁寫最近異動日期 115/06/17，網站詳細頁「最近核准變更」寫 —）：「系統內的最近核准變更的資訊要跟
+商工登記裡的最近異動日期一樣，把系統詳細頁裡的名稱也改成最近異動日期」。
+
+- 原因：商工登記查詢只打公司的資料集，商業（獨資、合夥：商行、企業社、工作室）查不到，日期一直是空的。
+- 探路（Actions，看完刪掉、log 也刪）確認兩步：`426D5542-…`（商業登記基本資料-應用三）`President_No eq 統編` 拿每個申登機關；
+  `7E6AFA72-…`（swagger 標「商業登記基本資料-應用一」）`President_No eq 統編 and Agency eq 機關代碼` 拿
+  `Business_Last_Change_Date`、負責人、登記資本額、地址。遷過縣市的兩個機關都「核准設立」，取最近異動日期最新的那列。
+- `Registry.lookupBusiness`；`lookupCompany` 遇到名稱不是「…公司」的先查商業登記，公司查不到也最後試一次。
+  欄位候選多 `President_No`、`Business_Current_Status_Desc`、`Business_Register_Funds`、`Business_Setup_Approve_Date`、
+  `Business_Last_Change_Date`。下一次商工登記自動更新（或選單「商工登記更新」）就會補上。
+- 詳細頁、匯出、編輯欄位、排序選項、Actions 的變更說明，「最近核准變更（日期）」一律改「最近異動日期」。
+- 測試：`tests/registry.test.js` 兩條（商行取最新機關、公司照舊）；`test-capital-fields.js`、`test-sort-regchanged.js` 改欄名。

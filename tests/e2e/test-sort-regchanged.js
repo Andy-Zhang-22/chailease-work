@@ -1,4 +1,4 @@
-// 排序多一個「依最近核准變更（新到舊）」，而且排序那組搬到「名單新增」下面
+// 排序多一個「依最近異動日期（新到舊）」，而且排序那組搬到「名單新增」下面
 const { chromium } = require('playwright');
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
@@ -18,14 +18,14 @@ const SEED=[mk(1,'甲公司','2024/01/05'),mk(2,'乙公司','2026/04/02'),mk(3,'
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 
  const opts=await pg.evaluate(()=>[...document.querySelectorAll('#sortBy option')].map(o=>[o.value,o.textContent]));
- chk(opts.some(([v,t])=>v==='regchanged'&&/最近核准變更（新到舊）/.test(t)), `排序多一個選項：${JSON.stringify(opts.map(o=>o[1]))}`);
+ chk(opts.some(([v,t])=>v==='regchanged'&&/最近異動日期（新到舊）/.test(t)), `排序多一個選項：${JSON.stringify(opts.map(o=>o[1]))}`);
 
  const groups=await pg.evaluate(()=>[...document.querySelectorAll('#filters .filter-group[data-group]')].map(g=>g.dataset.group));
  chk(groups[groups.indexOf('added')+1]==='sort', `排序就在「名單新增」下面：${JSON.stringify(groups.slice(0,4))}`);
 
  // 預設就是這個排序，不用自己選
  const def=await pg.inputValue('#sortBy');
- chk(def==='regchanged', `預設排序就是最近核准變更：${def}`);
+ chk(def==='regchanged', `預設排序就是最近異動日期：${def}`);
  const names=await pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent));
  chk(JSON.stringify(names)===JSON.stringify(['乙公司','丁公司','甲公司','丙公司']),
    `由新到舊排，沒有日期的排最後：${JSON.stringify(names)}`);

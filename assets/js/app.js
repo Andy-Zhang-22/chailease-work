@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-260';
+  const APP_VERSION = '20261003-261';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4675,7 +4675,7 @@
        * 才知道公司到底動了什麼。用「查到」而不是直接寫在日期上，是因為那個日期
        * 是政府登記的核准日，跟網站查到差異的那天未必是同一天。
        */
-      ['最近核准變更', [
+      ['最近異動日期', [
         r.regChanged || (r.regAt ? '—' : '—　還沒查過商工登記'),
         regChangeBrief(r),
       ].filter(Boolean).join('　')],
@@ -5403,7 +5403,7 @@
     line('■ 登記動態');
     {
       const p = el('div', { className: 'brief-reg' });
-      const head = `最近核准變更：${r.regChanged || '—'}`;
+      const head = `最近異動日期：${r.regChanged || '—'}`;
       p.append(el('div', { textContent: head }));
       line(head);
       if (r.regChanges && r.regChanges.length) {
@@ -5534,7 +5534,7 @@
     ['founded', '成立年', 'text'],
     ['capital', '資本總額（仟元）', 'text'],
     ['capitalPaid', '實收資本額（仟元）', 'text'],
-    ['regChanged', '最近核准變更日期', 'text'],
+    ['regChanged', '最近異動日期', 'text'],
     ['phoneRaw', '電話', 'textarea'],
     ['owner', '負責人', 'text'],
     ['keyman', 'KEYMAN', 'text'],
@@ -6067,7 +6067,7 @@ export default {
     ['owner', '負責人'],
     ['address', '登記地址'],
     ['founded', '成立年'],
-    ['regChanged', '最近核准變更日期'],
+    ['regChanged', '最近異動日期'],
   ];
   // 登記給的是完整日期（2016/03/01），名單上只記年份：比對與寫入都只用年
   const registryValue = (key, data) => {
@@ -6760,7 +6760,7 @@ export default {
       if (!await askConfirm(`要查 ${all.length} 筆嗎？\n\n`
         + '會在背景一筆一筆送出（每筆間隔 0.3 秒，避免對政府網站造成負擔），'
         + '這個視窗會自動收起來，你可以繼續打電話；進度在畫面下方，隨時可以按停止。\n\n'
-        + '查到跟登記不一致的欄位（統編、資本總額、實收資本額、負責人、登記地址、成立年、最近核准變更日期）會直接更新，'
+        + '查到跟登記不一致的欄位（統編、資本總額、實收資本額、負責人、登記地址、成立年、最近異動日期）會直接更新，'
         + '記成「已修改」，每一筆都可以在詳細頁還原。')) return;
       $('#editor').hidden = true;
       toast('已在背景開始更新，可以繼續用名單');
