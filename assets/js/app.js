@@ -7796,8 +7796,11 @@ export default {
    *
    * 版本 240–255 有一份停業表（稅籍停業／非營業中、健保投保單位註銷），名單上對到的會標「已停業」、
    * 一鍵整批標成禁止推廣。使用者發現那份資料不準（「這家客戶還是在營業中」），整個拿掉。
-   * 當時每家都記了一則「已停業（…），整批標禁止推廣」的紀錄：把那則刪掉，狀態從剩下的紀錄推回來；
-   * 當時被清掉的下次聯絡日救不回來，變成未排定（從選單「整理未排定的名單」排回去）。
+   * 當時每家都記了一則「已停業（…），整批標禁止推廣」的紀錄：把那則刪掉，狀態從剩下的紀錄推回來
+   * （使用者：「並且恢復這些名單的狀態」）。當時被清掉的下次聯絡日沒有存底，盡量推：
+   *   1. 剩下最近那則紀錄的內容寫了「10/20 再聯絡」這種日期，就用它（跟記通話時的補日期同一套）；
+   *   2. 不然名單檔本來的下次聯絡日比最近聯絡日晚，就用檔案的；
+   *   3. 都沒有就排今天，讓它回到「該回撥」那條線上，使用者打一通再排。
    * 跑過就記在這台裝置上，不重跑；別台裝置同步後那些紀錄已經不在了，也就不會再動。
    */
   const CLOSED_UNDO_KEY = 'closed-undo-done';
@@ -7810,12 +7813,18 @@ export default {
     }
     if (ids.size) {
       state.logs = await window.Store.allLogs();
+      const today = todayISO();
       for (const id of ids) {
         const rest = state.logs.filter((l) => l.recordId === id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         const last = rest[0];
         const mine = state.userStates.get(id);
         if (!mine || mine.outcome !== 'blocked') continue;
-        await saveState(id, { outcome: last ? (window.Normalize.normalizeOutcome(last.outcome) || 'contacted') : 'new', lastDate: last ? (last.date || '') : '', nextDate: null, pinDate: false });
+        const rec = state.records.find((r) => r.id === id) || {};
+        const lastDate = last ? (last.date || '') : '';
+        const found = last && last.text ? window.Normalize.findFollowUp(last.text, lastDate || today) : null;
+        let next = found && found.iso ? found.iso : (rec.nextDate && rec.nextDate !== rec.lastDate && (!lastDate || rec.nextDate > lastDate) ? rec.nextDate : today);
+        if (window.Holidays && next !== today) next = window.Holidays.nextWorkday(next).iso;
+        await saveState(id, { outcome: last ? (window.Normalize.normalizeOutcome(last.outcome) || 'contacted') : 'new', lastDate, nextDate: next, pinDate: false, cold: '' });
       }
       touch();
       scheduleSync();
@@ -7833,7 +7842,7 @@ export default {
     await reload();
     const undone = await undoClosedBatch();
     render();
-    if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原，變成未排定，從選單「整理未排定的名單」排回去`);
+    if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
     if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
