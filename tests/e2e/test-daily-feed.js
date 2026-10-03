@@ -89,7 +89,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
 
  // 分頁名稱
  const tabs=await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('找名單') && tabs.length===3, `分頁列只剩三個：${tabs.join(' | ')}`);
+ chk(tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('行事曆') && tabs[2].startsWith('找名單') && tabs.length===4, `分頁列四個：${tabs.join(' | ')}`);
 
  // 每日自動挑：動產擔保 4 家（禾泰、昱昌、泓宇、巨鎰）、登記清冊 4 家 → 8 家，都排今天
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);

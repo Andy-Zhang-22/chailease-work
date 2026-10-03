@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-248';
+  const APP_VERSION = '20261003-249';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4058,6 +4058,7 @@
 
     const tab = state.tab;
     $('#paneList').hidden = tab !== 'all';
+    $('#paneCal').hidden = tab !== 'cal';
     $('#paneStats').hidden = tab !== 'stats';
     $('#paneRules').hidden = tab !== 'rules';
     $('#paneLeads').hidden = tab !== 'leads';
@@ -4068,12 +4069,16 @@
     $('#paneNhi').hidden = tab !== 'nhi';
     $('#paneEinv').hidden = tab !== 'einv';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv';
+    const wide = tab === 'cal' || tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
     renderFilters();
-    if (tab === 'stats') {
+    // 行事曆分頁名字後面帶今天還沒做的家數，不用進去就知道今天排了幾家
+    { const n = state.records.length ? calTodayCount() : 0; const pill = $('#countCal'); if (pill) { pill.textContent = n ? String(n) : ''; pill.hidden = !n; } }
+    if (tab === 'cal') {
+      renderCal();
+    } else if (tab === 'stats') {
       // 統計只跟資料有關，資料沒變就不用重畫幾十根長條
       if (statsKey !== String(dataVersion)) { renderStats(); statsKey = String(dataVersion); }
     } else if (tab === 'rules') {
@@ -4096,6 +4101,211 @@
       if (window.Einv) window.Einv.show();
     } else { renderList(); renderRemindBar(); }
   }
+
+
+  /* ---------------- 行事曆 ---------------- */
+  /*
+   * 行事曆（使用者：「能在我的電推系統內內建一個行事曆嗎 … 我這樣才能看到我哪天要拜訪誰」）：
+   * 整月一格一天，每格列那天要聯絡的客戶——下次聯絡日落在那天的（🚗 要拜訪、📞 要打電話），
+   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，看最近一則紀錄：拜訪表單的
+   * 「下一步：再約拜訪」、或紀錄裡寫了約了拜訪／見面就是 🚗，其他都是 📞。
+   * 點一天，下面列那天的行程：拜訪的同區排一起（同一條路相鄰），每家帶電話、導航、記拜訪；
+   * 電話的帶上次談的重點。日期還是在詳細頁改，行事曆只是把現有的下次聯絡日攤開來看，不另存一套，
+   * 兩邊不會打架。週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週行程變成文字貼 LINE。
+   * 分頁放在最上面那排（每天都會開，不該藏在選單裡），名字後面帶今天還沒做的家數。
+   */
+  const cal = { month: '', sel: '' };
+  const calYm = (iso) => String(iso || '').slice(0, 7);   // yyyy-mm（既有的 monthOf 回的是整個月的頭尾）
+  const calMd = (iso) => String(iso || '').slice(5).replace('-', '/');
+  const VISIT_NEXT_RE = /下一步：再約拜訪|再約拜訪|約(了|好|定)?[^\n]{0,8}(拜訪|見面|面談|碰面|過去一趟)/;
+  const stepOf = (text) => { const m = String(text || '').match(/下一步：([^\n]+)/); return m ? m[1].trim() : ''; };
+  let calCache = { key: '', map: null };
+  /** 哪天有誰：Map(yyyy-mm-dd → [{ v, kind: 'visit'|'call', done, time, step, note }])，排好序。 */
+  function calEvents() {
+    const key = `${dataVersion}|${todayISO()}|${chattelVersion}`;
+    if (calCache.key === key && calCache.map) return calCache.map;
+    const map = new Map();
+    const push = (iso, item) => { if (!iso) return; if (!map.has(iso)) map.set(iso, []); map.get(iso).push(item); };
+    const byId = new Map();
+    const views = allViews().filter((v) => !v.blocked);
+    views.forEach((v) => byId.set(v.id, v));
+    // 哪天做了什麼：同一家同一天只算一次，有拜訪就算拜訪
+    const doneKey = new Map();
+    state.logs.forEach((l) => {
+      const v = byId.get(l.recordId);
+      if (!v || !l.date) return;
+      const k = `${l.recordId}|${l.date}`;
+      const cur = doneKey.get(k) || { v, iso: l.date, kind: 'call', note: '', at: 0 };
+      if (l.kind === 'visit') cur.kind = 'visit';
+      if ((l.createdAt || 0) >= cur.at) { cur.at = l.createdAt || 0; cur.note = l.text || ''; }
+      doneKey.set(k, cur);
+    });
+    doneKey.forEach((d) => push(d.iso, { v: d.v, kind: d.kind, done: true, time: '', step: '', note: d.note }));
+    const today = todayISO();
+    views.forEach((v) => {
+      const last = latestLog(v.id);
+      const text = (last && last.text) || '';
+      const noteText = text.replace(/下一步：[^\n]*/g, '').replace(/\s+/g, ' ').trim();   // 下一步另外做成籤，不重複
+      const note = noteText ? `上次 ${calMd((last && last.date) || '')}：${noteText.slice(0, 40)}` : '';
+      const step = stepOf(text);
+      const kind = VISIT_NEXT_RE.test(text) ? 'visit' : 'call';
+      const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
+      if (v.nextDate) {
+        const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
+        if (!didIt) push(v.nextDate, { v, kind, done: false, time: remindIso === v.nextDate ? timeLabel(v.remindAt) : '', step, note });
+      }
+      if (remindIso && remindIso !== v.nextDate && !doneKey.has(`${v.id}|${remindIso}`)) push(remindIso, { v, kind: 'call', done: false, time: timeLabel(v.remindAt), step, note });
+    });
+    // 一天裡：還沒做的在前（拜訪先、再電話，拜訪照區、路、門牌排，電話照時間、公司名），做完的在後
+    const road = (v) => roadOf(v.addressActual || v.address);
+    map.forEach((list) => list.sort((a, b) => Number(a.done) - Number(b.done)
+      || Number(b.kind === 'visit') - Number(a.kind === 'visit')
+      || (a.kind === 'visit' ? ((a.v.district || '').localeCompare(b.v.district || '', 'zh-Hant') || road(a.v).localeCompare(road(b.v), 'zh-Hant') || (a.v.addressActual || a.v.address || '').localeCompare(b.v.addressActual || b.v.address || '', 'zh-Hant', { numeric: true })) : ((a.time || '99').localeCompare(b.time || '99')))
+      || a.v.company.localeCompare(b.v.company, 'zh-Hant')));
+    calCache = { key, map };
+    return map;
+  }
+  const calTodayCount = () => (calEvents().get(todayISO()) || []).filter((x) => !x.done).length;
+  function openCalendar(iso) {
+    cal.sel = iso || todayISO();
+    cal.month = calYm(cal.sel);
+    closeOverlays();
+    switchTab('cal');
+  }
+  window.openCalendar = openCalendar;   // 測試用
+
+  function renderCal() {
+    const host = $('#paneCal');
+    if (!host) return;
+    const today = todayISO();
+    if (!cal.sel) cal.sel = today;
+    if (!cal.month) cal.month = calYm(cal.sel);
+    const H = window.Holidays;
+    const events = calEvents();
+    host.textContent = '';
+    const [y, m] = cal.month.split('-').map(Number);
+    const shift = (n) => { const d = new Date(y, m - 1 + n, 1); cal.month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; renderCal(); };
+    const head = el('div', { className: 'cal-head' }, [
+      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '◀', title: '上個月', onclick: () => shift(-1) }),
+      el('h2', { textContent: `${y} 年 ${m} 月` }),
+      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '▶', title: '下個月', onclick: () => shift(1) }),
+      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '今天', onclick: () => { cal.sel = today; cal.month = calYm(today); renderCal(); } }),
+      el('span', { className: 'cal-legend', textContent: '🚗 拜訪　📞 電話　✓ 做完了' }),
+      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製這週', title: '把這一週的行程變成文字，貼到 LINE 或行事曆', onclick: () => copyWeek() }),
+    ]);
+    host.append(head);
+    const grid = el('div', { className: 'cal-grid' });
+    ['一', '二', '三', '四', '五', '六', '日'].forEach((w) => grid.append(el('div', { className: 'cal-dow', textContent: w })));
+    const first = `${cal.month}-01`;
+    const startDow = (new Date(`${first}T00:00:00`).getDay() + 6) % 7;   // 週一起算
+    const start = addDays(first, -startDow);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const rows = Math.ceil((startDow + daysInMonth) / 7);
+    for (let i = 0; i < rows * 7; i++) {
+      const iso = addDays(start, i);
+      const list = events.get(iso) || [];
+      const off = H ? H.holidayName(iso) : '';
+      const other = calYm(iso) !== cal.month;
+      const cell = el('button', { className: `cal-day${other ? ' is-other' : ''}${off ? ' is-off' : ''}${iso < today ? ' is-past' : ''}${iso === today ? ' is-today' : ''}${iso === cal.sel ? ' is-sel' : ''}`, type: 'button', 'data-date': iso, onclick: () => { cal.sel = iso; if (other) cal.month = calYm(iso); renderCal(); } });
+      const todo = list.filter((x) => !x.done).length;
+      cell.append(el('div', { className: 'cal-n' }, [
+        el('span', { textContent: String(Number(iso.slice(8))) }),
+        el('small', { textContent: iso === today ? '今天' : (off && !/^週/.test(off) ? off : '') }),
+      ]));
+      const MAX = 4;
+      list.slice(0, MAX).forEach((x) => cell.append(el('div', { className: `cal-ev${x.done ? ' is-done' : ''}`, textContent: `${x.done ? '✓ ' : ''}${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}` })));
+      if (list.length > MAX) cell.append(el('div', { className: 'cal-ev muted', textContent: `＋${list.length - MAX} 家` }));
+      if (list.length) cell.append(el('div', { className: 'cal-cnt', textContent: todo ? `${todo} 家` : `✓ ${list.length}` }));
+      grid.append(cell);
+    }
+    host.append(grid);
+    host.append(calAgenda(cal.sel, events.get(cal.sel) || []));
+  }
+
+  function calAgenda(iso, list) {
+    const H = window.Holidays;
+    const box = el('div', { className: 'cal-agenda' });
+    const planned = list.filter((x) => !x.done);
+    const visits = planned.filter((x) => x.kind === 'visit');
+    const calls = planned.filter((x) => x.kind !== 'visit');
+    const done = list.filter((x) => x.done);
+    const off = H ? H.holidayName(iso) : '';
+    const what = planned.length
+      ? `要跑 ${visits.length} 家、打 ${calls.length} 家${done.length ? `，做完 ${done.length} 家` : ''}`
+      : done.length ? `做完 ${done.length} 家` : off ? `${off}，沒排` : '沒有排';
+    box.append(el('h3', { textContent: `${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）${what}` }));
+    const openBtn = (v, label) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: label || '打開', onclick: () => openDetail(v.id) });
+    const visitBtn = (v) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '記拜訪', onclick: () => {
+      openDetail(v.id);
+      setTimeout(() => { const d = [...document.querySelectorAll('#drawerBody details')].find((x) => /記錄這次拜訪/.test(x.textContent)); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 60);
+    } });
+    const addrOf = (v) => (v.addressActual || v.address || '');
+    const shortAddr = (v) => addrOf(v).replace(/^.{2,3}[市縣]/, '');
+    const nameBtn = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) });
+    let lastDist = null;
+    visits.forEach((x) => {
+      const dist = x.v.district || '沒有區';
+      if (dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 拜訪・${dist}（同區排一起）` })); lastDist = dist; }
+      box.append(el('div', { className: 'cal-row is-visit' }, [
+        nameBtn(x.v),
+        x.step ? el('span', { className: 'badge badge-up', textContent: x.step }) : '',
+        x.time ? el('span', { className: 'badge badge-pin', textContent: x.time }) : '',
+        ...telLinks(x.v, 1),
+        el('span', { className: 'muted', textContent: shortAddr(x.v) }),
+        addrOf(x.v) ? navLink('', addrOf(x.v)) : '',
+        visitBtn(x.v),
+      ]));
+    });
+    if (calls.length) {
+      box.append(el('div', { className: 'cal-cap', textContent: '📞 電話' }));
+      calls.forEach((x) => box.append(el('div', { className: 'cal-row is-call' }, [
+        nameBtn(x.v),
+        x.time ? el('span', { className: 'badge badge-pin', textContent: `⏰ ${x.time}` }) : '',
+        x.step ? el('span', { className: 'badge badge-ind', textContent: x.step }) : '',
+        ...telLinks(x.v, 1),
+        x.note ? el('span', { className: 'muted', textContent: x.note }) : '',
+        openBtn(x.v),
+      ])));
+    }
+    if (done.length) {
+      box.append(el('div', { className: 'cal-cap', textContent: '✓ 做完的' }));
+      done.forEach((x) => box.append(el('div', { className: 'cal-row is-done' }, [
+        el('span', { textContent: `✓ ${x.kind === 'visit' ? '🚗' : '📞'}` }),
+        nameBtn(x.v),
+        x.note ? el('span', { className: 'muted', textContent: x.note.replace(/\s+/g, ' ').slice(0, 60) }) : '',
+        openBtn(x.v),
+      ])));
+    }
+    if (!list.length) box.append(el('p', { className: 'muted', textContent: '這天沒有排任何客戶。要排的話，到客戶詳細頁把下次聯絡日填這一天。' }));
+    return box;
+  }
+
+  /** 這一週（週一到週日）的行程變成文字，貼 LINE 或行事曆用。 */
+  function weekText(iso) {
+    const H = window.Holidays;
+    const events = calEvents();
+    const startDow = (new Date(`${iso}T00:00:00`).getDay() + 6) % 7;
+    const mon = addDays(iso, -startDow);
+    const lines = [`${calMd(mon)}～${calMd(addDays(mon, 6))} 行程`];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(mon, i);
+      const list = (events.get(d) || []).filter((x) => !x.done);
+      if (!list.length) continue;
+      lines.push(`${calMd(d)}（${H ? H.weekLabel(d) : ''}）`);
+      list.forEach((x) => {
+        const tel = x.v.phones.length ? x.v.phones[0].display : '';
+        lines.push(`  ${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}${x.time ? ` ${x.time}` : ''}${x.step ? `（${x.step}）` : ''}${x.kind === 'visit' && (x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
+      });
+    }
+    return lines.length > 1 ? lines.join('\n') : '';
+  }
+  async function copyWeek() {
+    const text = weekText(cal.sel || todayISO());
+    if (!text) { toast('這一週沒有排任何客戶'); return; }
+    const ok = await copyText(text);
+    toast(ok ? '已複製這週的行程，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
+  }
+  window.weekText = weekText;   // 測試用
 
   /* ---------------- 詳細資料抽屜 ---------------- */
 
@@ -4356,6 +4566,8 @@
       if (!v) return;
       const dd = el('dd', { textContent: v });
       if (copyable) dd.append(copyDot(copyable, `複製${k} ${copyable}`, `已複製${k}：${copyable}`));
+      // 下次聯絡日旁邊一個小連結，跳到行事曆的那一天看當天還排了誰
+      if (k === '下次聯絡' && r.nextDate) dd.append(' ', el('button', { className: 'link-btn cal-jump', type: 'button', textContent: '看行事曆', onclick: () => openCalendar(r.nextDate) }));
       dl.append(el('dt', { textContent: k }), dd);
     });
     // 行銷區域：依規範用「公司登記地址」判，跟服務區域（看實際地址）分開
@@ -7803,11 +8015,11 @@ export default {
   const SOURCE_TABS = ['leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv'];
   function switchTab(tab) {
     if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'leads'; }
-    if (!(tab === 'all' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
+    if (!(tab === 'all' || tab === 'cal' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
     state.tab = tab;
     state.limit = PAGE_SIZE;
     const isSource = SOURCE_TABS.includes(tab);
-    const top = tab === 'all' ? 'all' : isSource ? 'sources' : '';
+    const top = tab === 'all' ? 'all' : tab === 'cal' ? 'cal' : isSource ? 'sources' : '';
     [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', !!top && b.dataset.tab === top));
     $('#subtabs').hidden = !isSource;
     [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
@@ -7885,7 +8097,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv') {
+    if (want === 'cal' || want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv') {
       $('#importer').hidden = true;
       switchTab(want);
     }
