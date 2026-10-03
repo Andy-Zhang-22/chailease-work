@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-244';
+  const APP_VERSION = '20261003-245';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4306,7 +4306,9 @@
       const dd = el('dd', { className: 'detail-chattel' });
       if (r.chattel && r.chattel.length) {
         const ol = el('ol', { className: 'reg-history' });
-        r.chattel.forEach((c) => {
+        // 照日期新到舊列（使用者：「動擔的詳細資訊請按照日期排序，最新到最舊」）：登記核准日，沒有就契約起；都沒有的排最後
+        const dk = (c) => { const m = String(c.approved || c.start || '').match(/^(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : -1; };
+        [...r.chattel].sort((a, b) => dk(b) - dk(a)).forEach((c) => {
           const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天，未註銷` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天到期`;
           const li = el('li', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '' }, [
             el('b', { textContent: `${c.lender.name || '不明'}　${window.Chattel.typeShort(c.type)}　${chattelMoney(c.amount)}` }),
