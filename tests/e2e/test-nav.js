@@ -20,7 +20,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(await pg.locator('#subtabs').isVisible() && (await pg.$$eval('#subtabs .subtab',a=>a.length))===7, '第二排七個來源');
  chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('.subtab[data-tab="leads"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneLeads').isVisible(), '找名單亮著、預設登記清冊');
  const subs=await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(subs[0].startsWith('登記清冊') && subs[1].startsWith('動產擔保') && subs[2].startsWith('上市櫃') && subs[6].startsWith('剛開電子發票'), `名字縮短：${subs.join(' | ')}`);
+ chk(subs[0].startsWith('每月公司設立／變更登記清冊') && subs[1].startsWith('動產擔保') && subs[2].startsWith('上市櫃') && subs[6].startsWith('剛開電子發票'), `名字縮短：${subs.join(' | ')}`);
  // 切到出進口廠商：pane 換、搜尋欄提示換、記住
  await pg.click('.subtab[data-tab="trade"]'); await pg.waitForTimeout(400);
  chk(await pg.locator('#paneTrade').isVisible() && await pg.locator('#paneLeads').isHidden() && /出進口廠商/.test(await pg.getAttribute('#search','placeholder')), '切到出進口廠商');
