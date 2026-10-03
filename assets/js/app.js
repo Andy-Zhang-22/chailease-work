@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-253';
+  const APP_VERSION = '20261003-254';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4153,15 +4153,17 @@
       const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
       if (v.nextDate) {
         const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
-        if (!didIt) push(v.nextDate, { v, kind, done: false, time: remindIso === v.nextDate ? timeLabel(v.remindAt) : '', step, note });
+        const depart = kind === 'visit' ? (last.meetingDepart || '') : '';
+        const arrive = kind === 'visit' ? (last.meetingArrive || '') : '';
+        if (!didIt) push(v.nextDate, { v, kind, done: false, time: kind === 'visit' ? (arrive || depart) : (remindIso === v.nextDate ? timeLabel(v.remindAt) : ''), depart, arrive, step, note });
       }
       if (remindIso && remindIso !== v.nextDate && !doneKey.has(`${v.id}|${remindIso}`)) push(remindIso, { v, kind: 'call', done: false, time: timeLabel(v.remindAt), step, note });
     });
-    // 一天裡：還沒做的在前（拜訪先、再電話，拜訪照區、路、門牌排，電話照時間、公司名），做完的在後
+    // 一天裡：還沒做的在前（拜訪先、再電話；拜訪有抵達時間的照時間、再照區、路、門牌排，電話照時間、公司名），做完的在後
     const road = (v) => roadOf(v.addressActual || v.address);
     map.forEach((list) => list.sort((a, b) => Number(a.done) - Number(b.done)
       || Number(b.kind === 'visit') - Number(a.kind === 'visit')
-      || (a.kind === 'visit' ? ((a.v.district || '').localeCompare(b.v.district || '', 'zh-Hant') || road(a.v).localeCompare(road(b.v), 'zh-Hant') || (a.v.addressActual || a.v.address || '').localeCompare(b.v.addressActual || b.v.address || '', 'zh-Hant', { numeric: true })) : ((a.time || '99').localeCompare(b.time || '99')))
+      || (a.kind === 'visit' ? ((a.time || '99').localeCompare(b.time || '99') || (a.v.district || '').localeCompare(b.v.district || '', 'zh-Hant') || road(a.v).localeCompare(road(b.v), 'zh-Hant') || (a.v.addressActual || a.v.address || '').localeCompare(b.v.addressActual || b.v.address || '', 'zh-Hant', { numeric: true })) : ((a.time || '99').localeCompare(b.time || '99')))
       || a.v.company.localeCompare(b.v.company, 'zh-Hant')));
     calCache = { key, map };
     return map;
@@ -4214,7 +4216,7 @@
         el('small', { textContent: iso === today ? '今天' : (off && !/^週/.test(off) ? off : '') }),
       ]));
       const MAX = 4;
-      list.slice(0, MAX).forEach((x) => cell.append(el('div', { className: `cal-ev${x.done ? ' is-done' : ''}`, textContent: `${x.done ? '✓ ' : ''}${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}` })));
+      list.slice(0, MAX).forEach((x) => cell.append(el('div', { className: `cal-ev${x.done ? ' is-done' : ''}`, textContent: `${x.done ? '✓ ' : ''}${x.kind === 'visit' ? '🚗' : '📞'} ${x.kind === 'visit' && x.time ? `${x.time} ` : ''}${x.v.company}` })));
       if (list.length > MAX) cell.append(el('div', { className: 'cal-ev muted', textContent: `＋${list.length - MAX} 家` }));
       if (list.length) cell.append(el('div', { className: 'cal-cnt', textContent: todo ? `${todo} 家` : `✓ ${list.length}` }));
       grid.append(cell);
@@ -4247,7 +4249,7 @@
       box.append(el('div', { className: 'cal-row is-visit' }, [
         nameBtn(x.v),
         x.step ? el('span', { className: 'badge badge-up', textContent: x.step }) : '',
-        x.time ? el('span', { className: 'badge badge-pin', textContent: x.time }) : '',
+        x.depart || x.arrive ? el('span', { className: 'badge badge-pin', textContent: `${x.depart ? `出發 ${x.depart}` : ''}${x.depart && x.arrive ? '・' : ''}${x.arrive ? `抵達 ${x.arrive}` : ''}` }) : '',
         ...telLinks(x.v, 1),
         el('span', { className: 'muted', textContent: shortAddr(x.v) }),
         addrOf(x.v) ? navLink('', addrOf(x.v)) : '',
@@ -4292,7 +4294,8 @@
       lines.push(`${calMd(d)}（${H ? H.weekLabel(d) : ''}）`);
       list.forEach((x) => {
         const tel = x.v.phones.length ? x.v.phones[0].display : '';
-        lines.push(`  ${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}${x.time ? ` ${x.time}` : ''}${x.step ? `（${x.step}）` : ''}${x.kind === 'visit' && (x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
+        const when = x.kind === 'visit' ? [x.depart && `${x.depart} 出發`, x.arrive && `${x.arrive} 到`].filter(Boolean).join('、') : x.time;
+        lines.push(`  ${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}${when ? ` ${when}` : ''}${x.step ? `（${x.step}）` : ''}${x.kind === 'visit' && (x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
       });
     }
     return lines.length > 1 ? lines.join('\n') : '';
@@ -4707,6 +4710,15 @@
      */
     const meet = el('input', { type: 'checkbox', className: 'meet-check' });
     const meetLabel = el('label', { className: 'meet-label', title: '這通約到了拜訪：下次聯絡日那天行事曆標 🚗、列在拜訪組' }, [meet, document.createTextNode(' 🚗 約到拜訪')]);
+    // 出發、抵達時間：勾了約到拜訪才出現，記在那則紀錄上（meetingDepart、meetingArrive），行事曆照抵達時間排、格子與行程都寫出來
+    // （使用者：「當我勾約到拜訪的話請給我出發時間和抵達時間可以選，並且在行事曆上也要給我」）
+    const departInput = el('input', { type: 'time', className: 'meet-depart' });
+    const arriveInput = el('input', { type: 'time', className: 'meet-arrive' });
+    const meetTimes = el('div', { className: 'row meet-times', hidden: true }, [
+      el('span', { className: 'muted', textContent: '出發' }), departInput,
+      el('span', { className: 'muted', textContent: '抵達' }), arriveInput,
+    ]);
+    const syncMeetTimes = () => { meetTimes.hidden = !meet.checked; };
     /*
      * 固定這天：使用者「打完這通電話，我確定一定要下週二再撥，但我怕會因為每天上線通數洗掉」。
      * 勾了就記 pinDate：照上限重排、「今天的 N 家挪到下個上班日」、週五「未跟完的移到下週」、關係企業日期連動
@@ -4736,7 +4748,7 @@
       return logDrafts.get(r.id) || null;
     };
     const writeDraft = () => {
-      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, meet: meet.checked, pin: pin.checked, at: Date.now() };
+      const d = { text: memo.value, outcome: outcomeSel.value, nextDate: nextInput.value, meet: meet.checked, depart: departInput.value, arrive: arriveInput.value, pin: pin.checked, at: Date.now() };
       const keep = d.text.trim() || d.nextDate !== (r.nextDate || '') || d.meet || d.pin !== !!r.pinDate;
       if (keep) logDrafts.set(r.id, d); else logDrafts.delete(r.id);
       try {
@@ -4758,6 +4770,7 @@
       if (draft.outcome) outcomeSel.value = draft.outcome;
       if (draft.nextDate) nextInput.value = draft.nextDate;
       meet.checked = !!draft.meet;
+      departInput.value = draft.depart || ''; arriveInput.value = draft.arrive || ''; syncMeetTimes();
       if (draft.pin !== undefined) pin.checked = !!draft.pin;
       draftNote.hidden = !memo.value.trim();
       const discard = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '丟掉草稿' });
@@ -4767,7 +4780,9 @@
     memo.addEventListener('input', writeDraft);
     outcomeSel.addEventListener('change', writeDraft);
     nextInput.addEventListener('change', writeDraft);
-    meet.addEventListener('change', () => { if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted'; writeDraft(); });
+    meet.addEventListener('change', () => { if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted'; syncMeetTimes(); if (meet.checked) departInput.focus(); writeDraft(); });
+    departInput.addEventListener('change', writeDraft);
+    arriveInput.addEventListener('change', writeDraft);
     pin.addEventListener('change', writeDraft);
     const quick = el('div', { className: 'card-actions' });
     [['今天', 0], ['明天', 1], ['3 天後', 3], ['一週後', 7], ['兩週後', 14], ['一個月後', 'm1'], ['三個月後', 'm3']].forEach(([label, days]) => {
@@ -4868,7 +4883,7 @@
         await window.Store.addLog({
           recordId: r.id, date: today, text, outcome: outcomeSel.value, createdAt,
           // 約到見面：記在這則紀錄上，本週節奏算「約到幾個」、週三列拜訪名單用
-          ...(meet.checked ? { meeting: true, meetingDate: picked || '' } : {}),
+          ...(meet.checked ? { meeting: true, meetingDate: picked || '', meetingDepart: departInput.value || '', meetingArrive: arriveInput.value || '' } : {}),
         });
         state.logs = await window.Store.allLogs();
         if (!state.logs.some((l) => l.recordId === r.id && l.createdAt === createdAt)) {
@@ -4902,14 +4917,14 @@
           + (auto.movedFrom ? `（${dateLabel(auto.movedFrom)} 是${auto.reason}，順延了）` : '')
         : '';
       const coolNote = cooled === 'cold' ? `；連續未接 ${streak} 次，移到冷名單、不再排日期（打通一次就解除）` : cooled === 'cool' ? `；連續未接 ${streak} 次，自動排到兩週後 ${dateLabel(picked)}` : '';
-      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? (picked ? `，約到 ${dateLabel(picked)} 見面 🎯` : '，約到見面了（記得把日期填在下次聯絡）') : ''));
+      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? `，約到 ${dateLabel(picked)} 拜訪 🚗${arriveInput.value ? ` ${departInput.value ? `${departInput.value} 出發、` : ''}${arriveInput.value} 到` : ''}` : ''));
       render();
       openDetail(r.id);
       scheduleSync();
     };
     form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
-      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, pinLabel, save,
+      el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));
     form.append(quick);
     if (members.length) {
