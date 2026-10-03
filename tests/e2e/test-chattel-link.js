@@ -51,6 +51,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ');
  chk(/新鑫股份有限公司 附條件買賣 1,200 萬/.test(det) && /2023\/10\/15 → 2026\/11\/12（還有 38 天到期）/.test(det), `詳細頁第一件：${det.slice(0,120)}`);
  chk(/合迪股份有限公司 動產抵押 450 萬/.test(det) && /登記 110新經動字第007355號/.test(det), '第二件也列了');
+ chk(det.indexOf('新鑫股份有限公司') < det.indexOf('合迪股份有限公司'), '照日期新到舊：2023 的新鑫排在 2021 的合迪前面');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  await pg.locator('#paneList .card:has-text("沒動保")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/清冊裡沒有這家/.test(await pg.textContent('#drawerBody .detail-chattel')), '沒對到的講清楚');
