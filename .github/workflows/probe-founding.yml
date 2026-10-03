@@ -9,4 +9,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tools/probe-founding2.mjs 2>&1 | tee probe.txt
+      - run: node tools/probe-founding3.mjs 2>&1 | tee probe.txt
