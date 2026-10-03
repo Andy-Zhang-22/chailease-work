@@ -174,7 +174,7 @@
   let started = false;
   let ready = false;
   let showHidden = false;
-  const f = { due: 'm6', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), q: '' };
+  const f = { due: 'm6', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), phone: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -217,6 +217,7 @@
       && (except === 'districts' || !F.districts.size || F.districts.has(r.branch.district))
       && (except === 'mine' || !F.mine.size || F.mine.has(mine ? (declined(mine) ? 'declined' : 'in') : 'out'))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
+      && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.amount >= c.min && r.amount <= c.max
       && !(c.hideFin && r.custIsFin)
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id)))
@@ -270,7 +271,7 @@
     const lenderBadge = r.family === 'chailease'
       ? el('span', { className: 'badge', textContent: `自家：${r.lender.name}`, title: '中租自家的案件，預設藏起來' })
       : el('span', { className: 'badge badge-peer', textContent: `金主：${r.lender.name || '不明'}` });
-    const phoneBadge = hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '';
+    const phoneBadge = hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '';
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上是禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
       : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）' });
@@ -326,6 +327,7 @@
     const types = [...new Set(rows.map((r) => r.type))].sort();
     chips($('#chattel-fType'), types.map((t) => [t, typeShort(t), facet('types', (r) => r.type === t)]), f.types);
     chips($('#chattel-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
+    chips($('#chattel-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     chips($('#chattel-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label,
       facet('mine', (r) => { const m = mineOf(r, c.cm); return k === 'out' ? !m : k === 'in' ? (m && !declined(m)) : (m && declined(m)); })]), f.mine);
     // 分公司與區：籤是從資料長出來的，分公司在前、共同區在後、劃分表外最後
@@ -428,6 +430,9 @@
   const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '有電話', '我的分公司', '500 萬以上'];
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.cust && r.cust.id));
+  const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.cust && r.cust.id) : new Set(['N']));
+  // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
+  const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
     ageOf(r) === 'lt5',
@@ -479,6 +484,7 @@
       group('標的物所在地', el('div', { className: 'chips', id: 'chattel-fDistrict' })),
       group('成立年數（查商工登記來的，Actions 每月補）', el('div', { className: 'chips', id: 'chattel-fAge' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'chattel-fMine' })),
+      group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'chattel-fPhone' })),
       group('擔保債權金額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'chattel-amtMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '100' }), '～',
         el('input', { id: 'chattel-amtMax', type: 'number', min: '0', step: '100', placeholder: '上限' })])),
@@ -585,7 +591,7 @@
     $('#chattel-more').onclick = () => { limit += PAGE; render(); };
     $('#chattel-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#chattel-reset').onclick = () => {
-      f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.q = '';
+      f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.phone.clear(); f.q = '';
       $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'amount';
       showHidden = false;
       rerender();

@@ -53,7 +53,7 @@
   let limit = PAGE;
   let started = false;      // 第一次切到這個分頁才去抓 index.json
   let ready = false;
-  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), q: '' };
+  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), phone: new Set(), q: '' };
 
   /* ---------------- 跟我的名單比對 ---------------- */
 
@@ -334,6 +334,7 @@
       && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
+      && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && (showHidden || !(hidden.has(keyOf(r)) || delOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
@@ -408,7 +409,7 @@
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '',
-        hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '', mineBadge]),
+        hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '', mineBadge]),
       el('div', { className: 'card-meta' }, [
         el('span', { textContent: `💰 ${wan(r.capital)}` }),
         r['代表人'] ? el('span', { textContent: `👤 ${r['代表人']}` }) : '',
@@ -462,6 +463,7 @@
     // 成立年數：只算已經知道設立日期的；還沒查的在名單上方那一行
     chips($('#leads-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#leads-fMine'), MINE.map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#leads-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     // 分公司：籤是從載進來的列長出來的（清冊裡沒有這一欄），分公司在前、共同區在後、劃分表外最後
     const counts = new Map();
     rows.forEach((r) => { if (r.branch.key && passes(r, c, 'branches')) counts.set(r.branch.key, (counts.get(r.branch.key) || 0) + 1); });
@@ -588,6 +590,9 @@
   const DAILY_PRIORITY = ['本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r['統一編號']));
+  const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r['統一編號']) : new Set(['N']));
+  // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
+  const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const dailyChecks = (r, latest) => [
     r['期別'] === latest,
     r.rk === 'up',
@@ -648,6 +653,7 @@
       group('行業（依營業項目大類）', el('div', { className: 'chips', id: 'leads-fInd' })),
       group('成立年數（依核准設立日期；變更清冊的是查商工登記來的）', el('div', { className: 'chips', id: 'leads-fAge' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'leads-fMine' })),
+      group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'leads-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
         el('input', { id: 'leads-capMax', type: 'number', min: '0', step: '100', placeholder: '上限', value: '6000' })])),
@@ -724,7 +730,7 @@
     $('#leads-more').onclick = () => { limit += PAGE; render(); };
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
-      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.q = ''; showHidden = false;
+      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.q = ''; showHidden = false;
       $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };
