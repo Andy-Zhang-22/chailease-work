@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-251';
+  const APP_VERSION = '20261003-252';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4107,8 +4107,8 @@
   /*
    * 行事曆（使用者：「能在我的電推系統內內建一個行事曆嗎 … 我這樣才能看到我哪天要拜訪誰」）：
    * 整月一格一天，每格列那天要聯絡的客戶——下次聯絡日落在那天的（🚗 要拜訪、📞 要打電話），
-   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，看最近一則紀錄有沒有明講：通話紀錄勾了
-   * 「約到拜訪」、或寫了「約到拜訪」：是就 🚗，其他一律 📞（不放寬猜字面，免得提到「拜訪」就被當成要去）。
+   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，只看最近一則通話紀錄有沒有勾「約到拜訪」：
+   * 有就 🚗，其他一律 📞（不猜字面，使用者：「只有我勾選要拜訪才是約到拜訪」）。
    * 點一天，下面列那天的行程：拜訪的同區排一起（同一條路相鄰），每家帶電話、導航、記拜訪；
    * 電話的帶上次談的重點。日期還是在詳細頁改，行事曆只是把現有的下次聯絡日攤開來看，不另存一套，
    * 兩邊不會打架。週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週行程變成文字貼 LINE。
@@ -4117,10 +4117,8 @@
   const cal = { month: '', sel: '' };
   const calYm = (iso) => String(iso || '').slice(0, 7);   // yyyy-mm（既有的 monthOf 回的是整個月的頭尾）
   const calMd = (iso) => String(iso || '').slice(5).replace('-', '/');
-  // 只認明講的：通話紀錄勾了「約到拜訪」（meeting）、以前拜訪表單「下一步」選的「再約拜訪」，或紀錄裡寫「約到拜訪」「約好拜訪」「約了拜訪」「約拜訪」（使用者：「我有約到拜訪會特別說」）。
-  // 不再放寬到「約…（幾個字）…拜訪」：「跟之前拜訪過的…」這種也會中（使用者：「為什麼我沒排這間拜訪卻有他在上面？」）
-  const VISIT_NEXT_RE = /下一步：再約拜訪|約(到|好|了|定)?拜訪/;
-  const stepOf = (text) => { const m = String(text || '').match(/下一步：([^\n]+)/); return m ? m[1].trim() : ''; };
+  // 🚗 只認通話紀錄勾了「約到拜訪」（meeting）的，不看字面、也不看以前拜訪表單的「下一步」
+  // （使用者：「行事曆只有我勾選要拜訪才是約到拜訪」；之前從字面猜，「跟之前拜訪過的…」也會中）
   let calCache = { key: '', map: null };
   /** 哪天有誰：Map(yyyy-mm-dd → [{ v, kind: 'visit'|'call', done, time, step, note }])，排好序。 */
   function calEvents() {
@@ -4147,10 +4145,10 @@
     views.forEach((v) => {
       const last = latestLog(v.id);
       const text = (last && last.text) || '';
-      const noteText = text.replace(/下一步：[^\n]*/g, '').replace(/\s+/g, ' ').trim();   // 下一步另外做成籤，不重複
+      const noteText = text.replace(/\s+/g, ' ').trim();
       const note = noteText ? `上次 ${calMd((last && last.date) || '')}：${noteText.slice(0, 40)}` : '';
-      const step = stepOf(text);
-      const kind = (last && last.meeting) || VISIT_NEXT_RE.test(text) ? 'visit' : 'call';
+      const step = '';
+      const kind = last && last.meeting ? 'visit' : 'call';
       const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
       if (v.nextDate) {
         const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
@@ -4703,8 +4701,8 @@
     const nextInput = el('input', { type: 'date', value: r.nextDate || '' });
     /*
      * 約到拜訪：勾了就記在這則紀錄上（meeting、meetingDate＝下次聯絡日），行事曆那天標 🚗、列在拜訪組，
-     * 附近可以順訪的算「約過見面」。這是判斷拜訪的唯一正式入口（使用者：「紀錄這次拜訪那個功能我用不到，
-     * 請刪掉並且將判斷拜訪的能力在訪談紀錄內」）；內容裡寫「約到拜訪」也認得，當備援。不勾就跟以前一模一樣。
+     * 附近可以順訪的算「約過見面」。這是判斷拜訪的唯一入口（使用者：「紀錄這次拜訪那個功能我用不到，
+     * 請刪掉並且將判斷拜訪的能力在訪談紀錄內」「只有我勾選要拜訪才是約到拜訪」），內容寫什麼都不算。不勾就跟以前一模一樣。
      */
     const meet = el('input', { type: 'checkbox', className: 'meet-check' });
     const meetLabel = el('label', { className: 'meet-label', title: '這通約到了拜訪：下次聯絡日那天行事曆標 🚗、列在拜訪組' }, [meet, document.createTextNode(' 🚗 約到拜訪')]);
