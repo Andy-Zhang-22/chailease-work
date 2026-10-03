@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-254';
+  const APP_VERSION = '20261003-255';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4106,13 +4106,12 @@
   /* ---------------- 行事曆 ---------------- */
   /*
    * 行事曆（使用者：「能在我的電推系統內內建一個行事曆嗎 … 我這樣才能看到我哪天要拜訪誰」）：
-   * 整月一格一天，每格列那天要聯絡的客戶——下次聯絡日落在那天的（🚗 要拜訪、📞 要打電話），
-   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，只看最近一則通話紀錄有沒有勾「約到拜訪」、
-   * 而且約的那天就是下次聯絡日：是就 🚗，其他一律 📞（不猜字面，使用者：「只有我勾選要拜訪才是約到拜訪」）。
-   * 點一天，下面列那天的行程：拜訪的同區排一起（同一條路相鄰），每家帶電話、導航、記拜訪；
-   * 電話的帶上次談的重點。日期還是在詳細頁改，行事曆只是把現有的下次聯絡日攤開來看，不另存一套，
-   * 兩邊不會打架。週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週行程變成文字貼 LINE。
-   * 分頁放在最上面那排（每天都會開，不該藏在選單裡），名字後面帶今天還沒做的家數。
+   * 整月一格一天，只列要去拜訪的（使用者：「只在行事曆上顯示要拜訪的客戶，電話那些都不需要」）——
+   * 通話紀錄勾了「🚗 約到拜訪」、約的那天就是下次聯絡日的；過去的日子列去過的（✓）。
+   * 點一天，下面列那天的行程：同區排一起（有抵達時間的照時間），每家帶出發／抵達、電話、導航、記錄、刪除
+   * （刪除＝取消那則紀錄的約到拜訪，紀錄留著）。日期還是在詳細頁改，行事曆只是把現有的約定攤開來看，不另存一套。
+   * 週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週拜訪變成文字貼 LINE。
+   * 分頁放在最上面那排（每天都會開，不該藏在選單裡），名字後面帶今天還沒去的家數。
    */
   const cal = { month: '', sel: '' };
   const calYm = (iso) => String(iso || '').slice(0, 7);   // yyyy-mm（既有的 monthOf 回的是整個月的頭尾）
@@ -4121,54 +4120,67 @@
   // 也不看以前拜訪表單的「下一步」（使用者：「行事曆只有我勾選要拜訪才是約到拜訪」）。
   // 日期要對：以前勾的「約到見面」記號留在舊紀錄上，下次聯絡日後來改了還被當成要去（使用者：「星彩我沒有勾，為什麼他會在拜訪這」）
   let calCache = { key: '', map: null };
-  /** 哪天有誰：Map(yyyy-mm-dd → [{ v, kind: 'visit'|'call', done, time, step, note }])，排好序。 */
+  /**
+   * 哪天要去拜訪誰：Map(yyyy-mm-dd → [{ v, log, done, time, depart, arrive, note }])，排好序。只有拜訪，不列電話
+   * （使用者：「只在行事曆上顯示要拜訪的客戶，電話那些都不需要」）。
+   * 來源是通話紀錄勾了「約到拜訪」的那則（meeting、meetingDate）：
+   *   - 約的那天還沒到（含今天）：只看這家最近一則勾過的，而且約的那天要是現在的下次聯絡日（日期改了沒再勾就不算）；
+   *     那天已經記了紀錄（去過回來記了）或按過「完成」就算去過了（✓），這時下次聯絡日改到別天也照樣列成去過。
+   *   - 約的那天過了：列成去過的（✓），當工作日誌看。
+   */
   function calEvents() {
     const key = `${dataVersion}|${todayISO()}|${chattelVersion}`;
     if (calCache.key === key && calCache.map) return calCache.map;
     const map = new Map();
     const push = (iso, item) => { if (!iso) return; if (!map.has(iso)) map.set(iso, []); map.get(iso).push(item); };
     const byId = new Map();
-    const views = allViews().filter((v) => !v.blocked);
-    views.forEach((v) => byId.set(v.id, v));
-    // 哪天做了什麼：同一家同一天只算一次，有拜訪就算拜訪
-    const doneKey = new Map();
-    state.logs.forEach((l) => {
-      const v = byId.get(l.recordId);
-      if (!v || !l.date) return;
-      const k = `${l.recordId}|${l.date}`;
-      const cur = doneKey.get(k) || { v, iso: l.date, kind: 'call', note: '', at: 0 };
-      if (l.kind === 'visit') cur.kind = 'visit';
-      if ((l.createdAt || 0) >= cur.at) { cur.at = l.createdAt || 0; cur.note = l.text || ''; }
-      doneKey.set(k, cur);
-    });
-    doneKey.forEach((d) => push(d.iso, { v: d.v, kind: d.kind, done: true, time: '', step: '', note: d.note }));
+    allViews().filter((v) => !v.blocked).forEach((v) => byId.set(v.id, v));
     const today = todayISO();
-    views.forEach((v) => {
-      const last = latestLog(v.id);
-      const text = (last && last.text) || '';
-      const noteText = text.replace(/\s+/g, ' ').trim();
-      const note = noteText ? `上次 ${calMd((last && last.date) || '')}：${noteText.slice(0, 40)}` : '';
-      const step = '';
-      const kind = last && last.meeting && last.meetingDate && last.meetingDate === v.nextDate ? 'visit' : 'call';
-      const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
-      if (v.nextDate) {
-        const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
-        const depart = kind === 'visit' ? (last.meetingDepart || '') : '';
-        const arrive = kind === 'visit' ? (last.meetingArrive || '') : '';
-        if (!didIt) push(v.nextDate, { v, kind, done: false, time: kind === 'visit' ? (arrive || depart) : (remindIso === v.nextDate ? timeLabel(v.remindAt) : ''), depart, arrive, step, note });
-      }
-      if (remindIso && remindIso !== v.nextDate && !doneKey.has(`${v.id}|${remindIso}`)) push(remindIso, { v, kind: 'call', done: false, time: timeLabel(v.remindAt), step, note });
+    const loggedOn = new Set(state.logs.map((l) => `${l.recordId}|${l.date}`));
+    const lastMeet = new Map();   // 每家最近一則勾過約到拜訪的
+    state.logs.forEach((l) => { if (l.meeting && l.meetingDate) { const cur = lastMeet.get(l.recordId); if (!cur || (l.createdAt || 0) > (cur.createdAt || 0)) lastMeet.set(l.recordId, l); } });
+    const seen = new Set();
+    state.logs.forEach((l) => {
+      if (!l.meeting || !l.meetingDate) return;
+      const v = byId.get(l.recordId);
+      if (!v) return;
+      const k = `${l.recordId}|${l.meetingDate}`;
+      if (seen.has(k)) return;
+      const past = l.meetingDate < today;
+      const went = loggedOn.has(k) || (l.meetingDate === today && v.dueDoneOn === today);
+      if (!past && (lastMeet.get(l.recordId) !== l || (v.nextDate !== l.meetingDate && !went))) return;
+      seen.add(k);
+      const done = past || went;
+      const noteText = String(l.text || '').replace(/\s+/g, ' ').trim();
+      push(l.meetingDate, { v, log: l, kind: 'visit', done, time: l.meetingArrive || l.meetingDepart || '', depart: l.meetingDepart || '', arrive: l.meetingArrive || '', note: noteText ? `${calMd(l.date || '')} 約的：${noteText.slice(0, 40)}` : '' });
     });
-    // 一天裡：還沒做的在前（拜訪先、再電話；拜訪有抵達時間的照時間、再照區、路、門牌排，電話照時間、公司名），做完的在後
+    // 一天裡：還沒去的在前，有抵達時間的照時間、再照區、路、門牌排；去過的在後
     const road = (v) => roadOf(v.addressActual || v.address);
     map.forEach((list) => list.sort((a, b) => Number(a.done) - Number(b.done)
-      || Number(b.kind === 'visit') - Number(a.kind === 'visit')
-      || (a.kind === 'visit' ? ((a.time || '99').localeCompare(b.time || '99') || (a.v.district || '').localeCompare(b.v.district || '', 'zh-Hant') || road(a.v).localeCompare(road(b.v), 'zh-Hant') || (a.v.addressActual || a.v.address || '').localeCompare(b.v.addressActual || b.v.address || '', 'zh-Hant', { numeric: true })) : ((a.time || '99').localeCompare(b.time || '99')))
+      || (a.time || '99').localeCompare(b.time || '99')
+      || (a.v.district || '').localeCompare(b.v.district || '', 'zh-Hant') || road(a.v).localeCompare(road(b.v), 'zh-Hant')
+      || (a.v.addressActual || a.v.address || '').localeCompare(b.v.addressActual || b.v.address || '', 'zh-Hant', { numeric: true })
       || a.v.company.localeCompare(b.v.company, 'zh-Hant')));
     calCache = { key, map };
     return map;
   }
-  const calTodayCount = () => (calEvents().get(todayISO()) || []).filter((x) => !x.done).length;
+  /** 從行事曆拿掉：把那則紀錄的「約到拜訪」取消（紀錄本身留著），下次聯絡日不動 */
+  async function cancelVisit(x) {
+    if (!await askConfirm(`把「${x.v.company}」${calMd(x.log.meetingDate)} 的拜訪從行事曆拿掉？通話紀錄留著，只是取消「約到拜訪」；下次聯絡日不變。`, { okText: '拿掉', danger: true })) return;
+    try {
+      await window.Store.updateLog(x.log.logId, { meeting: false, meetingDate: '', meetingDepart: '', meetingArrive: '' }, x.log.uid);
+      state.logs = await window.Store.allLogs();
+    } catch (err) {
+      console.error('取消約到拜訪失敗', err);
+      toast(`拿不掉：${err && err.message ? err.message : err}`);
+      return;
+    }
+    touch();
+    toast(`已把「${x.v.company}」從行事曆拿掉`);
+    render();
+    scheduleSync();
+  }
+  const calTodayCount = () => (calEvents().get(todayISO()) || []).filter((x) => !x.done).length;   // 今天還沒去的拜訪
   function openCalendar(iso) {
     cal.sel = iso || todayISO();
     cal.month = calYm(cal.sel);
@@ -4193,7 +4205,7 @@
       el('h2', { textContent: `${y} 年 ${m} 月` }),
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '▶', title: '下個月', onclick: () => shift(1) }),
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '今天', onclick: () => { cal.sel = today; cal.month = calYm(today); renderCal(); } }),
-      el('span', { className: 'cal-legend', textContent: '🚗 拜訪　📞 電話　✓ 做完了' }),
+      el('span', { className: 'cal-legend', textContent: '🚗 要去拜訪　✓ 去過了' }),
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製這週', title: '把這一週的行程變成文字，貼到 LINE 或行事曆', onclick: () => copyWeek() }),
     ]);
     host.append(head);
@@ -4216,7 +4228,7 @@
         el('small', { textContent: iso === today ? '今天' : (off && !/^週/.test(off) ? off : '') }),
       ]));
       const MAX = 4;
-      list.slice(0, MAX).forEach((x) => cell.append(el('div', { className: `cal-ev${x.done ? ' is-done' : ''}`, textContent: `${x.done ? '✓ ' : ''}${x.kind === 'visit' ? '🚗' : '📞'} ${x.kind === 'visit' && x.time ? `${x.time} ` : ''}${x.v.company}` })));
+      list.slice(0, MAX).forEach((x) => cell.append(el('div', { className: `cal-ev${x.done ? ' is-done' : ''}`, textContent: `${x.done ? '✓ ' : ''}🚗 ${x.time ? `${x.time} ` : ''}${x.v.company}` })));
       if (list.length > MAX) cell.append(el('div', { className: 'cal-ev muted', textContent: `＋${list.length - MAX} 家` }));
       if (list.length) cell.append(el('div', { className: 'cal-cnt', textContent: todo ? `${todo} 家` : `✓ ${list.length}` }));
       grid.append(cell);
@@ -4229,54 +4241,43 @@
     const H = window.Holidays;
     const box = el('div', { className: 'cal-agenda' });
     const planned = list.filter((x) => !x.done);
-    const visits = planned.filter((x) => x.kind === 'visit');
-    const calls = planned.filter((x) => x.kind !== 'visit');
     const done = list.filter((x) => x.done);
     const off = H ? H.holidayName(iso) : '';
     const what = planned.length
-      ? `要跑 ${visits.length} 家、打 ${calls.length} 家${done.length ? `，做完 ${done.length} 家` : ''}`
-      : done.length ? `做完 ${done.length} 家` : off ? `${off}，沒排` : '沒有排';
+      ? `要跑 ${planned.length} 家${done.length ? `，去過 ${done.length} 家` : ''}`
+      : done.length ? `去過 ${done.length} 家` : off ? `${off}，沒排拜訪` : '沒排拜訪';
     box.append(el('h3', { textContent: `${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）${what}` }));
     const openBtn = (v, label) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: label || '打開', onclick: () => openDetail(v.id) });
-    const visitBtn = (v) => logBtn(v);
     const addrOf = (v) => (v.addressActual || v.address || '');
     const shortAddr = (v) => addrOf(v).replace(/^.{2,3}[市縣]/, '');
     const nameBtn = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) });
+    const timesBadge = (x) => (x.depart || x.arrive ? el('span', { className: 'badge badge-pin', textContent: `${x.depart ? `出發 ${x.depart}` : ''}${x.depart && x.arrive ? '・' : ''}${x.arrive ? `抵達 ${x.arrive}` : ''}` }) : '');
     let lastDist = null;
-    visits.forEach((x) => {
+    planned.forEach((x) => {
       const dist = x.v.district || '沒有區';
-      if (dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 拜訪・${dist}（同區排一起）` })); lastDist = dist; }
+      if (dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 ${dist}（同區排一起）` })); lastDist = dist; }
       box.append(el('div', { className: 'cal-row is-visit' }, [
         nameBtn(x.v),
-        x.step ? el('span', { className: 'badge badge-up', textContent: x.step }) : '',
-        x.depart || x.arrive ? el('span', { className: 'badge badge-pin', textContent: `${x.depart ? `出發 ${x.depart}` : ''}${x.depart && x.arrive ? '・' : ''}${x.arrive ? `抵達 ${x.arrive}` : ''}` }) : '',
+        timesBadge(x),
         ...telLinks(x.v, 1),
         el('span', { className: 'muted', textContent: shortAddr(x.v) }),
         addrOf(x.v) ? navLink('', addrOf(x.v)) : '',
-        visitBtn(x.v),
+        logBtn(x.v),
+        // 刪除：從行事曆拿掉這次拜訪（使用者：「幫我在行事曆上新增刪除的選項」）
+        el('button', { className: 'btn btn-tiny cal-del', type: 'button', textContent: '刪除', title: '從行事曆拿掉這次拜訪（取消約到拜訪，紀錄留著）', onclick: () => cancelVisit(x) }),
       ]));
     });
-    if (calls.length) {
-      box.append(el('div', { className: 'cal-cap', textContent: '📞 電話' }));
-      calls.forEach((x) => box.append(el('div', { className: 'cal-row is-call' }, [
-        nameBtn(x.v),
-        x.time ? el('span', { className: 'badge badge-pin', textContent: `⏰ ${x.time}` }) : '',
-        x.step ? el('span', { className: 'badge badge-ind', textContent: x.step }) : '',
-        ...telLinks(x.v, 1),
-        x.note ? el('span', { className: 'muted', textContent: x.note }) : '',
-        openBtn(x.v),
-      ])));
-    }
     if (done.length) {
-      box.append(el('div', { className: 'cal-cap', textContent: '✓ 做完的' }));
+      box.append(el('div', { className: 'cal-cap', textContent: '✓ 去過的' }));
       done.forEach((x) => box.append(el('div', { className: 'cal-row is-done' }, [
-        el('span', { textContent: `✓ ${x.kind === 'visit' ? '🚗' : '📞'}` }),
+        el('span', { textContent: '✓ 🚗' }),
         nameBtn(x.v),
-        x.note ? el('span', { className: 'muted', textContent: x.note.replace(/\s+/g, ' ').slice(0, 60) }) : '',
+        timesBadge(x),
+        x.note ? el('span', { className: 'muted', textContent: x.note.slice(0, 60) }) : '',
         openBtn(x.v),
       ])));
     }
-    if (!list.length) box.append(el('p', { className: 'muted', textContent: '這天沒有排任何客戶。要排的話，到客戶詳細頁把下次聯絡日填這一天。' }));
+    if (!list.length) box.append(el('p', { className: 'muted', textContent: '這天沒排拜訪。要排的話，到那家「記錄這通電話」勾「🚗 約到拜訪」、下次聯絡日填這一天。' }));
     return box;
   }
 
@@ -4286,7 +4287,7 @@
     const events = calEvents();
     const startDow = (new Date(`${iso}T00:00:00`).getDay() + 6) % 7;
     const mon = addDays(iso, -startDow);
-    const lines = [`${calMd(mon)}～${calMd(addDays(mon, 6))} 行程`];
+    const lines = [`${calMd(mon)}～${calMd(addDays(mon, 6))} 拜訪行程`];
     for (let i = 0; i < 7; i++) {
       const d = addDays(mon, i);
       const list = (events.get(d) || []).filter((x) => !x.done);
@@ -4294,15 +4295,15 @@
       lines.push(`${calMd(d)}（${H ? H.weekLabel(d) : ''}）`);
       list.forEach((x) => {
         const tel = x.v.phones.length ? x.v.phones[0].display : '';
-        const when = x.kind === 'visit' ? [x.depart && `${x.depart} 出發`, x.arrive && `${x.arrive} 到`].filter(Boolean).join('、') : x.time;
-        lines.push(`  ${x.kind === 'visit' ? '🚗' : '📞'} ${x.v.company}${when ? ` ${when}` : ''}${x.step ? `（${x.step}）` : ''}${x.kind === 'visit' && (x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
+        const when = [x.depart && `${x.depart} 出發`, x.arrive && `${x.arrive} 到`].filter(Boolean).join('、');
+        lines.push(`  🚗 ${x.v.company}${when ? ` ${when}` : ''}${(x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
       });
     }
     return lines.length > 1 ? lines.join('\n') : '';
   }
   async function copyWeek() {
     const text = weekText(cal.sel || todayISO());
-    if (!text) { toast('這一週沒有排任何客戶'); return; }
+    if (!text) { toast('這一週沒有排拜訪'); return; }
     const ok = await copyText(text);
     toast(ok ? '已複製這週的行程，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
   }
