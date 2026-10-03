@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-258';
+  const APP_VERSION = '20261003-260';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3285,9 +3285,14 @@
       if (!hosts.length && !sel) return;
       const base = baseFor(key);
       const tally = new Map();
+      // 有沒有機會：同老闆連結的關係企業算一家（整組共用，見 renderFilters）
+      const once = key === 'chance' ? new Set() : null;
       base.forEach((r) => {
         const v = FACET_VALUE[key](r);
-        (Array.isArray(v) ? v : [v]).forEach((x) => tally.set(x, (tally.get(x) || 0) + 1));
+        (Array.isArray(v) ? v : [v]).forEach((x) => {
+          if (once) { const who = `${x}|${r.group || r.id}`; if (once.has(who)) return; once.add(who); }
+          tally.set(x, (tally.get(x) || 0) + 1);
+        });
       });
       hosts.forEach((chip) => {
         const small = chip.querySelector('small');
@@ -3438,9 +3443,18 @@
     all.forEach((r) => { visitCounts[r.visitKind === 'yes' ? 0 : 1][1] += 1; });
     chips($('#fltVisit'), 'visit', visitCounts, state.filters.visit, (v) => window.Normalize.VISIT_LABEL[v]);
 
-    // 有沒有機會：固定「有機會 → 無機會 → 未判斷」，含 0 筆
+    // 有沒有機會：固定「有機會 → 無機會 → 未判斷」，含 0 筆。
+    // 同老闆連結的關係企業算一家（有沒有機會本來就是整組共用的），不然 3 家關係企業標一次有機會就算成 3 家，數字會讓人有錯覺
+    // （使用者：「這個標注裡，有幾間是關係企業不要重複計算，會有錯覺」）
     const chanceCounts = new Map(CHANCE_ORDER.map((k) => [k, 0]));
-    all.forEach((r) => { const k = r.chance || 'none'; chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1); });
+    const chanceSeen = new Set();
+    all.forEach((r) => {
+      const k = r.chance || 'none';
+      const who = `${k}|${r.group || r.id}`;
+      if (chanceSeen.has(who)) return;
+      chanceSeen.add(who);
+      chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1);
+    });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
     // 冷名單：固定兩顆，含 0 筆
     const coldCounts = [['cold', 0], ['ok', 0]];
@@ -4720,9 +4734,12 @@
         const ol = el('ol', { className: 'reg-history' });
         // 照日期新到舊列（使用者：「動擔的詳細資訊請按照日期排序，最新到最舊」）：登記核准日，沒有就契約起；都沒有的排最後
         const dk = (c) => { const m = String(c.approved || c.start || '').match(/^(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : -1; };
-        [...r.chattel].sort((a, b) => dk(b) - dk(a)).forEach((c) => {
+        // 收起來只留最新的兩筆，其他的按「展開其他 N 件」才出來（使用者：「動產擔保這個在詳細頁做成可以收放的，收起來後只顯示最新的兩筆」）
+        const SHOW = 2;
+        const sorted = [...r.chattel].sort((a, b) => dk(b) - dk(a));
+        sorted.forEach((c, i) => {
           const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天，未註銷` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天到期`;
-          const li = el('li', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '' }, [
+          const li = el('li', { className: `${c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : ''}${i >= SHOW ? ' is-more' : ''}`.trim(), hidden: i >= SHOW }, [
             el('b', { textContent: `${c.lender.name || '不明'}　${window.Chattel.typeShort(c.type)}　${chattelMoney(c.amount)}` }),
             el('div', { className: 'muted', textContent: `契約 ${c.start || '？'} → ${c.end || '？'}${when ? `（${when}）` : ''}` }),
             c.addr ? el('div', { className: 'muted', textContent: `標的物所在地 ${c.addr}${c.items ? `，${c.items} 件` : ''}` }) : '',
@@ -4731,7 +4748,21 @@
           ol.append(li);
         });
         dd.append(ol);
-        dd.append(el('div', { className: 'muted', textContent: '新北市動產擔保登記清冊（每月更新）裡登記的案件；快到期的就是換約時機。' }));
+        if (sorted.length > SHOW) {
+          const more = sorted.length - SHOW;
+          const soonHidden = sorted.slice(SHOW).filter((c) => c.days != null && c.days >= 0 && c.days <= 92).length;
+          const toggle = el('button', { className: 'link-btn chattel-more', type: 'button', 'aria-expanded': 'false' });
+          const label = (open) => `${open ? '收起，只看最新兩筆 ▴' : `展開其他 ${more} 件 ▾`}${!open && soonHidden ? `（其中 ${soonHidden} 件 3 個月內到期）` : ''}`;
+          toggle.textContent = label(false);
+          toggle.onclick = () => {
+            const open = toggle.getAttribute('aria-expanded') !== 'true';
+            ol.querySelectorAll('li.is-more').forEach((li) => { li.hidden = !open; });
+            toggle.setAttribute('aria-expanded', String(open));
+            toggle.textContent = label(open);
+          };
+          dd.append(toggle);
+        }
+        dd.append(el('div', { className: 'muted', textContent: `新北市動產擔保登記清冊（每月更新）裡登記的案件，共 ${sorted.length} 件；快到期的就是換約時機。` }));
       } else {
         dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有這家（只有在新北市登記的動產抵押、附條件買賣）' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
       }

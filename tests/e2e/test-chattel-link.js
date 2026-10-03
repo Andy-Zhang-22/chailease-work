@@ -10,10 +10,11 @@ const HEAD='案件類別,登記編號,客戶統編,客戶名稱,金主統編,金
 const ROWS=[
  ['附條件買賣登記','112新經動字第004821號','28451237','禾泰精密工業有限公司','20000001','新鑫股份有限公司','2023/10/15','2026/11/12','12000000','新北市新莊區五權一路12號','3','2023/10/20','',''],
  ['動產抵押登記','110新經動字第007355號','28451237','禾泰精密工業有限公司','20000003','合迪股份有限公司','2021/11/28','2028/11/28','4500000','新北市新莊區五權一路12號','4','2021/12/01','',''],
+ ['附條件買賣登記','108新經動字第001234號','28451237','禾泰精密工業有限公司','20000004','裕融企業股份有限公司','2019/03/01','2026/12/01','2000000','新北市新莊區五權一路12號','1','2019/03/05','',''],
  ['動產抵押登記','109新經動字第000100號','53217846','昱昌汽車貨運股份有限公司','20000002','和潤企業股份有限公司','2017/01/01','2020/01/01','3000000','新北市三重區重新路1號','1','2017/01/05','',''],
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
-const INDEX={generatedAt:'2026-09-26T14:36:42.637Z',dataThrough:'2026/07/02',total:3,kept:3,files:[{path:'ntpc.csv',rows:3}]};
+const INDEX={generatedAt:'2026-09-26T14:36:42.637Z',dataThrough:'2026/07/02',total:4,kept:4,files:[{path:'ntpc.csv',rows:4}]};
 const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2012',capital:'1,500',phoneRaw:'02-2222-3333',phones:[{digits:'0222223333',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路9號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:'2026-10-20',lastDate:'',addedDate:'2026-09-01',importedAt:1});
 const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌汽車貨運股份有限公司','53217846'), mk('3','沒動保有限公司','99999999')];
 (async()=>{
@@ -35,7 +36,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  chk(/動保 新鑫 11\/12 到期/.test(top), `卡片標最近到期的那件：${top}`);
  chk(await c1.locator('.badge-chattel.is-soon').count()===1, '38 天內到期標紅');
  const meta=(await c1.locator('.card-meta').textContent()).replace(/\s+/g,' ');
- chk(/🏦 新鑫 附條件買賣 1,200 萬・還有 38 天（共 2 件）/.test(meta), `卡片內容：${meta}`);
+ chk(/🏦 新鑫 附條件買賣 1,200 萬・還有 38 天（共 3 件）/.test(meta), `卡片內容：${meta}`);
  const c2=pg.locator('#paneList .card:has-text("昱昌")');
  chk(await c2.locator('.badge-chattel').count()===0, '只有過期案件的不標到期');
  // 篩選
@@ -51,6 +52,15 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  chk(/新鑫股份有限公司 附條件買賣 1,200 萬/.test(det) && /2023\/10\/15 → 2026\/11\/12（還有 38 天到期）/.test(det), `詳細頁第一件：${det.slice(0,120)}`);
  chk(/合迪股份有限公司 動產抵押 450 萬/.test(det) && /登記 110新經動字第007355號/.test(det), '第二件也列了');
  chk(det.indexOf('新鑫股份有限公司') < det.indexOf('合迪股份有限公司'), '照日期新到舊：2023 的新鑫排在 2021 的合迪前面');
+ // 收起來只顯示最新兩筆：2019 的裕融藏著，按展開才出來（使用者：「收起來後只顯示最新的兩筆」）
+ const lis=pg.locator('#drawerBody .detail-chattel li');
+ const visible=async()=>(await lis.evaluateAll(a=>a.filter(x=>!x.hidden).map(x=>x.querySelector('b').textContent.split('　')[0])));
+ const tg=pg.locator('#drawerBody .chattel-more');
+ chk((await lis.count())===3 && JSON.stringify(await visible())==='["新鑫股份有限公司","合迪股份有限公司"]' && /展開其他 1 件 ▾（其中 1 件 3 個月內到期）/.test(await tg.textContent()), `收起：只看最新兩筆、按鈕講還有幾件：${JSON.stringify(await visible())} ${await tg.textContent()}`);
+ await tg.click(); await pg.waitForTimeout(150);
+ chk(JSON.stringify(await visible())==='["新鑫股份有限公司","合迪股份有限公司","裕融企業股份有限公司"]' && /收起，只看最新兩筆/.test(await tg.textContent()) && /共 3 件/.test(await pg.textContent('#drawerBody .detail-chattel')), `展開：三件都在：${JSON.stringify(await visible())}`);
+ await tg.click(); await pg.waitForTimeout(150);
+ chk((await visible()).length===2, '再按收回去');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  await pg.locator('#paneList .card:has-text("沒動保")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/清冊裡沒有這家/.test(await pg.textContent('#drawerBody .detail-chattel')), '沒對到的講清楚');
