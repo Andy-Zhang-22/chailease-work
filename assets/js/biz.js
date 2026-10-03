@@ -223,10 +223,21 @@
   const closedNote = (name, tax) => el('span', { className: 'muted', textContent: `已停業（${global.Closed.label(closedOf(name, tax))}），自動藏起來` });
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  /*
+   * Google 地圖找到的電話（使用者：「商行那頁有辦法找到相對應的電話嗎」）：稅籍檔沒電話，商行多半是店面，Google 地圖的命中率高。
+   * 「幫篩出來的找電話」對目前篩出來、沒電話的前 HUNT_MAX 家用主站同一條 Places 查法（名稱＋地址），確定／疑似都留下、標清楚；
+   * 找到的填進卡片上貼電話的框，加入名單時一起帶。存本機（FOUND_KEY），重開不會重查、不會多花額度。
+   */
+  const FOUND_KEY = 'biz-found-phones-v1';
+  const HUNT_MAX = 50;
+  let found = new Map();
+  try { found = new Map(Object.entries(JSON.parse(localStorage.getItem(FOUND_KEY) || '{}'))); } catch (e) { found = new Map(); }
+  const saveFound = () => { try { localStorage.setItem(FOUND_KEY, JSON.stringify(Object.fromEntries(found))); } catch (e) { /* 無痕 */ } };
+  const foundOf = (r) => { const f = found.get(r.key); return f && f.tel ? f : null; };
   function phoneBox(r, key, hasAuto) {
     if (hasAuto) return '';
     const stop = (e) => e.stopPropagation();
-    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
+    const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || ((found.get(key) || {}).tel || ''), onclick: stop });
     input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
     return el('div', { className: 'card-actions phone-search', onclick: stop }, [
       el('span', { className: 'muted', textContent: '找電話：' }),
@@ -262,7 +273,9 @@
       hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '',
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })) : '',
     ]);
+    const fp = foundOf(r);
     const meta = el('div', { className: 'card-meta' }, [
+      fp ? el('span', {}, ['📞 ', el('a', { href: `tel:${fp.tel.replace(/[^\d+#]/g, '')}`, textContent: fp.tel }), el('small', { className: 'muted', textContent: fp.level === 'sure' ? '（Google 地圖找到，名稱地址都對）' : '（Google 地圖找到，疑似，打前核對）' }), fp.maps ? el('a', { href: fp.maps, target: '_blank', rel: 'noopener', textContent: ' 地圖', title: 'Google 地圖上的這家' }) : '']) : '',
       el('span', { textContent: `💰 資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}` }),
       r.setup ? el('span', { textContent: `🎂 ${r.monthly && r.kind === '設立' ? '核准設立' : '設立'} ${r.setup.y}/${String(r.setup.m).padStart(2, '0')}${r.monthly && r.kind === '設立' ? `/${String(r.setup.d).padStart(2, '0')}` : `（${r.years} 年）`}` }) : (r.monthly ? '' : el('span', { className: 'muted', textContent: '🎂 設立不明' })),
       r.changed ? el('span', { textContent: `🔁 核准變更 ${ymd(r.changed)}` }) : '',
@@ -418,7 +431,7 @@
   }
   const thousands = (yuan) => (yuan ? Math.round(yuan / 1000).toLocaleString() : '');
   function toStandardCsv(list, dates) {
-    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.setup ? String(r.setup.y) : '', thousands(r.capital), typed.get(r.key) || '', r.owner || '', '', r.inds[0] || '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
+    const lines = [CSV_HEAD, ...list.map((r, i) => [r.name, r.taxId, '', r.setup ? String(r.setup.y) : '', thousands(r.capital), typed.get(r.key) || (foundOf(r) ? foundOf(r).tel : ''), r.owner || '', '', r.inds[0] || '', (dates && dates[i]) || '', '', [noteFor(r), r._why ? `每日新名單，${r._why}` : ''].filter(Boolean).join('\n'), r.address, todayIso(), ''])].map((row) => row.map(csvCell).join(','));
     return `﻿${lines.join('\n')}\n`;
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -456,14 +469,21 @@
   const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
-  const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.taxId) : new Set(['N']));
+  const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
+  // 電話籤、每日挑選：出進口登記的，或 Google 地圖找到的，都算有電話
+  const phoneKindsOf = (r) => {
+    const fp = foundOf(r);
+    if (fp && fp.tel) return isMobile(fp.tel) ? new Set(['Y', 'M']) : new Set(['Y']);
+    return global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.taxId) : new Set(['N']);
+  };
+  const anyPhone = (r) => hasPhone(r) || !!foundOf(r);
   // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
   const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
   const capRank = (r) => (r.capital >= 10000000 ? 0 : r.capital >= 5000000 ? 1 : r.capital >= 1000000 ? 2 : 3);
-  const dailyChecks = (r) => [!!r.reg, capRank(r), hasPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
+  const dailyChecks = (r) => [!!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -548,6 +568,7 @@
             el('span', { className: 'muted', textContent: '起' })]),
           el('button', { className: 'btn btn-primary', id: 'biz-add', type: 'button', title: '把目前篩出來、還不在名單裡的全部送進匯入流程（一次最多 200 家）', textContent: '把篩出來的加入客戶名單' }),
           el('button', { className: 'btn', id: 'biz-export', type: 'button', textContent: '匯出 CSV' }),
+          el('button', { className: 'btn', id: 'biz-hunt', type: 'button', title: `對目前篩出來、沒電話的前 ${HUNT_MAX} 家用 Google 地圖（Places API）查電話，用你在選單裡設的金鑰；找到的填進卡片，加入名單時一起帶`, textContent: '幫篩出來的找電話（Google 地圖）' }),
         ]),
       ]),
       el('div', { className: 'leads-loading', id: 'biz-loading', hidden: true }),
@@ -609,6 +630,32 @@
         rerender();
       };
       $('#biz-add').onclick = () => { const c = criteria(); addToList(current.filter((r) => !mineOf(r, c.cm))); };
+      $('#biz-hunt').onclick = async () => {
+        const btn = $('#biz-hunt');
+        if (!(global.placesKey && global.placesKey())) { toast('還沒設 Google 地圖的 API 金鑰：右上選單「幫沒電話的找電話」那裡設'); return; }
+        const c = criteria();
+        const todo = current.filter((r) => !mineOf(r, c.cm) && !hasPhone(r) && !found.has(r.key) && !typed.get(r.key)).slice(0, HUNT_MAX);   // 查過沒找到的也不再查
+        if (!todo.length) { toast('篩出來的這些不是已有電話就是查過了'); return; }
+        btn.disabled = true;
+        let sure = 0; let maybe = 0; let done = 0; let stopped = '';
+        for (const r of todo) {
+          btn.textContent = `找電話中 ${done + 1}／${todo.length}…`;
+          try {
+            const { best } = await global.placesLookup({ company: r.name, address: r.address, city: r.branch.city || '', district: r.district || '' });
+            if (best && best.phone) {
+              found.set(r.key, { tel: best.phone, level: best.level, maps: best.maps || '' });
+              if (!typed.get(r.key)) typed.set(r.key, best.phone);   // 加入名單時一起帶
+              if (best.level === 'sure') sure += 1; else maybe += 1;
+            } else found.set(r.key, { tel: '', level: 'none', maps: '' });   // 查過沒有：下次不再花額度
+          } catch (err) { stopped = err && err.message ? err.message : String(err); break; }
+          done += 1;
+          if (done % 10 === 0) { saveFound(); render(); }
+        }
+        saveFound();
+        btn.disabled = false; btn.textContent = '幫篩出來的找電話（Google 地圖）';
+        render();
+        toast(stopped ? `查到第 ${done + 1} 家停了：${stopped}` : `查了 ${done} 家：確定 ${sure} 家、疑似 ${maybe} 家、沒找到 ${done - sure - maybe} 家`);
+      };
       $('#biz-export').onclick = () => {
         const blob = new Blob([toStandardCsv(current)], { type: 'text/csv;charset=utf-8' });
         const a = el('a', { href: URL.createObjectURL(blob), download: `商行企業社${mode === 'list' ? '' : `-${periodLabel(curPeriod()).replace('/', '')}${mode === 'setup' ? '設立' : '變更'}`}-${todayIso()}-${current.length}家.csv` });
