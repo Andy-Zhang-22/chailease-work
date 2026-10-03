@@ -1055,3 +1055,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .cal-pick-row .muted { font-size: 12px; white-space: nowrap; }
 #editorBody .meet-times { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
 #editorBody .meet-times .muted { white-space: nowrap; }
+
+/* 行事曆：整天導航、順序編號 */
+.cal-route { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }
+.cal-route .muted { font-size: 12px; }
+.cal-no { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 12px; font-weight: 700; }
