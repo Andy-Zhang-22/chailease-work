@@ -367,6 +367,19 @@
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
   };
+  /** 同一區、有電話、還不在名單上的（客戶詳細頁「附近可以順訪的」用）；清冊沒載就先載 */
+  async function nearby(district, limit) {
+    if (!root) root = document.getElementById('paneTrade');
+    if (!root || !district) return [];
+    await start();
+    if (!ready) return [];
+    const cm = customerMap();
+    return rows.filter((r) => r.district === district && r.tel && !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId) && !closedOf(r.name, r.taxId))
+      .slice(0, limit || 50)
+      .map((r) => ({ kind: '出進口廠商', name: r.name, taxId: r.taxId, address: r.address, tel: r.tel, note: r.rep ? `代表人 ${r.rep}` : '', add: () => addToList([r]) }));
+  }
+  /** 電話表載好之後，同步拿這個統編的電話（商行分頁「附近」用） */
+  const telOf = (taxId) => { const tax = String(taxId || '').replace(/\D/g, ''); const p = phones && tax.length === 8 ? phones.get(tax) : null; return p ? p.tel : ''; };
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneTrade');
     if (!root) return [];
@@ -500,5 +513,5 @@
     render();
   }
 
-  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, dailyCandidates, DAILY_PRIORITY };
+  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, telOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);

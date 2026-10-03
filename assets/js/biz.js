@@ -500,6 +500,20 @@
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
   };
+  /** 同一區、還不在名單上的商行（客戶詳細頁「附近可以順訪的」用，店面型可以直接走進去）；有電話的在前 */
+  async function nearby(district, limit) {
+    if (!root) root = document.getElementById('paneBiz');
+    if (!root || !district) return [];
+    await start();
+    if (!ready) return [];
+    if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
+    const cm = customerMap();
+    const tel = (r) => (foundOf(r) ? foundOf(r).tel : '') || typed.get(r.key) || (global.Trade && global.Trade.telOf ? global.Trade.telOf(r.taxId) : '') || '';
+    return rows.filter((r) => r.district === district && !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId) && !closedOf(r.name, r.taxId))
+      .map((r) => ({ kind: '商行', name: r.name, taxId: r.taxId, address: r.address, tel: tel(r), note: [r.inds[0] || '', r.owner ? `負責人 ${r.owner}` : ''].filter(Boolean).join('・'), add: () => addToList([r]) }))
+      .sort((a, b) => Number(!!b.tel) - Number(!!a.tel))
+      .slice(0, limit || 50);
+  }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneBiz');
     if (!root) return [];
@@ -673,5 +687,5 @@
     start().catch((err) => { console.error(err); toast(`商行／企業社載入失敗：${err.message}`); });
   }
 
-  global.Biz = { show, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, dailyCandidates, DAILY_PRIORITY };
+  global.Biz = { show, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);

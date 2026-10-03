@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-246';
+  const APP_VERSION = '20261003-247';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4099,6 +4099,92 @@
 
   /* ---------------- 詳細資料抽屜 ---------------- */
 
+  /*
+   * 附近可以順訪的（使用者：「拜訪完客戶後我想在同區找可以順訪且聯絡的客戶」）：
+   * 名單上同一區的客戶，同一條路的排最前面，再照值得去的程度：有機會／談過 → 約過見面 → 打過還沒約 → 沒打過但有電話。
+   * 已停業、禁止推廣、冷名單不列。每家帶電話、導航（起點是現在這家）、記拜訪。
+   * 勾「連找名單的也列」就把出進口廠商（有電話）、商行同區的也排進來當陌生拜訪的候選。
+   * 名單上只有地址沒有座標，「附近」是用區和路名判斷。
+   */
+  const roadOf = (addr) => { const m = String(addr || '').replace(/台/g, '臺').replace(/\s+/g, '').match(/[\u4e00-\u9fa5]{1,8}?(路|街|大道)/); return m ? m[0] : ''; };
+  const NEARBY_TIER = ['有機會／談過', '約過見面', '打過還沒約', '沒打過'];
+  function nearbyTier(v) {
+    if (v.chance === 'yes' || v.outcome === 'contacted') return 0;
+    if (v.visitKind === 'yes' || state.logs.some((l) => l.recordId === v.id && l.meeting)) return 1;
+    if (v.lastDate || (v.outcome && v.outcome !== 'new')) return 2;
+    return v.phones.length ? 3 : -1;   // 沒打過又沒電話的不列
+  }
+  function nearbyCustomers(r) {
+    if (!r.district) return [];
+    const road = roadOf(r.addressActual || r.address);
+    return allViews()
+      .filter((v) => v.id !== r.id && v.district === r.district && (!r.city || !v.city || v.city === r.city) && !v.blocked && !v.closed && !v.cold)
+      .map((v) => ({ v, tier: nearbyTier(v), sameRoad: !!road && roadOf(v.addressActual || v.address) === road }))
+      .filter((x) => x.tier >= 0)
+      .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.tier - b.tier || (b.v.lastDate || '').localeCompare(a.v.lastDate || '') || a.v.company.localeCompare(b.v.company, 'zh-Hant'));
+  }
+  const navLink = (from, to) => el('a', { className: 'btn btn-tiny', href: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from || '')}&destination=${encodeURIComponent(to || '')}&travelmode=driving`, target: '_blank', rel: 'noopener', textContent: '導航', title: '從現在這家出發的 Google 地圖路線' });
+  function nearbySection(r) {
+    const origin = r.addressActual || r.address || '';
+    const list = nearbyCustomers(r);
+    const det = el('details', { className: 'detail-section nearby' });
+    det.append(el('summary', {}, [el('h3', { textContent: `附近可以順訪的（${r.district || '沒有區'}${list.length ? `，名單上 ${list.length} 家` : ''}）` })]));
+    if (!r.district) { det.append(el('p', { className: 'muted', textContent: '這家的地址看不出在哪一區，沒辦法找附近的。' })); return det; }
+    const host = el('div');
+    if (!list.length) host.append(el('p', { className: 'muted', textContent: `名單上沒有其他在${r.district}、可以打的客戶。` }));
+    list.forEach(({ v, tier, sameRoad }) => {
+      const visit = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '記拜訪', onclick: () => {
+        openDetail(v.id);
+        setTimeout(() => { const d = [...document.querySelectorAll('#drawerBody details')].find((x) => /記錄這次拜訪/.test(x.textContent)); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 60);
+      } });
+      host.append(el('div', { className: 'nearby-row' }, [
+        el('button', { className: 'link-btn nearby-name', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) }),
+        sameRoad ? el('span', { className: 'badge badge-up', textContent: '同一條路' }) : '',
+        el('span', { className: `badge ${tier === 0 ? 'badge-chance-yes' : 'badge-ind'}`, textContent: NEARBY_TIER[tier] }),
+        v.chance === 'yes' ? el('span', { className: 'badge badge-chance-yes', textContent: '有機會' }) : '',
+        el('span', { className: 'muted', textContent: (v.addressActual || v.address || '').replace(/^.{2,3}[市縣]/, '') }),
+        ...telLinks(v, 1),
+        navLink(origin, v.addressActual || v.address),
+        visit,
+      ]));
+    });
+    det.append(el('p', { className: 'muted', textContent: '同一區的客戶，同一條路的排前面，再照有機會／談過 → 約過見面 → 打過 → 沒打過。先打一通「我剛好在附近，方便過去一下嗎」。已停業、禁止推廣、冷名單不列。' }), host);
+    // 連找名單的也列：出進口廠商（有電話）、商行同區的，當陌生拜訪的候選
+    let leadsOn = false;
+    try { leadsOn = localStorage.getItem('nearby-leads') === '1'; } catch (e) { leadsOn = false; }
+    const box = el('input', { type: 'checkbox', checked: leadsOn });
+    const leadsHost = el('div', { className: 'nearby-leads' });
+    const drawLeads = async () => {
+      leadsHost.textContent = '';
+      if (!box.checked) return;
+      leadsHost.append(el('p', { className: 'muted', textContent: '載清冊中…' }));
+      const got = [];
+      for (const [mod, key] of [[window.Trade, 'Trade'], [window.Biz, 'Biz']]) {
+        if (mod && mod.nearby) { try { got.push(...await mod.nearby(r.district, 20)); } catch (err) { console.error(`${key} 附近的載不到`, err); } }
+      }
+      const road = roadOf(origin);
+      got.forEach((x) => { x.sameRoad = !!road && roadOf(x.address) === road; });
+      got.sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || Number(!!b.tel) - Number(!!a.tel) || a.name.localeCompare(b.name, 'zh-Hant'));
+      leadsHost.textContent = '';
+      if (!got.length) { leadsHost.append(el('p', { className: 'muted', textContent: `找名單裡沒有在${r.district}、還不在名單上的。` })); return; }
+      got.forEach((x) => {
+        leadsHost.append(el('div', { className: 'nearby-row' }, [
+          el('span', { className: 'badge badge-ind', textContent: x.kind }),
+          el('b', { textContent: x.name }),
+          x.sameRoad ? el('span', { className: 'badge badge-up', textContent: '同一條路' }) : '',
+          el('span', { className: 'muted', textContent: [x.note, String(x.address || '').replace(/^.{2,3}[市縣]/, '')].filter(Boolean).join('・') }),
+          x.tel ? el('a', { className: 'tel', href: `tel:${x.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${x.tel}` }) : el('span', { className: 'muted', textContent: '沒電話' }),
+          navLink(origin, x.address),
+          el('button', { className: 'btn btn-tiny', type: 'button', textContent: '加入名單', onclick: async (e) => { e.target.disabled = true; try { await x.add(); } finally { e.target.textContent = '已加入'; } } }),
+        ]));
+      });
+    };
+    box.onchange = () => { try { localStorage.setItem('nearby-leads', box.checked ? '1' : '0'); } catch (e) { /* 無痕 */ } drawLeads(); };
+    det.append(el('label', { className: 'nearby-leads-toggle' }, [box, ' 連找名單的也列（出進口廠商有電話的、商行；同區、還不在名單上的）']), leadsHost);
+    det.ontoggle = () => { if (det.open && box.checked && !leadsHost.childElementCount) drawLeads(); };
+    return det;
+  }
+
   function openDetail(id, opts) {
     const raw = state.records.find((r) => r.id === id);
     if (!raw) return;
@@ -4393,6 +4479,7 @@
     }
     // 名單來源不在詳細頁列出（使用者說看起來亂），卡片上仍有、篩選也有
     body.append(dl);
+    body.append(nearbySection(r));
 
     // 通話紀錄表單
     const section = el('div', { className: 'detail-section' }, [el('h3', { textContent: '記錄這通電話' })]);
