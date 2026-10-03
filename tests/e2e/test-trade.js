@@ -49,6 +49,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await clearAll(); n=await names();
  chk(n.join('|')==='晨光貿易有限公司|遠帆國際開發有限公司|新莊好商行', `清掉預設後照資本額高到低：${n.join('|')}`);
  const first=pg.locator('#trade-cards .card:has-text("晨光")');
+ chk((await first.locator('.card-name a[href="https://findbiz.nat.gov.tw/fts/company/70000001"]').count())===1 && /queryList\.do\?qryCond=70000003&/.test(await pg.locator('#trade-cards .card:has-text("新莊好商行") .card-name a').getAttribute('href')), '公司名直達商工登記頁、商行連用統編查');
  const top=(await first.locator('.card-top').textContent()).replace(/\s+/g,' ');
  chk(/新登記/.test(top) && /進口＋出口/.test(top) && /新莊分公司/.test(top), `卡片標籤：${top}`);
  const meta=(await first.locator('.card-meta').textContent()).replace(/\s+/g,' ');

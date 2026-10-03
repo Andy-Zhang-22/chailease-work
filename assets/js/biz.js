@@ -255,8 +255,8 @@
 
   /* 商業（獨資／合夥）在 findbiz 的頁面是 /fts/business/統編/序號，序號（banKey）稅籍與清冊都沒有，湊不出直達連結；
    * /fts/company/統編 是公司用的，商業開不到（使用者回報）。改連查詢結果頁，帶統編當條件（欄位照 findbiz 查詢表單），
-   * 點結果那一列就是商業登記頁。findbiz 有 Cloudflare，開發環境與 Actions 都連不到，這條是使用者實際點過確認的。 */
-  const findbiz = (taxId, text) => el('a', { href: `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${encodeURIComponent(taxId)}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`, target: '_blank', rel: 'noopener', textContent: text, title: '商工登記公示資料：用統編查商業登記' });
+   * 點結果那一列就是商業登記頁（網址規則集中在 Normalize.findbizUrl）。findbiz 有 Cloudflare，開發環境與 Actions 都連不到，這條是使用者實際點過確認的。 */
+  const findbiz = (taxId, text) => el('a', { href: global.Normalize.findbizUrl(taxId, text), target: '_blank', rel: 'noopener', textContent: text, title: '商工登記公示資料：用統編查商業登記' });
 
   function card(r, c) {
     const mine = mineOf(r, c.cm);

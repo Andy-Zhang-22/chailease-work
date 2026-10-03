@@ -279,7 +279,7 @@
       ? el('span', { className: 'badge badge-own', textContent: `名單上是禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
       : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）' });
     const name = el('span', { className: 'card-name' }, [r.cust.id
-      ? el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r.cust.id)}`, target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料' })
+      ? el('a', { href: global.Normalize.findbizUrl(r.cust.id, r.cust.name), target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料（開新分頁）' })   // 債務人是商行時走用統編查的結果頁
       : document.createTextNode(r.cust.name || '（沒有名稱）'), copyName(r.cust.name || '')]);
     const isHidden = hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id) || !!closedOf(r.cust.name, r.cust.id);
     const actions = mine

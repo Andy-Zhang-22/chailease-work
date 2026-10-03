@@ -1611,7 +1611,26 @@
     return keys;
   }
 
+  /**
+   * 商工登記公示資料（findbiz）的連結：公司名稱點下去直接開那家的登記頁。
+   *
+   * 公司（名稱以「公司」結尾）有直達頁 /fts/company/統編；商業（商行、企業社、工作室…獨資合夥）
+   * 和分公司在 findbiz 是另一種頁面、網址要帶清冊裡沒有的序號，湊不出直達連結，
+   * 只能連「用統編查」的結果頁，點結果那一列再進去（使用者實際點過確認）。
+   * 以前出進口、健保、電子發票三個分頁不分公司商業一律連結果頁，使用者要求
+   * 「所有名單的公司名只要點進去都是要連結這樣的畫面」——公司一律直達。
+   * 沒統編的回 ''（寧可不連也不要連錯家）。
+   */
+  function findbizUrl(taxId, name) {
+    const tax = String(taxId || '').replace(/\D/g, '');
+    if (!tax) return '';
+    const n = String(name || '').replace(/\s/g, '');
+    if (/公司$/.test(n) && !/分公司$/.test(n)) return `https://findbiz.nat.gov.tw/fts/company/${tax}`;
+    return `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${tax}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`;
+  }
+
   global.Normalize = {
+    findbizUrl,
     companyKeys,
     detectVisit, VISIT_LABEL, detectKeyman,
     parseKeyValue,
