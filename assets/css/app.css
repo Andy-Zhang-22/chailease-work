@@ -90,13 +90,22 @@ button, input, select { font: inherit; color: inherit; }
 .menu {
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: var(--shadow); padding: 6px; min-width: 230px;
-  /* 選單比手機螢幕還長：最下面的「檢查更新」與版本號滑不到，所以限高、自己捲 */
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px; width: 480px;
+  /* 四組兩欄（使用者：這個畫面裡有點太多功能）；比螢幕還長就自己捲 */
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; text-align: left;
   max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); overflow: auto; -webkit-overflow-scrolling: touch;
 }
+.menu[hidden] { display: none; }
+.menu-group { min-width: 0; }
+.menu-cap { font-size: 11px; color: var(--muted); letter-spacing: .06em; padding: 6px 12px 2px; }
 .menu button {
-  display: block; width: 100%; text-align: right; background: none; border: 0;
-  padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 手機：從底下滑出來的面板，兩欄剛好放得下 */
+@media (max-width: 760px) {
+  .menu { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; border-radius: 16px 16px 0 0; border-bottom: 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); max-height: 85dvh; }
+  .menu button { padding: 9px 10px; }
 }
 .menu button:hover { background: var(--surface-2); }
 .menu .danger { color: var(--danger); }
@@ -557,7 +566,7 @@ button, input, select { font: inherit; color: inherit; }
 /* 門檻表在畫面外時不必排版 */
 .rule-defer { content-visibility: auto; contain-intrinsic-size: auto 560px; }
 
-.menu-version { margin: 4px 12px 2px; font-size: 11px; color: var(--muted); text-align: right; }
+.menu-version { margin: 6px 12px 2px; font-size: 11px; color: var(--muted); text-align: left; }
 
 .paste-box {
   width: 100%; min-height: 130px; resize: vertical; margin: 14px 0 4px;
