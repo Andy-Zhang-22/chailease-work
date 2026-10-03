@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-252';
+  const APP_VERSION = '20261003-253';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4107,8 +4107,8 @@
   /*
    * 行事曆（使用者：「能在我的電推系統內內建一個行事曆嗎 … 我這樣才能看到我哪天要拜訪誰」）：
    * 整月一格一天，每格列那天要聯絡的客戶——下次聯絡日落在那天的（🚗 要拜訪、📞 要打電話），
-   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，只看最近一則通話紀錄有沒有勾「約到拜訪」：
-   * 有就 🚗，其他一律 📞（不猜字面，使用者：「只有我勾選要拜訪才是約到拜訪」）。
+   * 過去的日子列那天記過的通話與拜訪（✓ 做完了）。拜訪還是電話，只看最近一則通話紀錄有沒有勾「約到拜訪」、
+   * 而且約的那天就是下次聯絡日：是就 🚗，其他一律 📞（不猜字面，使用者：「只有我勾選要拜訪才是約到拜訪」）。
    * 點一天，下面列那天的行程：拜訪的同區排一起（同一條路相鄰），每家帶電話、導航、記拜訪；
    * 電話的帶上次談的重點。日期還是在詳細頁改，行事曆只是把現有的下次聯絡日攤開來看，不另存一套，
    * 兩邊不會打架。週末與國定假日用現有的行事曆資料灰掉；「複製這週」把一週行程變成文字貼 LINE。
@@ -4117,8 +4117,9 @@
   const cal = { month: '', sel: '' };
   const calYm = (iso) => String(iso || '').slice(0, 7);   // yyyy-mm（既有的 monthOf 回的是整個月的頭尾）
   const calMd = (iso) => String(iso || '').slice(5).replace('-', '/');
-  // 🚗 只認通話紀錄勾了「約到拜訪」（meeting）的，不看字面、也不看以前拜訪表單的「下一步」
-  // （使用者：「行事曆只有我勾選要拜訪才是約到拜訪」；之前從字面猜，「跟之前拜訪過的…」也會中）
+  // 🚗 只認通話紀錄勾了「約到拜訪」（meeting）、而且約的那天（meetingDate）就是現在的下次聯絡日；不看字面、
+  // 也不看以前拜訪表單的「下一步」（使用者：「行事曆只有我勾選要拜訪才是約到拜訪」）。
+  // 日期要對：以前勾的「約到見面」記號留在舊紀錄上，下次聯絡日後來改了還被當成要去（使用者：「星彩我沒有勾，為什麼他會在拜訪這」）
   let calCache = { key: '', map: null };
   /** 哪天有誰：Map(yyyy-mm-dd → [{ v, kind: 'visit'|'call', done, time, step, note }])，排好序。 */
   function calEvents() {
@@ -4148,7 +4149,7 @@
       const noteText = text.replace(/\s+/g, ' ').trim();
       const note = noteText ? `上次 ${calMd((last && last.date) || '')}：${noteText.slice(0, 40)}` : '';
       const step = '';
-      const kind = last && last.meeting ? 'visit' : 'call';
+      const kind = last && last.meeting && last.meetingDate && last.meetingDate === v.nextDate ? 'visit' : 'call';
       const remindIso = v.remindAt ? (() => { const d = new Date(v.remindAt); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
       if (v.nextDate) {
         const didIt = doneKey.has(`${v.id}|${v.nextDate}`) || (v.nextDate === today && v.dueDoneOn === today);
@@ -4790,6 +4791,8 @@
       // 禁止推廣不需要內容或下次聯絡日：判定了就是判定了，之後也不會再打
       const blocking = outcomeSel.value === 'blocked';
       if (!text && !nextInput.value && !blocking) { toast('請至少填寫內容或下次聯絡日'); return; }
+      // 勾了約到拜訪就要有日期：行事曆是靠「約的那天」標 🚗 的，沒日期等於沒約
+      if (meet.checked && !nextInput.value) { toast('勾了「約到拜訪」要填下次聯絡日：哪天去？'); nextInput.focus(); return; }
       const today = todayISO();
 
       /*
