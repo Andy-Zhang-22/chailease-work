@@ -1,0 +1,17 @@
+{
+ "generatedAt": "2026-10-03T03:00:00.000Z",
+ "source": "https://data.gov.tw/api/v2/rest/dataset/31869",
+ "cities": ["新北市", "臺北市"],
+ "years": 3,
+ "baseline": "",
+ "dataYm": "",
+ "allInCities": 0,
+ "total": 0,
+ "newTotal": 0,
+ "newThisMonth": 0,
+ "withPhone": 0,
+ "byFirst": {},
+ "byDist": {},
+ "files": [{"path": "einv.csv", "rows": 0}],
+ "note": "佔位：Actions「每月電子發票導入名單」第一次跑完會換成真的資料"
+}

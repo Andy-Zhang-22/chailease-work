@@ -49,6 +49,13 @@ const NROWS=[
 ];
 const NCSV='\uFEFF'+[NHEAD,...NROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const NINDEX={generatedAt:'2026-10-02T20:00:00.000Z',cities:['新北市'],months:6,total:2,withPhone:1,latestYm:'2026/09',files:[{path:'nhi.csv',rows:2}]};
+const EHEAD='統編,名稱,屬性,地址,首見年月,設立日期,組織別,資本額,行業代號,行業,開發票,電話';
+const EROWS=[
+ ['70000009','新開發票有限公司','B2B','新北市新莊區中正路200號','202610','108/05/01','有限公司','20000000','4610','商品批發經紀業','Y','02-2990-9999'],
+ ['70000008','沒電話發票有限公司','B2C','新北市板橋區文化路2號','202610','110/05/01','有限公司','3000000','4711','零售業','Y',''],
+];
+const ECSV='\uFEFF'+[EHEAD,...EROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
+const EINDEX={generatedAt:'2026-10-03T20:00:00.000Z',cities:['新北市'],years:3,baseline:'202609',dataYm:'202610',total:2,newTotal:2,newThisMonth:2,withPhone:1,files:[{path:'einv.csv',rows:2}]};
 const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2012',capital:'1,500',phoneRaw:'02-2222-3333',phones:[{digits:'0222223333',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路9號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:TODAY,lastDate:'2026-09-12',addedDate:'2026-09-01',importedAt:1});
 const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客戶二有限公司','99999992')];
 (async()=>{
@@ -70,6 +77,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'\uFEFF統編,電話,傳真,核發日期\n11111111,02-1234-5678,,2025/01/01\n'}));   // 甲一在貿易署電話表裡
  await ctx.route('**/leads/nhi/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(NINDEX)}));
  await ctx.route('**/leads/nhi/nhi.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:NCSV}));
+ await ctx.route('**/leads/einv/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(EINDEX)}));
+ await ctx.route('**/leads/einv/einv.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:ECSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9485/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','5');
@@ -85,7 +94,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);
  chk(fed.every(f=>f.addedDate===TODAY), `每日新名單的名單新增日期＝今天：${fed.map(f=>f.addedDate).join('|')}`);
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
- chk(fed.length===5, `額度 5：五頁輪流拿（動產擔保、登記清冊、商行、出進口、剛開始請人各 1）：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.length===5, `額度 5：六頁輪流拿，排最後的剛開電子發票這輪沒輪到（動產擔保、登記清冊、商行、出進口、剛開始請人各 1）：${fed.map(f=>f.company).join('|')}`);
+ const ec=await pg.evaluate(async()=>(await window.Einv.dailyCandidates()).map(r=>r.name+'|'+r._why));
+ chk(ec.length===2 && /^新開發票有限公司\|符合：有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、剛導入 3 個月內$/.test(ec[0]), `剛開電子發票的候選照優先順序、寫符合哪幾條：${ec.join(' / ')}`);
+ chk(JSON.stringify(await pg.evaluate(()=>window.splitEvenly([9,9,9,9,9,9],25)))==='[5,4,4,4,4,4]', '六頁分 25：前面的多拿');
  chk(fed.some(f=>f.company==='名祿實業有限公司') && !fed.some(f=>f.company==='沒電話請人有限公司'), `剛開始請人挑 1 家、有電話且全符合的先：${fed.filter(f=>/請人|名祿/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、剛投保 3 個月內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿五條全符合，寫在訪談內容');
  chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
