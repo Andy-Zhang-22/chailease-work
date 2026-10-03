@@ -217,7 +217,8 @@
     if (v) global.openCustomer(v.id);
   }
 
-  const findbiz = (taxId, text) => el('a', { href: `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${encodeURIComponent(taxId)}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`, target: '_blank', rel: 'noopener', textContent: text, title: '商工登記公示資料：用統編查' });
+  // 公司直達登記頁、商業連用統編查的結果頁（規則在 Normalize.findbizUrl）
+  const findbiz = (taxId, text) => el('a', { href: global.Normalize.findbizUrl(taxId, text), target: '_blank', rel: 'noopener', textContent: text, title: '商工登記公示資料（開新分頁）' });
   const whenLabel = (r) => (r.firstMonths == null ? '' : r.firstMonths < 1 ? '這個月' : r.firstMonths < 12 ? `${r.firstMonths} 個月前` : `${Math.floor(r.firstMonths / 12)} 年${r.firstMonths % 12 ? `${r.firstMonths % 12} 個月` : ''}前`);
 
   function card(r, c) {
