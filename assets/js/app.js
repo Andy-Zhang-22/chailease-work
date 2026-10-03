@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-239';
+  const APP_VERSION = '20261003-240';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -935,6 +935,8 @@
      * 那位客戶就悄悄回到待打名單裡。所以以訪談內容為準，再把使用者自己選的
      * 「禁止推廣」也算進來——兩邊任一成立就是禁打，只能加不能減。
      */
+    // 已停業（leads/closed，每月抓；統編對不到才比名稱）：只標，不改資料；六個名單分頁那邊是直接藏
+    out.closed = window.Closed && window.Closed.ready() ? window.Closed.of(record.company, record.taxId) : null;
     out.blockedInfo = window.Normalize.detectBlocked(out.notesRaw);
     out.blocked = out.blockedInfo.blocked || out.outcome === 'blocked';
     // 禁止推廣的原因與日期：最近一則標禁止推廣的通話紀錄（個資法：不要打的名單要留得住為什麼、什麼時候）
@@ -2895,6 +2897,7 @@
     { key: 'trade', name: '出進口廠商（貿易署，含電話）', url: 'leads/trade/index.json', every: '每月 9 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，有電話 ${Number(j.withPhone || 0).toLocaleString()}` },
     { key: 'nhi', name: '剛開始請人（健保新成立投保單位）', url: 'leads/nhi/index.json', every: '每月 10 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
     { key: 'einv', name: '剛開電子發票（財政部導入電子發票營業人）', url: 'leads/einv/index.json', every: '每月 11 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛導入 ${Number(j.newTotal || 0).toLocaleString()}，起算 ${j.baseline || ''}` },
+    { key: 'closed', name: '已停業（稅籍停業／非營業中、健保停歇業）', url: 'leads/closed/index.json', every: '每月 12 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家${j.taxFileDate ? `，稅籍檔 ${j.taxFileDate}` : ''}` },
     { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
   ];
   async function openDataStatus() {
@@ -3608,6 +3611,7 @@
       // 「優先區域」拿掉：新莊一帶幾乎每筆都是，標了等於沒標，只是讓卡片更擠
       r.territory === '範圍外' ? el('span', { className: 'badge badge-outside', textContent: '範圍外·需協銷' }) : '',
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
+      r.closed ? el('span', { className: 'badge badge-blocked', textContent: `已停業・${r.closed.kind}${r.closed.date ? ` ${r.closed.date}` : ''}`, title: '財政部稅籍／健保署的公開資料說這家停業或註銷了（Actions 每月抓）；名單上的這筆沒動，只是標出來' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
@@ -7392,6 +7396,8 @@ export default {
      */
     window.customerViews = () => allViews();
     window.openCustomer = (id) => openDetail(id);
+    // 停業表（leads/closed）：載好之後名單上的卡片才標得出「已停業」，所以載完重算一次
+    if (window.Closed) window.Closed.ensure().then(() => { if (window.Closed.count()) { touch(); renderList(); } }).catch(() => {});
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
     window.splitEvenly = splitEvenly;   // 測試用
