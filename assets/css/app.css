@@ -469,6 +469,10 @@ details.nearby[open] > summary::before { content: '▾ '; }
 .share-hint { flex-basis: 100%; }
 .badge-pin { border-color: var(--primary); color: var(--primary); font-weight: 600; }
 .meet-label { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+/* 勾了約到拜訪才出現的出發／抵達時間 */
+.meet-times { flex-basis: 100%; margin: 0; }   /* 勾選那行的下面自成一行，在儲存鈕之前 */
+.meet-times[hidden] { display: none; }
+.meet-times input[type="time"] { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
 .remind-bar { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; }
 .remind-bar.is-due { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
 .remind-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13.5px; }
