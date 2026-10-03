@@ -32,6 +32,8 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
    Date=D; }`);
  await ctx.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/chattel/ntpc.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
+ await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:'{"generatedAt":"x"}'}));
+ await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n28451237,0922333444,,2026/01/01\n53217846,02-2299-0000,,2026/01/01\n'}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}});
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
 
@@ -90,6 +92,11 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await clickChip('#chattel-fAge','5 年以上'); n=await names();
  chk(n.join('|')==='禾泰精密工業有限公司', `只看 5 年以上：${n.join('|')}`);
  await clickChip('#chattel-fAge','5 年以上');
+ const pc=(await pg.locator('#chattel-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話2', `電話籤（對出進口廠商電話表）：${pc}`);
+ await clickChip('#chattel-fPhone','手機'); n=await names(); chk(n.join('|')==='禾泰精密工業有限公司', `只按「手機」：${n.join('|')}`);
+ chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#chattel-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ await clickChip('#chattel-fPhone','手機'); await clickChip('#chattel-fPhone','有電話'); n=await names(); chk(n.length===2 && n.includes('昱昌汽車貨運股份有限公司'), `「有電話」含手機：${n.join('|')}`);
+ await clickChip('#chattel-fPhone','有電話');
 
  // 金主籤：勾中租才會看到自家的
  await clickChip('#chattel-fLender','中租'); n=await names();

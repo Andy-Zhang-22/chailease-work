@@ -24,6 +24,8 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
    Date=D; }`);
  await ctx.route('**/leads/biz/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/biz/biz.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
+ await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:'{"generatedAt":"x"}'}));
+ await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n87493071,0912345678,,2026/01/01\n91214059,02-2277-0000,,2026/01/01\n'}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9488/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); },[mk('1','樹德醫療器材行','91214059')]);
@@ -46,6 +48,11 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await clickChip('#biz-fBranch','新莊分公司'); n=await names(); chk(n.length===2 && !n.includes('樹德醫療器材行'), `篩新莊分公司：${n.join('|')}`);
  await clickChip('#biz-fAge','未滿 5 年'); n=await names(); chk(n.join('|')==='協玖裝潢企業社', `再篩未滿 5 年：${n.join('|')}`);
  await pg.click('#biz-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選');
+ const pc=(await pg.locator('#biz-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話1', `電話籤（對出進口廠商電話表）：${pc}`);
+ await clickChip('#biz-fPhone','手機'); n=await names(); chk(n.join('|')==='一塊制作室內裝修工作室', `只按「手機」：${n.join('|')}`);
+ chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#biz-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ await clickChip('#biz-fPhone','沒電話'); n=await names(); chk(n.length===2 && n.includes('協玖裝潢企業社'), `手機＋沒電話是「或」：${n.join('|')}`);
+ await pg.click('#biz-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選也清電話籤');
  // 頂端搜尋欄跟著分頁
  await pg.fill('#search','裝潢'); await pg.waitForTimeout(400); n=await names(); chk(n.join('|')==='協玖裝潢企業社', `頂端搜尋欄搜這一頁：${n.join('|')}`); await pg.fill('#search',''); await pg.waitForTimeout(400);
  // 名稱旁有複製的點；卡片上有找電話那排＋貼電話的框（使用者：在分頁找好電話，加入時要一起帶、加完直接開那一筆）

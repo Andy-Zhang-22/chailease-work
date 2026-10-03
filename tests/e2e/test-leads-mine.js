@@ -22,6 +22,8 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  const ctx=await br.newContext();
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
+ await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:'{"generatedAt":"x"}'}));
+ await ctx.route('**/leads/trade/phones.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n11111111,0933000111,,2026/01/01\n22222222,02-2200-1111,,2026/01/01\n'}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9484/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
@@ -49,6 +51,11 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  await pg.locator('#leads-fMine .chip:has-text("名單裡沒有")').click(); await pg.waitForTimeout(300); n=await names();
  chk(n.join('|')==='乙二機械股份有限公司'===false && n.length===2 && !n.includes('乙二機械股份有限公司'), `只看名單裡沒有的：${n.join('|')}`);
  await pg.locator('#leads-fMine .chip:has-text("名單裡沒有")').click(); await pg.waitForTimeout(300);
+ // 電話籤：對出進口廠商電話表
+ const pc=(await pg.locator('#leads-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話2', `電話籤：${pc}`);
+ await pg.locator('#leads-fPhone .chip:has-text("手機")').click(); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='甲一精密有限公司', `只按「手機」：${n.join('|')}`);
+ chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#leads-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ await pg.locator('#leads-fPhone .chip:has-text("手機")').click(); await pg.waitForTimeout(300); n=await names(); chk(n.length===4, '放開籤');
  // 這家不用了
  await pg.locator('#leads-cards .card:has-text("丁四")').locator('button.leads-hide').click(); await pg.waitForTimeout(300); n=await names();
  chk(!n.includes('丁四貿易有限公司'), `藏起來：${n.join('|')}`);

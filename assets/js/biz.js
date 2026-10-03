@@ -167,7 +167,7 @@
   let monthly = null;           // leads/biz/monthly/index.json
   const mrows = {};             // 期別 → { setup: [...], change: [...] }
   let listSub = '';
-  const f = { branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), q: '' };
+  const f = { branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
   const curPeriod = () => { const sel = root && $('#biz-period'); return (sel && sel.value) || (monthly && monthly.latest) || ''; };
   /** 目前模式在看的那一池 */
   const pool = () => (mode === 'list' ? rows : ((mrows[curPeriod()] || {})[mode] || []));
@@ -192,6 +192,7 @@
       && (except === 'invoice' || !f.invoice.size || f.invoice.has(r.invoice ? 'Y' : 'N'))
       && (except === 'reasons' || mode !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.capital >= c.min && r.capital <= c.max
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
@@ -255,7 +256,7 @@
       r.reg ? '' : el('span', { className: 'badge badge-own', textContent: '只有稅籍登記', title: '沒辦商業登記（小規模營業人可免辦）：商工登記查不到、沒有負責人，資本額是稅籍上自己填的' }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       r.invoice ? el('span', { className: 'badge badge-ind', textContent: '開發票' }) : '',
-      hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '',
+      hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '',
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
@@ -304,6 +305,7 @@
     const ikeys = [...new Set([...[...ic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([k]) => k), ...f.inds])];
     chips($('#biz-fInd'), ikeys.map((k) => [k, k, ic.get(k) || 0]), f.inds);
     chips($('#biz-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#biz-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     if (mode === 'change') chips($('#biz-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => r.rk === k)]).filter(([k, , n]) => n || f.reasons.has(k)), f.reasons);
     $('#biz-gOrg').hidden = mode !== 'list'; $('#biz-gInvoice').hidden = mode !== 'list'; $('#biz-gReason').hidden = mode !== 'change';
     drawModes();
@@ -450,6 +452,9 @@
   const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
+  const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.taxId) : new Set(['N']));
+  // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
+  const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
   const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
@@ -503,7 +508,7 @@
     ]);
     const filters = el('details', { className: 'leads-filters', id: 'biz-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
-      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。稅籍資料沒有電話，打前用 104 或 Google 查。' }),
+      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。稅籍資料沒有電話，統編對得到貿易署出進口廠商登記的才有（「電話」籤）；其他打前用 104 或 Google 查。' }),
       Object.assign(group('案由（變更清冊）', el('div', { className: 'chips', id: 'biz-fReason' })), { id: 'biz-gReason', hidden: true }),
       group('歸屬分公司（同「規則」的劃分表）', el('div', { className: 'chips', id: 'biz-fBranch' })),
       group('區', el('div', { className: 'chips', id: 'biz-fDistrict' })),
@@ -512,6 +517,7 @@
       Object.assign(group('統一發票', el('div', { className: 'chips', id: 'biz-fInvoice' })), { id: 'biz-gInvoice' }),
       group('行業（最多的 24 種；其他用關鍵字）', el('div', { className: 'chips', id: 'biz-fInd' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'biz-fMine' })),
+      group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'biz-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'biz-capMin', type: 'number', min: '0', step: '10', placeholder: '下限' }), '～',
         el('input', { id: 'biz-capMax', type: 'number', min: '0', step: '10', placeholder: '上限' })])),
