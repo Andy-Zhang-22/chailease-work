@@ -38,7 +38,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  });
  await pg.goto('http://localhost:8971/index.html');
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{localStorage.setItem('daily-feed-auto','0'); await window.Store.saveRecords(r);},SEED);
+ await pg.evaluate(async(r)=>{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);},SEED);   // 自動更新關掉：它一跑起來「全部更新」就會先灰掉，跟這裡手動按的搶
  await pg.reload(); await pg.waitForTimeout(900);
 
  await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');

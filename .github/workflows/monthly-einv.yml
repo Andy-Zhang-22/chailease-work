@@ -1,0 +1,60 @@
+# 每月抓財政部的「導入電子發票營業人清單」（data.gov.tw 31869），只留新北市、臺北市，跟上個月的首見表比出剛導入的，
+# 成立日、組織別、資本額、行業對稅籍檔，電話對貿易署的電話表（leads/trade/phones.csv）→ leads/einv/；
+# 網站的「剛開電子發票」分頁讀這裡。排在健保之後一天。
+name: 每月電子發票導入名單
+
+on:
+  schedule:
+    - cron: '0 20 10 * *'   # 每月 11 日台灣 04:00
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: '留哪些縣市（逗號分隔）'
+        required: false
+        default: '新北市,臺北市'
+      years:
+        description: '還沒有「剛導入」之前，先留成立幾年內的'
+        required: false
+        default: '3'
+      reset_baseline:
+        description: '把首見表清掉重新起算（平常不要）'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-einv
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 抓電子發票導入名單、對稅籍與電話表
+        env:
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
+          YEARS: ${{ inputs.years || '3' }}
+          RESET: ${{ inputs.reset_baseline == true && '--reset-baseline' || '' }}
+        run: |
+          node tools/fetch-einv.mjs --cities "$CITIES" --years "$YEARS" $RESET | tee fetch-einv.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-einv.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/einv
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "剛開電子發票名單：$(date -u +%Y-%m-%d)"
+          # leads/einv 整份是這次重算的，跟分支上的舊檔撞到一律用這次的
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"

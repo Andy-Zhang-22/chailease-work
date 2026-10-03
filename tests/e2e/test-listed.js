@@ -39,6 +39,7 @@ const SEED=[mk('1','安達投資有限公司','12345679')];
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
+ await ctx.route('**/leads/closed/**',r=>r.fulfill({status:404,body:''}));   // 測試不要載到 repo 裡真的停業表（裡面有測試拿來當樣本的真公司）
  await ctx.route('**/leads/listed/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/listed/companies.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  await ctx.route('**/leads/listed/owners.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(OWNERS)}));
