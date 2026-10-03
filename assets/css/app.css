@@ -1044,3 +1044,14 @@ body.has-registry-bar .update-bar { bottom: 60px; }
   .cal-n { flex-direction: column; gap: 0; }
   .cal-legend { margin-left: 0; flex-basis: 100%; }
 }
+
+/* 行事曆：排拜訪／改期 */
+.cal-agenda-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.cal-agenda-head h3 { margin: 0; }
+.cal-chosen { margin: 0 0 10px; font-weight: 600; }
+.cal-pick { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 12px; }
+.cal-pick-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.cal-pick-row:hover { border-color: var(--primary); }
+.cal-pick-row .muted { font-size: 12px; white-space: nowrap; }
+#editorBody .meet-times { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+#editorBody .meet-times .muted { white-space: nowrap; }

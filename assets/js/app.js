@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-256';
+  const APP_VERSION = '20261003-257';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4174,6 +4174,85 @@
   }
   window.openCalendar = openCalendar;   // 測試用
 
+  /**
+   * 直接在行事曆排拜訪／改期（使用者：「直接在行事曆排拜訪…不用先去詳細頁記一通電話」）。
+   * 排：挑客戶（名稱／統編／負責人搜）、哪天、出發／抵達、一句備註 → 記一則勾了「約到拜訪」的通話紀錄
+   * （跟在詳細頁勾的一模一樣：meeting、meetingDate、時間），下次聯絡日改成那天、結果改已聯絡。
+   * 改期：改那則紀錄的約的那天與時間、下次聯絡日跟著改。兩條路都走現有的紀錄，行事曆不另存一套。
+   */
+  function scheduleVisit(iso, existing) {
+    const H = window.Holidays;
+    const host = $('#editorBody');
+    host.textContent = '';
+    const x = existing || null;
+    let picked = x ? x.v : null;
+    host.append(el('h2', { textContent: x ? `改期：${x.v.company}` : `排拜訪：${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）` }));
+    const chosen = el('p', { className: 'cal-chosen', hidden: !picked, textContent: picked ? `🚗 ${picked.company}` : '' });
+    const search = el('input', { type: 'search', placeholder: '找客戶：公司名稱、統編、負責人', autocomplete: 'off' });
+    const results = el('div', { className: 'cal-pick' });
+    const drawResults = () => {
+      results.textContent = '';
+      const q = search.value.trim().toLowerCase();
+      if (!q) return;
+      const hits = allViews().filter((v) => !v.blocked && [v.company, v.taxId, v.owner, v.keyman].some((t) => String(t || '').toLowerCase().includes(q))).slice(0, 8);
+      if (!hits.length) { results.append(el('p', { className: 'muted', textContent: '名單上沒有這家' })); return; }
+      hits.forEach((v) => results.append(el('button', { className: 'cal-pick-row', type: 'button', onclick: () => { picked = v; chosen.textContent = `🚗 ${v.company}`; chosen.hidden = false; results.textContent = ''; search.value = ''; dateInput.focus(); } }, [
+        el('b', { textContent: v.company }),
+        el('span', { className: 'muted', textContent: [v.district, v.nextDate ? `下次 ${calMd(v.nextDate)}` : '', window.Normalize.outcomeLabel(v.outcome)].filter(Boolean).join('・') }),
+      ])));
+    };
+    search.oninput = drawResults;
+    const dateInput = el('input', { type: 'date', value: iso });
+    const dateHint = el('small', { className: 'muted' });
+    const hintDate = () => { const off = H && dateInput.value ? H.holidayName(dateInput.value) : ''; dateHint.textContent = dateInput.value ? `${dateLabel(dateInput.value)}（${H ? H.weekLabel(dateInput.value) : ''}）${off ? `，${off}` : ''}` : ''; };
+    dateInput.onchange = hintDate; hintDate();
+    const depart = el('input', { type: 'time', value: x ? x.depart : '' });
+    const arrive = el('input', { type: 'time', value: x ? x.arrive : '' });
+    const memo = x ? null : el('textarea', { rows: 2, placeholder: '一句備註（例如：帶設備融資方案、找王老闆）', value: '' });
+    const err = el('p', { className: 'save-err', hidden: true });
+    const save = el('button', { className: 'btn btn-primary', type: 'button', textContent: x ? '改好了' : '排進行事曆' });
+    save.onclick = async () => {
+      err.hidden = true;
+      if (!picked) { err.textContent = '先挑一家客戶'; err.hidden = false; search.focus(); return; }
+      const day = dateInput.value;
+      if (!day) { err.textContent = '要填哪天去'; err.hidden = false; dateInput.focus(); return; }
+      save.disabled = true;
+      try {
+        if (x) {
+          await window.Store.updateLog(x.log.logId, { meetingDate: day, meetingDepart: depart.value || '', meetingArrive: arrive.value || '' }, x.log.uid);
+          await saveState(picked.id, { nextDate: day, pinDate: false });
+        } else {
+          const text = (memo.value || '').trim() || `行事曆排拜訪 ${dateLabel(day)}`;
+          const createdAt = Date.now();
+          await window.Store.addLog({ recordId: picked.id, date: todayISO(), text, outcome: 'contacted', createdAt, meeting: true, meetingDate: day, meetingDepart: depart.value || '', meetingArrive: arrive.value || '' });
+          await saveState(picked.id, { outcome: 'contacted', nextDate: day, pinDate: false, cold: '' });
+        }
+        state.logs = await window.Store.allLogs();
+      } catch (e2) {
+        console.error('排拜訪失敗', e2);
+        err.textContent = `存不進去：${e2 && e2.message ? e2.message : e2}`; err.hidden = false; save.disabled = false;
+        return;
+      }
+      $('#editor').hidden = true;
+      touch();
+      cal.sel = day; cal.month = calYm(day);
+      render();
+      scheduleSync();
+      toast(x ? `已改到 ${dateLabel(day)}` : `已排 ${dateLabel(day)} 拜訪「${picked.company}」`);
+    };
+    const field = (label, node, hint) => el('label', { className: 'rule-field' }, [el('span', { textContent: label }), node, hint || '']);
+    if (!x) host.append(chosen, field('客戶', search), results);
+    host.append(
+      field('哪天去', dateInput, dateHint),
+      el('div', { className: 'row meet-times' }, [el('span', { className: 'muted', textContent: '出發' }), depart, el('span', { className: 'muted', textContent: '抵達' }), arrive]),
+      memo ? field('備註（會記成一則通話紀錄）', memo) : '',
+      err,
+      el('div', { className: 'row' }, [save]),
+    );
+    $('#editor').hidden = false;
+    if (!x) search.focus(); else dateInput.focus();
+  }
+
   function renderCal() {
     const host = $('#paneCal');
     if (!host) return;
@@ -4231,7 +4310,10 @@
     const what = planned.length
       ? `要跑 ${planned.length} 家${done.length ? `，去過 ${done.length} 家` : ''}`
       : done.length ? `去過 ${done.length} 家` : off ? `${off}，沒排拜訪` : '沒排拜訪';
-    box.append(el('h3', { textContent: `${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）${what}` }));
+    box.append(el('div', { className: 'cal-agenda-head' }, [
+      el('h3', { textContent: `${calMd(iso)}（${H ? H.weekLabel(iso) : ''}）${what}` }),
+      el('button', { className: 'btn btn-tiny btn-primary cal-add', type: 'button', textContent: '＋ 排拜訪', title: '直接在這一天排一家要去拜訪的客戶', onclick: () => scheduleVisit(iso) }),
+    ]));
     const openBtn = (v, label) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: label || '打開', onclick: () => openDetail(v.id) });
     const addrOf = (v) => (v.addressActual || v.address || '');
     const shortAddr = (v) => addrOf(v).replace(/^.{2,3}[市縣]/, '');
@@ -4248,6 +4330,7 @@
         el('span', { className: 'muted', textContent: shortAddr(x.v) }),
         addrOf(x.v) ? navLink('', addrOf(x.v)) : '',
         logBtn(x.v),
+        el('button', { className: 'btn btn-tiny cal-move', type: 'button', textContent: '改期', title: '改哪天去、出發／抵達時間', onclick: () => scheduleVisit(iso, x) }),
         // 刪除：從行事曆拿掉這次拜訪（使用者：「幫我在行事曆上新增刪除的選項」）
         el('button', { className: 'btn btn-tiny cal-del', type: 'button', textContent: '刪除', title: '從行事曆拿掉這次拜訪（取消約到拜訪，紀錄留著）', onclick: () => cancelVisit(x) }),
       ]));
@@ -4262,7 +4345,7 @@
         openBtn(x.v),
       ])));
     }
-    if (!list.length) box.append(el('p', { className: 'muted', textContent: '這天沒排拜訪。要排的話，到那家「記錄這通電話」勾「🚗 約到拜訪」、下次聯絡日填這一天。' }));
+    if (!list.length) box.append(el('p', { className: 'muted', textContent: '這天沒排拜訪。按「＋ 排拜訪」挑客戶直接排，或到那家「記錄這通電話」勾「🚗 約到拜訪」。' }));
     return box;
   }
 
