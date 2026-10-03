@@ -235,20 +235,20 @@
    * 把原始回應秀出來——猜錯的時候看得見，也才改得掉。
    */
   const FIELD_CANDIDATES = {
-    taxId: ['Business_Accounting_NO', 'BAN', 'Business_Accounting_No', '統一編號'],
+    taxId: ['Business_Accounting_NO', 'President_No', 'BAN', 'Business_Accounting_No', '統一編號'],
     // g0v 鏡像的搜尋結果混著公司、商號、分公司，欄位名稱各不相同——少列一個就變「（無名稱）」
     name: ['Company_Name', 'Business_Name', 'Company_Name_Chinese', 'Branch_Name',
       '公司名稱', '商業名稱', '分公司名稱', '名稱'],
-    status: ['Company_Status_Desc', 'Company_Status', 'Business_Status_Desc', '公司狀況', '狀態'],
+    status: ['Company_Status_Desc', 'Company_Status', 'Business_Current_Status_Desc', 'Business_Status_Desc', '公司狀況', '狀態'],
     owner: ['Responsible_Name', 'Company_Responsible_Name', 'Business_Responsible_Name',
       '代表人姓名', '負責人姓名', '負責人'],
     address: ['Company_Location', 'Business_Address', 'Company_Address', 'Business_Location',
       '公司所在地', '地址', '營業所在地'],
-    capital: ['Capital_Stock_Amount', 'Capital_Total_Amount', 'Capital_Amount',
+    capital: ['Capital_Stock_Amount', 'Capital_Total_Amount', 'Capital_Amount', 'Business_Register_Funds',
       '資本總額(元)', '資本總額', '資本額'],
     paidIn: ['Paid_In_Capital_Amount', 'Paid_In_Capital_Total_Amount', '實收資本額(元)', '實收資本額'],
-    setupDate: ['Company_Setup_Date', 'Business_Setup_Date', 'Setup_Date', '核准設立日期', '設立日期'],
-    changeDate: ['Change_Of_Approval_Data', 'Change_Of_Approval_Date', 'Last_Change_Date',
+    setupDate: ['Company_Setup_Date', 'Business_Setup_Approve_Date', 'Business_Setup_Date', 'Setup_Date', '核准設立日期', '設立日期'],
+    changeDate: ['Change_Of_Approval_Data', 'Change_Of_Approval_Date', 'Business_Last_Change_Date', 'Last_Change_Date',
       '最後核准變更日期', '最近核准變更日期'],
   };
 
@@ -750,9 +750,57 @@
    * 地址缺任何一個），再用名稱查，把缺的補上。名稱查回來的要對得上統編（或名稱一字不差）
    * 才採用，免得 like 撈到同名的別家。
    */
+  /*
+   * 商業（獨資、合夥：商行、企業社、工作室…）查商業登記。
+   *
+   * 公司的資料集查不到商業，所以以前商業的「最近異動日期」一直是空的（使用者截圖：findbiz 寫 115/06/17，網站寫 —）。
+   * 探路（Actions，2026-10）確認兩步：
+   *   1. 426D5542-…（商業登記基本資料-應用三）`President_No eq 統編` → 每個申登機關一列（遷過縣市的會有兩列，都「核准設立」）
+   *   2. 7E6AFA72-…（swagger 標「商業登記基本資料-應用一」）`President_No eq 統編 and Agency eq 機關代碼`
+   *      → Business_Last_Change_Date（最近異動日期）、Responsible_Name、Business_Register_Funds、Business_Address
+   * 幾個機關都查，取最近異動日期最新的那一列（就是現在登記的那個縣市；舊縣市那列停在遷出前的日期）。
+   */
+  const BIZ_AGENCY_BASE = 'https://data.gcis.nat.gov.tw/od/data/api/426D5542-5F05-43EB-83F9-F1300F14E1F1';
+  const BIZ_DETAIL_BASE = 'https://data.gcis.nat.gov.tw/od/data/api/7E6AFA72-AD6A-46D3-8681-ED77951D912D';
+  const bizDay = (raw) => { const d = String(raw || '').replace(/\D/g, ''); return d ? Number(d.length === 7 ? `${+d.slice(0, 3) + 1911}${d.slice(3)}` : d) : 0; };
+  async function lookupBusiness(taxId, opts) {
+    const id = String(taxId || '').replace(/\D/g, '');
+    if (id.length !== 8) return { ok: false, reason: '統一編號不是 8 碼', attempts: [] };
+    const attempts = [];
+    const wrap = (u) => (getProxy() && opts && opts.viaProxy ? viaProxy(u) : u);
+    let agencies = [];
+    try {
+      const rows = await request(wrap(odata(BIZ_AGENCY_BASE, `President_No eq ${id}`, 20)));
+      agencies = [...new Set(rows.map((r) => r && r.Agency).filter(Boolean))];
+      if (!agencies.length) attempts.push({ source: 'official', label: '商業登記基本資料（應用三）', reason: '查無資料', body: rows.info });
+    } catch (err) {
+      attempts.push({ source: 'official', label: '商業登記基本資料（應用三）', reason: explain(err, 'official'), body: err.body });
+    }
+    let best = null;
+    for (const ag of agencies) {
+      const url = odata(BIZ_DETAIL_BASE, `President_No eq ${id} and Agency eq ${ag}`, 1);
+      try {
+        const rows = await request(wrap(url));
+        const row = rows[0];
+        if (!row) { attempts.push({ source: 'official', label: `商業登記基本資料（${ag}）`, reason: '查無資料', body: rows.info, url }); continue; }
+        if (!best || bizDay(row.Business_Last_Change_Date) > bizDay(best.row.Business_Last_Change_Date)) best = { row, url };
+      } catch (err) {
+        attempts.push({ source: 'official', label: `商業登記基本資料（${ag}）`, reason: explain(err, 'official'), body: err.body, url });
+      }
+    }
+    if (!best) return { ok: false, attempts, reason: attempts.map((a) => `${a.label}：${a.reason}`).join('\n') || '商業登記查無資料' };
+    const data = mapRow(best.row);
+    return { ok: true, source: 'official', label: '商業登記基本資料', url: best.url, data, candidates: [data], raw: best.row, attempts, business: true };
+  }
+
   async function lookupCompany({ taxId, name }, opts) {
     const id = String(taxId || '').replace(/\D/g, '');
     const clean = String(name || '').replace(/\s/g, '');
+    // 名稱不是「…公司」的（商行、企業社、工作室…）先查商業登記；查不到再照公司的路走
+    if (id.length === 8 && clean && !/公司$/.test(clean)) {
+      const biz = await lookupBusiness(id, opts);
+      if (biz.ok) return biz;
+    }
     const lacking = (d) => !d || !(d.capital && d.owner && d.address);
     let res = id.length === 8 ? await lookupByTaxId(id, opts) : null;
     if ((!res || !res.ok || lacking(res.data)) && clean) {
@@ -775,11 +823,16 @@
         res = byName;
       }
     }
+    // 名稱看起來是公司、公司的資料集卻查不到：也可能其實是商業（名單上的名稱寫錯），最後試一次商業登記
+    if ((!res || !res.ok) && id.length === 8 && /公司$/.test(clean)) {
+      const biz = await lookupBusiness(id, opts);
+      if (biz.ok) return biz;
+    }
     return res || { ok: false, reason: '沒有統編也沒有公司名稱，無法查詢', attempts: [] };
   }
 
   global.Registry = {
-    lookupByTaxId, lookupByName, lookupByKeyword, companyStem, lookupCompany, mapRow, toThousands, tidyDate,
+    lookupByTaxId, lookupByName, lookupByKeyword, companyStem, lookupCompany, lookupBusiness, mapRow, toThousands, tidyDate,
     FULL_TAXID_BASE, LEGACY_TAXID_BASE,
     SOURCES, activeSources, getProxy, setProxy, checkProxy, probeDataset, probeNameQuery, probeBaseWithTaxId, PROBE_NAME, nameVariants,
     getBase, setBase, DEFAULT_BASE, getTaxIdBase, setTaxIdBase, DEFAULT_TAXID_BASE, FIELD_CANDIDATES,

@@ -44,7 +44,7 @@ const nap = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const REGISTRY_FIELDS = [
   ['taxId', '統一編號'], ['capital', '資本總額（仟元）'], ['capitalPaid', '實收資本額（仟元）'],
-  ['owner', '負責人'], ['address', '登記地址'], ['founded', '成立年'], ['regChanged', '最近核准變更日期'],
+  ['owner', '負責人'], ['address', '登記地址'], ['founded', '成立年'], ['regChanged', '最近異動日期'],
 ];
 const FIELD_LABEL = Object.fromEntries(REGISTRY_FIELDS);
 const REG_KIND_ORDER = ['capitalUp', 'capitalDown', 'address', 'owner', 'other'];

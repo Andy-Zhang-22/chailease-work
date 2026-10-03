@@ -167,3 +167,39 @@ test('lookupCompany：名稱查回來的統編要對得上才採用', async () =
   assert.equal(res.ok, false);
   assert.match(res.reason, /沒有一筆的統編是 22099131/);
 });
+
+test('lookupCompany：商行先查商業登記，遷過縣市的取最近異動日期最新的那個機關', async () => {
+  // 探路實際回的樣子（2026-10，一家從基隆遷到新北的商行，兩個機關都「核准設立」）；名稱、統編、地址是假的
+  const agencies = [{ President_No: '12345675', Agency: '376570000A' }, { President_No: '12345675', Agency: '376410000A' }];
+  const detail = {
+    '376570000A': { President_No: '12345675', Business_Name: '測試範例企業社', Business_Current_Status_Desc: '核准設立', Business_Register_Funds: 200000, Responsible_Name: '王O明', Agency: '376570000A', Business_Address: '基隆市信義區測試路1號', Business_Setup_Approve_Date: '1060322', Business_Last_Change_Date: '1100525' },
+    '376410000A': { President_No: '12345675', Business_Name: '測試範例企業社', Business_Current_Status_Desc: '核准設立', Business_Register_Funds: 200000, Responsible_Name: '王O明', Agency: '376410000A', Business_Address: '新北市中和區範例路2號', Business_Setup_Approve_Date: '1060322', Business_Last_Change_Date: '1150617' },
+  };
+  const { Registry: R, calls } = loadWithFetch((url) => {
+    const u = decodeURIComponent(url);
+    if (/426D5542/.test(u)) return fakeResponse(JSON.stringify(agencies));
+    const m = u.match(/7E6AFA72.*President_No eq 12345675 and Agency eq (\w+)/);
+    if (m) return fakeResponse(JSON.stringify([detail[m[1]]]));
+    return fakeResponse('');
+  });
+  const res = await R.lookupCompany({ taxId: '12345675', name: '測試範例企業社' });
+  assert.equal(res.ok, true);
+  assert.equal(res.business, true);
+  assert.equal(res.data.regChanged, '2026/06/17', '最近異動日期取新北那列（115/06/17）');
+  assert.equal(res.data.address, '新北市中和區範例路2號');
+  assert.equal(res.data.capital, '200');
+  assert.equal(res.data.founded, '2017/03/22');
+  assert.ok(calls.every((c) => !/5F64D864|236EE382/.test(c.url)), '商行不用先繞公司的資料集');
+});
+
+test('lookupCompany：名稱是公司的照舊走公司資料集，查不到才試商業登記', async () => {
+  const { Registry: R, calls } = loadWithFetch((url) => {
+    if (/426D5542/.test(url)) return fakeResponse('');
+    if (/Business_Accounting_NO/.test(url)) return fakeResponse(JSON.stringify([TSMC]));
+    return fakeResponse('');
+  });
+  const res = await R.lookupCompany({ taxId: '22099131', name: '台灣積體電路製造股份有限公司' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.regChanged, '2025/06/01');
+  assert.ok(!calls.some((c) => /426D5542/.test(c.url)), '公司查到了就不碰商業登記');
+});

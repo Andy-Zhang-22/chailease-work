@@ -32,7 +32,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  let res=await run(row('新北市新莊區富貴路562號6樓','1150121'));
  chk(/1 筆查到的比名單上的舊/.test(res), `結果說明有 1 筆較舊沒套用：${res.slice(0,140)}`);
  let d=await detail();
- chk(/568號6樓/.test(d.g['登記地址']||'') && /2026\/09\/17/.test(d.g['最近核准變更']||''), `地址還是 568 號、核准日期還是 9/17：${d.g['登記地址']} ${d.g['最近核准變更']}`);
+ chk(/568號6樓/.test(d.g['登記地址']||'') && /2026\/09\/17/.test(d.g['最近異動日期']||''), `地址還是 568 號、核准日期還是 9/17：${d.g['登記地址']} ${d.g['最近異動日期']}`);
  chk(!/變更登記地址/.test(d.hist), '沒有記成一次「變更登記地址」');
  // 2. 官方回 9/17 的 568 → 跟名單一致，沒變
  res=await run(row('新北市新莊區富貴路568號6樓','1150917'));
@@ -40,7 +40,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  // 3. 真的有新的（10/01 核准搬到 570）→ 套用
  res=await run(row('新北市新莊區富貴路570號','1151001'));
  d=await detail();
- chk(/570號/.test(d.g['登記地址']||'') && /2026\/10\/01/.test(d.g['最近核准變更']||'') && /變更登記地址/.test(d.hist), `比較新的照常套用並記變更：${d.g['登記地址']} ${d.g['最近核准變更']}`);
+ chk(/570號/.test(d.g['登記地址']||'') && /2026\/10\/01/.test(d.g['最近異動日期']||'') && /變更登記地址/.test(d.hist), `比較新的照常套用並記變更：${d.g['登記地址']} ${d.g['最近異動日期']}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'\n全部通過'); await br.close(); srv.close(); process.exit(bad?1:0);
 })();
