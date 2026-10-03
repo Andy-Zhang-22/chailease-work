@@ -4381,13 +4381,15 @@
 
   /*
    * 附近可以順訪的（使用者：「拜訪完客戶後我想在同區找可以順訪且聯絡的客戶」）：
-   * 名單上同一區的客戶，同一條路的排最前面，再照值得去的程度：有機會／談過 → 約過見面 → 打過還沒約 → 沒打過但有電話。
+   * 名單上同一區的客戶，同一條路的排最前面，再照值得去的程度：有機會或談過 → 約過見面 → 打過還沒約 → 沒打過但有電話。
+   * 籤只掛使用者自己標的「有機會」；談過的不另外掛籤。
    * 禁止推廣、冷名單不列。每家帶電話、導航（起點是現在這家）、記錄。
    * 勾「連找名單的也列」就把出進口廠商（有電話）、商行同區的也排進來當陌生拜訪的候選。
    * 名單上只有地址沒有座標，「附近」是用區和路名判斷。
    */
   const roadOf = (addr) => { const m = String(addr || '').replace(/台/g, '臺').replace(/\s+/g, '').match(/[\u4e00-\u9fa5]{1,8}?(路|街|大道)/); return m ? m[0] : ''; };
-  const NEARBY_TIER = ['有機會／談過', '約過見面', '打過還沒約', '沒打過'];
+  // 第 0 級（談過）不另外掛籤：以前寫「有機會／談過」會跟使用者自己標的「有機會」混在一起（使用者：「把這個的有機會/談過的狀態取消掉，留下我自己主動標記的有機會」）
+  const NEARBY_TIER = ['', '約過見面', '打過還沒約', '沒打過'];
   function nearbyTier(v) {
     if (v.chance === 'yes' || v.outcome === 'contacted') return 0;
     if (v.visitKind === 'yes' || state.logs.some((l) => l.recordId === v.id && l.meeting)) return 1;
@@ -4419,7 +4421,7 @@
       host.append(el('div', { className: 'nearby-row' }, [
         el('button', { className: 'link-btn nearby-name', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) }),
         sameRoad ? el('span', { className: 'badge badge-up', textContent: '同一條路' }) : '',
-        el('span', { className: `badge ${tier === 0 ? 'badge-chance-yes' : 'badge-ind'}`, textContent: NEARBY_TIER[tier] }),
+        NEARBY_TIER[tier] ? el('span', { className: 'badge badge-ind', textContent: NEARBY_TIER[tier] }) : '',
         v.chance === 'yes' ? el('span', { className: 'badge badge-chance-yes', textContent: '有機會' }) : '',
         el('span', { className: 'muted', textContent: (v.addressActual || v.address || '').replace(/^.{2,3}[市縣]/, '') }),
         ...telLinks(v, 1),
@@ -4427,7 +4429,7 @@
         visit,
       ]));
     });
-    det.append(el('p', { className: 'muted', textContent: '同一區的客戶，同一條路的排前面，再照有機會／談過 → 約過見面 → 打過 → 沒打過。先打一通「我剛好在附近，方便過去一下嗎」。禁止推廣、冷名單不列。' }), host);
+    det.append(el('p', { className: 'muted', textContent: '同一區的客戶，同一條路的排前面，再照有機會或談過 → 約過見面 → 打過 → 沒打過（只有你自己標的「有機會」會掛籤）。先打一通「我剛好在附近，方便過去一下嗎」。禁止推廣、冷名單不列。' }), host);
     // 連找名單的也列：出進口廠商（有電話）、商行同區的，當陌生拜訪的候選
     let leadsOn = false;
     try { leadsOn = localStorage.getItem('nearby-leads') === '1'; } catch (e) { leadsOn = false; }
