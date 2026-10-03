@@ -1,6 +1,6 @@
 // 行事曆分頁：只列要去拜訪的（通話紀錄勾「約到拜訪」、約的那天＝下次聯絡日），電話不列；去過的打勾；假日灰掉；
 // 點一天列行程（同區排一起、出發／抵達、導航、記錄、刪除）；刪除＝取消那則的約到拜訪；勾了沒填日期不給存；
-// 複製這週、分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天、?tab=cal
+// 直接在行事曆排拜訪（挑客戶、哪天、出發／抵達）、改期；複製這週、分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天、?tab=cal
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -106,6 +106,26 @@ const SEED=[
  const after=await pg.evaluate(async()=>{ const logs=(await window.Store.allLogs()).filter(l=>l.recordId==='4'); const v=window.customerViews().find(v=>v.company==='週三拜訪有限公司'); const l=logs.find(l=>/下週二/.test(l.text)); return {n:logs.length, meeting:!!(l&&l.meeting), text:logs.map(l=>l.text).join('|'), next:v.nextDate}; });
  chk((await evs('2026-10-13')).length===0 && after.n===2 && !after.meeting && /老闆說下週二可以/.test(after.text) && after.next==='2026-10-13', `拿掉後 10/13 沒有了、那則紀錄還在只是不勾了、下次聯絡日不動：${JSON.stringify(after)}`);
  chk(/已把「週三拜訪有限公司」從行事曆拿掉/.test(await pg.textContent('#toast')), `提示：${await pg.textContent('#toast')}`);
+ // 直接在行事曆排拜訪：點 10/8（空的）→ ＋ 排拜訪 → 找「今天打電話」→ 時間 → 排進去
+ await cell('2026-10-08').click(); await pg.waitForTimeout(200);
+ chk(/10\/08（四）沒排拜訪/.test(await pg.locator('#paneCal .cal-agenda h3').textContent()) && (await pg.locator('#paneCal .cal-add').count())===1, '空的那天有「＋ 排拜訪」');
+ await pg.click('#paneCal .cal-add'); await pg.waitForSelector('#editorBody h2'); await pg.waitForTimeout(100);
+ chk(/排拜訪：10\/08（四）/.test(await pg.textContent('#editorBody h2')) && (await pg.inputValue('#editorBody input[type="date"]'))==='2026-10-08', `對話框帶那一天：${await pg.textContent('#editorBody h2')}`);
+ await pg.fill('#editorBody input[type="search"]','今天打'); await pg.waitForTimeout(150);
+ chk((await pg.locator('#editorBody .cal-pick-row').count())===1 && /今天打電話有限公司/.test(await pg.locator('#editorBody .cal-pick-row').first().textContent()), '搜到那家');
+ await pg.click('#editorBody .cal-pick-row'); await pg.waitForTimeout(100);
+ chk(/🚗 今天打電話有限公司/.test(await pg.textContent('#editorBody .cal-chosen')), '挑好了');
+ await pg.fill('#editorBody input[type="time"] >> nth=0','10:00'); await pg.fill('#editorBody input[type="time"] >> nth=1','10:30'); await pg.fill('#editorBody textarea','帶設備融資方案');
+ await pg.click('#editorBody button:has-text("排進行事曆")'); await pg.waitForTimeout(700);
+ chk(await pg.locator('#editor').isHidden() && JSON.stringify(await evs('2026-10-08'))==='["🚗 10:30 今天打電話有限公司"]' && await cell('2026-10-08').evaluate(e=>e.classList.contains('is-sel')), `排進去：10/8 有這家、帶抵達時間、停在那天：${JSON.stringify(await evs('2026-10-08'))}`);
+ const sch=await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='今天打電話有限公司'); const l=(await window.Store.allLogs()).filter(l=>l.recordId==='3').sort((a,b)=>b.createdAt-a.createdAt)[0]; return {next:v.nextDate,outcome:v.outcome,text:l.text,meeting:l.meeting,md:l.meetingDate,dep:l.meetingDepart,arr:l.meetingArrive,date:l.date}; });
+ chk(sch.next==='2026-10-08' && sch.outcome==='contacted' && sch.text==='帶設備融資方案' && sch.meeting && sch.md==='2026-10-08' && sch.dep==='10:00' && sch.arr==='10:30' && sch.date===TODAY, `記成一則勾了約到拜訪的紀錄、下次聯絡日改成那天：${JSON.stringify(sch)}`);
+ chk((await evs('2026-10-05')).length===2, '今天格不會多出它（原本是電話；今天還是乙＋去過的己）');
+ // 改期：10/8 → 10/14、時間改 14:00
+ await pg.click('#paneCal .cal-row button:has-text("改期")'); await pg.waitForSelector('#editorBody h2'); await pg.waitForTimeout(100);
+ chk(/改期：今天打電話有限公司/.test(await pg.textContent('#editorBody h2')) && (await pg.inputValue('#editorBody input[type="time"] >> nth=1'))==='10:30' && (await pg.locator('#editorBody input[type="search"]').count())===0, '改期對話框帶原本的時間、不用再挑客戶');
+ await pg.fill('#editorBody input[type="date"]','2026-10-14'); await pg.fill('#editorBody input[type="time"] >> nth=1','14:00'); await pg.click('#editorBody button:has-text("改好了")'); await pg.waitForTimeout(700);
+ chk((await evs('2026-10-08')).length===0 && JSON.stringify(await evs('2026-10-14'))==='["🚗 14:00 今天打電話有限公司"]' && (await pg.evaluate(()=>window.customerViews().find(v=>v.company==='今天打電話有限公司').nextDate))==='2026-10-14', `改期：10/8 沒了、10/14 有、下次聯絡日跟著改：${JSON.stringify(await evs('2026-10-14'))}`);
  // 上下月、今天
  await pg.click('#paneCal button[title="下個月"]'); await pg.waitForTimeout(200);
  chk(/2026 年 11 月/.test(await pg.textContent('#paneCal h2')) && (await cell('2026-11-01').count())===1, '切到下個月');
