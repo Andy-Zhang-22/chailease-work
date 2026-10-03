@@ -30,8 +30,8 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9503/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk((await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開始請人')), '有「剛開始請人」分頁');
- await pg.click('.tab[data-tab="nhi"]'); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
+ chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開始請人')), '找名單底下有「剛開始請人」');
+ await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#nhi-sub')).replace(/\s+/g,' ');
  chk(/新北市最近 6 個月新成立的投保單位 4 家（對到電話 2）/.test(sub) && /資料到 2026\/09/.test(sub), `標題：${sub}`);
  // 預設篩選：資本額 500～6,000 萬、公司、我的分公司 → 名祿（新莊、1,200 萬）；老客戶 5,000 萬也在新莊但已在名單（還是列，標已在名單）
@@ -61,7 +61,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  chk((await pg.locator('#nhi-cards .card:has-text("名祿") .badge-mine').count())===1, '加完卡片標已在名單');
  // 統計的來源漏斗認得這個來源
- await pg.click('.tab[data-tab="stats"]'); await pg.waitForTimeout(400);
+ await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(400);
  chk(/剛開始請人/.test(await pg.textContent('#paneStats .funnel')), '來源漏斗列「剛開始請人」');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

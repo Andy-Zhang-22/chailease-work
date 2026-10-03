@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-240';
+  const APP_VERSION = '20261003-241';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -7354,6 +7354,7 @@ export default {
       if (!btn || btn.id === 'btnFilters' || btn.classList.contains('tab-link') || btn.classList.contains('nav-link')) return;
       switchTab(btn.dataset.tab);
     };
+    $('#subtabs').onclick = (e) => { const btn = e.target.closest('.subtab'); if (btn) switchTab(btn.dataset.tab); };
 
     $('#btnImport').onclick = () => { $('#importer').hidden = false; };
     $('#btnSync').onclick = () => runSync({ interactive: true });
@@ -7463,6 +7464,7 @@ export default {
       if (act === 'backups') { await openBackups(); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
+      if (act === 'stats' || act === 'rules') { switchTab(act); return; }
       if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
       if (act === 'feed-more') { await dailyFeed({ more: true }); render(); return; }
       if (act === 'spread-undo') { await undoSpread(); return; }
@@ -7579,16 +7581,27 @@ export default {
     });
   }
 
-  /** 切分頁：分頁列、選單、網址（?tab=leads）都從這裡走，狀態才會一致。 */
+  /*
+   * 切分頁：分頁列、選單、網址（?tab=leads）都從這裡走，狀態才會一致。
+   * 分頁列只有「重點推廣名單」「找名單」（使用者：分頁在版面上有點多）：七個名單來源是「找名單」底下的第二排（#subtabs），
+   * state.tab 還是那七個 key，各分頁、搜尋欄、?tab= 都不用改；按「找名單」就回到上次看的那個來源。統計、規則從右上選單進，分頁列不亮。
+   */
+  const SOURCE_TABS = ['leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv'];
   function switchTab(tab) {
-    const btn = $(`#tabs .tab[data-tab="${tab}"]`);
-    if (!btn) return;
+    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'leads'; }
+    if (!(tab === 'all' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
     state.tab = tab;
     state.limit = PAGE_SIZE;
-    [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', b === btn));
+    const isSource = SOURCE_TABS.includes(tab);
+    const top = tab === 'all' ? 'all' : isSource ? 'sources' : '';
+    [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', !!top && b.dataset.tab === top));
+    $('#subtabs').hidden = !isSource;
+    [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
+    if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
     render();
     syncSearchBox();
   }
+  window.switchTab = switchTab;   // 測試用：直接切到某個來源
 
   async function init() {
     // 深淺色切換拿掉了（使用者說用不到），一律跟著系統；以前手動選過的清掉，不然會永遠卡在那一色

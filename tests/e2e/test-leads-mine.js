@@ -29,7 +29,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  await pg.goto('http://localhost:9484/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); await window.Store.setState({recordId:'2',outcome:'blocked',updatedAt:1}); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- await pg.click('.tab[data-tab="leads"]'); await pg.waitForSelector('#leads-cards .card'); await pg.waitForTimeout(500);
+ await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForSelector('#leads-cards .card'); await pg.waitForTimeout(500);
  // 停掉背景查成立年（不影響測試但省時間）
  await pg.click('#leads-founded-btn').catch(()=>{});
  const names=async()=>pg.$$eval('#leads-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
@@ -72,7 +72,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  chk(recs.length===1, `單張加入進名單：${JSON.stringify(recs)}`);
  chk(recs[0] && recs[0].founded==='2012', `成立年一起帶進去：${recs[0]&&recs[0].founded}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
- await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200); await pg.click('.tab[data-tab="leads"]'); await pg.waitForTimeout(500);
+ await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200); await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForTimeout(500);
  chk(await c1.evaluate(e=>e.classList.contains('is-mine')), '切回來之後甲一變成已在名單');
  chk(/加入客戶名單（1 家）/.test(await pg.textContent('#leads-add')), `按鈕數字跟著變：${await pg.textContent('#leads-add')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

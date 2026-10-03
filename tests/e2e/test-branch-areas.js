@@ -49,7 +49,7 @@ const SEED=[mk('1','新莊甲','新北市新莊區中正路1號'),mk('5','宜蘭
  ];
  for(const [c,d,k,l] of cases){ const r=await B(c,d); chk(r.kind===k&&r.label===l, `${c}${d} → ${r.label||'（無）'}`); }
  // 規則頁有四條新規則
- await pg.click('.tab[data-tab="rules"]'); await pg.waitForTimeout(600);
+ await pg.evaluate(()=>window.switchTab('rules')); await pg.waitForTimeout(600);
  const rulesTxt=(await pg.textContent('#panel-rules, [data-panel="rules"], main').catch(()=>'' )||await pg.textContent('body')).replace(/\s+/g,' ');
  chk(/各分公司行銷區域劃分表/.test(rulesTxt)&&/附表一：共同區域與被申覆單位/.test(rulesTxt)&&/存貨擔保融資/.test(rulesTxt)&&/OSF 案件/.test(rulesTxt), '規則頁列出四條新規則');
  chk(/新莊.*樹林、三重、新莊、泰山、林口、蘆洲、五股、八里/.test(rulesTxt)&&/高屏一科、二科】專屬業務/.test(rulesTxt), '劃分表與存貨擔保融資的內容有顯示');

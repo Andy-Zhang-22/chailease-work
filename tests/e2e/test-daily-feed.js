@@ -89,7 +89,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
 
  // 分頁名稱
  const tabs=await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('每月公司設立／變更登記清冊'), `分頁名稱：${tabs.join(' | ')}`);
+ chk(tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('找名單') && tabs.length===3, `分頁列只剩三個：${tabs.join(' | ')}`);
 
  // 每日自動挑：動產擔保 4 家（禾泰、昱昌、泓宇、巨鎰）、登記清冊 4 家 → 8 家，都排今天
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);
@@ -154,8 +154,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const placed=await pg.evaluate(()=>window.planNewDates(['2026-10-24']));
  chk(placed[0]==='2026-10-27', `10/24 是週六、10/26 光復節補假，排到 10/27：${placed[0]}`);
  // 畫面上的篩選跟基準無關：把動產擔保切到「全部」、登記清冊勾批發零售，候選還是同一批
- await pg.click('.tab[data-tab="chattel"]'); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
- await pg.click('.tab[data-tab="leads"]'); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
+ await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
+ await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
  chk(cand.c.length===3 && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 3（以前刪掉的昱昌分頁也不列了、成立年不明的老早過期還在），登記清冊還剩 2 家；跟畫面篩選無關：${JSON.stringify(cand)}`);
  // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
