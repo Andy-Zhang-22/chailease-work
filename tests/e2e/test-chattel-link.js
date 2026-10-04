@@ -50,13 +50,16 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  await pg.locator('#paneList .card:has-text("禾泰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  // 使用者：「動產登記也顯示在詳細頁中，別收在下面，但僅顯示最新一筆，資訊越簡單越好」
  const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ').trim();
- chk((await pg.locator('#drawerBody .detail-chattel .chattel-line').first().textContent())==='新鑫　2023/10  金額：1,200 萬，2026/11 到期' && !(await pg.locator('#drawerBody .detail-chattel .chattel-rest').isVisible()) && (await pg.textContent('#drawerBody .chattel-more'))==='共 3 件 ▾', `只顯示最新一筆（2023 的新鑫，不是 2019 的裕融）、一行、照範例「金主　年月  金額：…，年月 到期」：${det}`);
+ const rowTxt=async(sel)=>pg.$$eval(sel,(trs)=>trs.filter((t)=>!t.hidden).map((t)=>[...t.cells].map((c)=>c.textContent).join('|')));
+ chk(JSON.stringify(await rowTxt('#drawerBody .detail-chattel tr.chattel-line'))==='["新鑫|2023/10|金額：1,200 萬|2026/11 到期"]' && (await pg.textContent('#drawerBody .chattel-more'))==='共 3 件 ▾', `只顯示最新一筆（2023 的新鑫，不是 2019 的裕融）、一行、照範例「金主　年月  金額：…，年月 到期」：${det}`);
  await pg.click('#drawerBody .chattel-more'); await pg.waitForTimeout(150);
- const rest=await pg.locator('#drawerBody .detail-chattel .chattel-rest .chattel-line').allTextContents();
- chk(JSON.stringify(rest)===JSON.stringify(['合迪　2021/11  金額：450 萬，2028/11 到期','裕融　2019/03  金額：200 萬，2026/12 到期']), `點「共 3 件」看其他幾件的金額與資訊：${JSON.stringify(rest)}`);
+ const rest=await rowTxt('#drawerBody .detail-chattel tr.chattel-line.is-rest');
+ chk(JSON.stringify(rest)===JSON.stringify(['合迪|2021/11|金額：450 萬|2028/11 到期','裕融|2019/03|金額：200 萬|2026/12 到期']), `點「共 3 件」看其他幾件的金額與資訊：${JSON.stringify(rest)}`);
  chk(await pg.locator('#drawerBody .detail-chattel .is-soon').count()===2, '3 個月內到期的標橘色（新鑫 11 月、裕融 12 月到期；合迪 2028 不標）');
  await pg.click('#drawerBody .chattel-more'); await pg.waitForTimeout(150);
- chk(!(await pg.locator('#drawerBody .detail-chattel .chattel-rest').isVisible()), '再按收回去');
+ chk((await rowTxt('#drawerBody .detail-chattel tr.chattel-line')).length===1, '再按收回去');
+ const xs=await pg.$$eval('#drawerBody .detail-chattel tr.chattel-line',(trs)=>{ trs.forEach((t)=>{t.hidden=false;}); const x=(i)=>[...new Set(trs.map((t)=>Math.round(t.cells[i].getBoundingClientRect().left)))].length; const rr=[...new Set(trs.map((t)=>Math.round(t.cells[2].getBoundingClientRect().right)))].length; return [x(1),x(3),rr]; });
+ chk(JSON.stringify(xs)==='[1,1,1]', `每一欄上下對齊（年月、到期的左邊、金額的右邊各只有一個位置）：${JSON.stringify(xs)}`);
  const order=await pg.evaluate(()=>[...document.querySelectorAll('#drawerBody > dl.detail-grid > dt')].map(x=>x.textContent.trim()));
  chk(order.indexOf('最近異動日期')>=0 && order.indexOf('動產擔保')===order.indexOf('最近異動日期')+1 && order.indexOf('下次聯絡')===order.indexOf('動產擔保')+1, `直接顯示，在最近異動日期後面、下次聯絡前面：${order.join('、')}`);
  chk(await pg.locator('#drawerBody details.detail-more .detail-chattel').count()===0, '不收在「更多資料」裡');

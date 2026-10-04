@@ -472,9 +472,15 @@ details.nearby[open] > summary::before { content: '▾ '; }
 .badge-chattel { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); color: var(--primary); }
 .badge-chattel.is-soon { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); font-weight: 600; }
 .detail-chattel .is-soon { color: var(--warn); font-weight: 600; }   /* 3 個月內到期：橘色 */
-.detail-chattel .chattel-rest { margin-top: 2px; padding-left: 10px; border-left: 2px solid var(--border); }
-.detail-chattel .chattel-rest[hidden] { display: none; }
 .detail-chattel .chattel-more { font-size: 13px; }
+/* 動產擔保排成表：每一欄上下對齊，數字等寬、金額靠右 */
+.chattel-table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.chattel-table td { padding: 2px 14px 2px 0; white-space: nowrap; vertical-align: baseline; }
+.chattel-table td:last-child { padding-right: 0; }
+.chattel-table .ch-amt { text-align: right; }
+.chattel-table tr[hidden] { display: none; }
+.chattel-table tr.is-rest td:first-child { padding-left: 10px; border-left: 2px solid var(--border); }
+.chattel-table .chattel-toggle td { padding: 2px 0; }
 .chattel-more { background: none; border: 0; padding: 4px 0; margin: 2px 0 6px; color: var(--primary); font-weight: 600; cursor: pointer; font: inherit; font-size: 14px; }
 .branch-common { color: #b45309; }
 .badge-branch { border-color: #0f766e; color: #0f766e; }
