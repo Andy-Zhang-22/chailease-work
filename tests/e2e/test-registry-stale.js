@@ -9,7 +9,7 @@ const mk=(id,name,tax,addr)=>({id,source:'名單.pdf',company:name,aliases:[],ta
 const SEED=[mk('A1','甲工程有限公司','11111111','新北市新莊區富貴路568號6樓')];
 let API=[];
 const row=(addr,chg)=>[{Business_Accounting_NO:'11111111',Company_Name:'甲工程有限公司',Responsible_Name:'王',Company_Location:addr,Capital_Stock_Amount:'5000000',Change_Of_Approval_Data:chg}];
-const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#drawerBody dl');if(!dl)return o;const k=[...dl.children];for(let i=0;i<k.length;i+=2){if(k[i].tagName==='DT')o[k[i].textContent]=(k[i+1]||{}).textContent||'';}return o;});
+const grid=(pg)=>pg.evaluate(()=>{const o={};document.querySelectorAll('#drawerBody dl.detail-grid').forEach((dl)=>{const k=[...dl.children];for(let i=0;i<k.length;i++){if(k[i].tagName==='DT')o[k[i].textContent]=(k[i+1]||{}).textContent||'';}});return o;});   // 常看的＋「更多資料」兩個 dl 都讀
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});

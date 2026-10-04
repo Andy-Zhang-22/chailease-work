@@ -18,7 +18,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 
- chk(await pg.locator('.card .copy-dot').count()===2, `兩支電話各一顆點：${await pg.locator('.card .copy-dot').count()}`);
+ chk(await pg.locator('.card .copy-dot').count()===1, `卡片變短只放一支電話、一顆點：${await pg.locator('.card .copy-dot').count()}`);
  chk(await pg.locator('.card').first().locator('text=複製').count()===0, '卡片上沒有「複製」兩個字了');
 
  const look=await pg.evaluate(()=>{const b=document.querySelector('.card .copy-dot');const r=b.getBoundingClientRect();
@@ -51,7 +51,8 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  await pg.click('#drawerBody .detail-title .copy-dot'); await pg.waitForTimeout(200);
  chk(/已複製：甲公司/.test(await pg.textContent('#toast')), `複製公司名稱：${await pg.textContent('#toast')}`);
 
- // 統一編號那一列也有一顆
+ // 統一編號那一列也有一顆（統編收在「更多資料」裡，先打開）
+ await pg.click('#drawerBody details.detail-more > summary'); await pg.waitForTimeout(150);
  const taxDot=pg.locator('#drawerBody .detail-grid dd').filter({hasText:'11111111'}).locator('.copy-dot');
  chk(await taxDot.count()===1, `統編那列一顆點：${await taxDot.count()}`);
 

@@ -19,7 +19,10 @@ const SEED=[mk('1','微企甲','4,999'),mk('7','剛好五千庚','5,000'),mk('8'
  const names=async()=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent).sort());
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['剛好五十萬丙','超過五十萬丁'].sort()), `大企部：500,000 仟含、以上都算；499,999 不算：${await names()}`);
- chk((await pg.locator('.card .badge-large').count())===2, '卡片有「大企部範疇」標記');
+ // 卡片變短後範疇不放卡片，詳細頁的資本總額後面寫範疇
+ await pg.locator('#cards .card').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(200);
+ chk(/大企部範疇/.test(await pg.textContent('#drawerBody .detail-grid')), '詳細頁資本總額寫「大企部範疇」');
+ await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.locator('#fltScale .chip').filter({hasText:/一般組範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['一般乙','差一點戊','剛好五千庚','八千辛'].sort()), `一般組：5,000（含）以上、500,000 以下（8,000 不再是微企）：${await names()}`);
  await pg.locator('#fltScale .chip').filter({hasText:/一般組範疇$/}).click(); await pg.locator('#fltScale .chip').filter({hasText:/未填資本額$/}).click(); await pg.waitForTimeout(400);

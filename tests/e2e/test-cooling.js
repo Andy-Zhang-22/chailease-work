@@ -34,7 +34,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await logMissed(); await logMissed();
  v=await pg.evaluate(()=>{ const x=window.customerViews().find(v=>v.company==='晨光貿易有限公司'); return {next:x.nextDate,cold:x.cold}; });
  chk(!v.next && v.cold===TODAY, `第 5 次未接移到冷名單、不排日期：${JSON.stringify(v)}`);
- chk(/❄ 冷名單/.test(await pg.locator('#cards .card:has-text("晨光") .card-top').textContent()), '卡片標 ❄ 冷名單');
+ chk(/❄ 冷名單/.test(await pg.locator('#cards .card:has-text("晨光") .card-tags').textContent()), '卡片標 ❄ 冷名單');
  const coldChips=await pg.$$eval('#fltCold .chip',a=>a.map(x=>x.textContent.replace(/\s+/g,'')).join('|'));
  chk(/1冷名單（未接太多次）\|1正常/.test(coldChips), `篩選有冷名單籤：${coldChips}`);
  // 打通一次就解除

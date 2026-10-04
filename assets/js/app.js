@@ -3727,10 +3727,10 @@
      * 卡片變短（使用者：「你能夠幫我把系統畫面簡化嗎」→ 卡片只留重點，「能再多顯示中租往來及變更登記的事項嗎」
      * 「中租曾往來的不用標，只標有往來的就好」）。四行：
      *   1. 公司名、狀態、自己標的有機會／無機會（禁止推廣也在這行）
-     *   2. 要注意的事（有才出現）：中租往來、變更登記、動保到期、回撥、固定、冷名單、同老闆幾家
+     *   2. 要注意的事（有才出現）：中租往來、變更登記、動保到期、回撥、固定、冷名單、已拜訪、同老闆幾家
      *   3. 下次聯絡日（逾期幾天）＋ 一支電話
-     *   4. 最新一句談話（一行）
-     * 產業、負責人、地區、資本額、最近聯絡、名單檔名、範疇、分公司、已拜訪、開場白都在詳細頁。
+     *   4. 最新一句談話（一行）；有增資、剛做進出口這類訊號的，下面再一行開場白（跟以前一樣）
+     * 產業、負責人、地區、資本額、最近聯絡、名單檔名、範疇、分公司都在詳細頁。
      */
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name', textContent: r.company }),
@@ -3748,6 +3748,7 @@
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
+      r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
@@ -3770,6 +3771,7 @@
       latest = { text: mine.text || `（${window.Normalize.outcomeLabel(mine.outcome)}）` };
     }
     if (latest) node.append(el('p', { className: 'card-notes', textContent: latest.text }));
+    { const o = openerFor(r); if (o && o.kind !== 'age') node.append(openerNode(r, 'card-opener')); }   // 開場白：有增資、剛做進出口這類訊號才放；成立年那種太普遍，卡片上不放
     node.onclick = () => openDetail(r.id);
     node.onkeydown = (e) => { if (e.key === 'Enter') openDetail(r.id); };
     return node;
