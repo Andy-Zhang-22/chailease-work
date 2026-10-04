@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-265';
+  const APP_VERSION = '20261004-267';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -76,6 +76,8 @@
     sort: 'regchanged',
     limit: PAGE_SIZE,
     hideBlocked: true,
+    // 隱藏「中租往來」（使用者：「請幫我像隱藏禁止推廣一樣，隱藏中租往來的客戶」）：預設勾、每台記自己的（hide-dealing＝'0' 是取消）
+    hideDealing: (() => { try { return localStorage.getItem('hide-dealing') !== '0'; } catch (e) { return true; } })(),
     filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), industry: '' },
   };
 
@@ -3146,7 +3148,7 @@
           hint,
         ]));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 同業 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份；剛開電子發票＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛導入 3 個月內，再比導入月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：每一頁最前面都是「利率不敏感」——動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛增資／擴張、剛做進出口、剛開始請人、剛開電子發票的；接著登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝成立 5 年內 → 3 個月內到期 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社＝有商業登記 → 資本額 1,000 萬以上 → 有電話 → 本期變更 → 我的分公司 → 設立 6～10 年 → 開發票；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份；剛開電子發票＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛導入 3 個月內，再比導入月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -3253,6 +3255,8 @@
     const f = state.filters;
     // 「隱藏禁止推廣」對洽談狀態那組不算：禁打的家數還是要看得到，才知道藏了幾筆
     if (state.hideBlocked && r.blocked && skip !== 'outcome') return false;
+    // 「隱藏中租往來」對往來情形那組不算（家數照樣看得到）；自己在篩選點了「中租往來」就不藏，不然點了會是空的
+    if (state.hideDealing && r.dealingKind === 'active' && skip !== 'relation' && !state.filters.relation.has('active')) return false;
     for (const key of Object.keys(FACET_VALUE)) {
       if (key === skip) continue;
       if (f[key].size && !facetHas(f[key], FACET_VALUE[key](r))) return false;
@@ -3791,7 +3795,7 @@
       .join('|');
     // chattelVersion 也算進去：動保清冊是開站後才載好的，載好了卡片要重畫才標得出「跟誰借錢、什麼時候到期」
     const key = [dataVersion, chattelVersion, state.tab, state.search, state.sort,
-      state.limit, state.hideBlocked, filterKey].join('|');
+      state.limit, state.hideBlocked, state.hideDealing, filterKey].join('|');
     if (listKey === key) return;
     listKey = key;
 
@@ -3973,7 +3977,8 @@
       if (!o) return;
       add(byOrigin.get(o), v);
       const m = String(v.notesRaw || '').match(/每日新名單，符合：([^；\n]+)/);
-      if (m) m[1].split('、').map((x) => x.trim()).filter(Boolean).forEach((rule) => {
+      // 「利率不敏感（跟和潤借）」這種括號裡是細節，統計歸在同一條
+      if (m) m[1].split('、').map((x) => x.trim().replace(/（[^）]*）$/, '')).filter(Boolean).forEach((rule) => {
         const k = `${o}｜${rule}`;
         if (!byRule.has(k)) byRule.set(k, blank());
         add(byRule.get(k), v);
@@ -7722,6 +7727,8 @@ export default {
     $('#sortBy').value = state.sort;
     $('#sortBy').onchange = (e) => { state.sort = e.target.value; render(); };
     $('#hideBlocked').onchange = (e) => { state.hideBlocked = e.target.checked; render(); };
+    $('#hideDealing').checked = state.hideDealing;
+    $('#hideDealing').onchange = (e) => { state.hideDealing = e.target.checked; try { localStorage.setItem('hide-dealing', e.target.checked ? '1' : '0'); } catch (err) { /* 無痕 */ } render(); };
     $('#btnMore').onclick = () => { state.limit += PAGE_SIZE; renderList(); };
     $('#fltIndustry').oninput = (e) => { state.filters.industry = e.target.value.trim(); state.limit = PAGE_SIZE; render(); };
     $('#btnResetFilters').onclick = () => {

@@ -179,6 +179,9 @@ button, input, select { font: inherit; color: inherit; }
 .list-head { display: flex; justify-content: space-between; align-items: center;
   gap: 12px; margin-bottom: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 .only-open { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+/* 兩個「隱藏」勾選靠右擺在一起 */
+#listSummary { margin-right: auto; }
+.list-head { justify-content: flex-end; }
 
 /* ---------- 名單卡片 ---------- */
 .cards { display: grid; gap: 10px; }

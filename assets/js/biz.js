@@ -167,7 +167,9 @@
   let monthly = null;           // leads/biz/monthly/index.json
   const mrows = {};             // 期別 → { setup: [...], change: [...] }
   let listSub = '';
-  const f = { branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
   const curPeriod = () => { const sel = root && $('#biz-period'); return (sel && sel.value) || (monthly && monthly.latest) || ''; };
   /** 目前模式在看的那一池 */
   const pool = () => (mode === 'list' ? rows : ((mrows[curPeriod()] || {})[mode] || []));
@@ -192,6 +194,7 @@
       && (except === 'invoice' || !f.invoice.size || f.invoice.has(r.invoice ? 'Y' : 'N'))
       && (except === 'reasons' || mode !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.capital >= c.min && r.capital <= c.max
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
@@ -318,6 +321,7 @@
     const ikeys = [...new Set([...[...ic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([k]) => k), ...f.inds])];
     chips($('#biz-fInd'), ikeys.map((k) => [k, k, ic.get(k) || 0]), f.inds);
     chips($('#biz-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#biz-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#biz-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     if (mode === 'change') chips($('#biz-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => r.rk === k)]).filter(([k, , n]) => n || f.reasons.has(k)), f.reasons);
     $('#biz-gOrg').hidden = mode !== 'list'; $('#biz-gInvoice').hidden = mode !== 'list'; $('#biz-gReason').hidden = mode !== 'change';
@@ -462,7 +466,16 @@
   // 本期只算「變更」——剛設立的才 0 年，離 7～8 年最遠。
   // 使用者：「商行那分頁可以挑資本額大於 1000 萬的優先給我」：資本額提到第二（有商業登記之後——只有稅籍的資本額是自填的，
   // 不能讓它靠自填的數字插隊），分級 1,000 萬以上 → 500 萬以上 → 100 萬以上 → 其他。
-  const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  const DAILY_PRIORITY = ['利率不敏感', '有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的
+  const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
+  const rateFreeOf = (r) => {
+    const peer = peerOf(r.taxId);
+    if (peer) return `跟${peer}借`;
+    return '';
+  };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
+  const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
   const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
@@ -479,7 +492,7 @@
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
   const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
   const capRank = (r) => (r.capital >= 10000000 ? 0 : r.capital >= 5000000 ? 1 : r.capital >= 1000000 ? 2 : 3);
-  const dailyChecks = (r) => [!!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
+  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -491,7 +504,7 @@
   }
   /** 「符合：…」那串；分公司放寬到鄰近的也寫出來 */
   const whyOf = (r, hitAt) => {
-    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i));
+    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i)).map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r)}）` : x));
     const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
@@ -516,6 +529,7 @@
     await start();
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
+    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
     // 池子＝名單 ＋ 本期清冊裡資本額到門檻、名單裡沒有的（新設立的稅籍檔還沒收進去，只有清冊有）
     let extra = [];
@@ -551,6 +565,7 @@
       Object.assign(group('統一發票', el('div', { className: 'chips', id: 'biz-fInvoice' })), { id: 'biz-gInvoice' }),
       group('行業（最多的 24 種；其他用關鍵字）', el('div', { className: 'chips', id: 'biz-fInd' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'biz-fMine' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'biz-fRate' })),
       group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'biz-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'biz-capMin', type: 'number', min: '0', step: '10', placeholder: '下限' }), '～',
@@ -625,6 +640,7 @@
       await attachDyn();   // 本期清冊對名單（沒有清冊就略過）
       ready = true;
       if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
+      if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
       const rerender = () => { limit = PAGE; render(); };
       ['#biz-capMin', '#biz-capMax'].forEach((s) => { $(s).oninput = rerender; });
       $('#biz-sort').onchange = () => { switchMode.touched = true; rerender(); };
@@ -634,7 +650,7 @@
       $('#biz-more').onclick = () => { limit += PAGE; render(); };
       $('#biz-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
       $('#biz-reset').onclick = () => {
-        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
+        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         $('#biz-q').value = ''; $('#biz-capMin').value = ''; $('#biz-capMax').value = ''; $('#biz-sort').value = mode === 'list' ? 'capital' : 'newest'; showHidden = false;
         rerender();
       };

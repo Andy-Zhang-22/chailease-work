@@ -53,7 +53,9 @@
   let limit = PAGE;
   let started = false;      // 第一次切到這個分頁才去抓 index.json
   let ready = false;
-  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), phone: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), phone: new Set(), q: '' };
 
   /* ---------------- 跟我的名單比對 ---------------- */
 
@@ -334,6 +336,7 @@
       && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
+      && (except === 'rate' || !F.rate.size || F.rate.has(rateKey(r)))
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && (showHidden || !(hidden.has(keyOf(r)) || delOf(r)))
       && r.capital >= c.min && r.capital <= c.max
@@ -463,6 +466,7 @@
     // 成立年數：只算已經知道設立日期的；還沒查的在名單上方那一行
     chips($('#leads-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#leads-fMine'), MINE.map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#leads-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#leads-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     // 分公司：籤是從載進來的列長出來的（清冊裡沒有這一欄），分公司在前、共同區在後、劃分表外最後
     const counts = new Map();
@@ -587,13 +591,27 @@
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面的是：動產擔保上跟同業（租賃／融資，不含銀行）
+  // 借的，或本期剛增資／擴張的（成長快的時候缺的是錢，不是便宜的錢）
+  const DAILY_PRIORITY = ['利率不敏感', '本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
+  const rateFreeOf = (r, latest) => {
+    const peer = peerOf(r['統一編號']);
+    if (peer) return `跟${peer}借`;
+    if (r['期別'] !== latest) return '';
+    return r.rk === 'up' ? '剛增資' : EXPAND_RE.test(r.reason) ? '剛擴張' : '';
+  };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套（本期＝最新一期）
+  let latestP = '';
+  const latestPeriod = () => latestP || (latestP = Object.keys((index && index.periods) || {}).sort().pop() || '');
+  const rateKey = (r) => (rateFreeOf(r, latestPeriod()) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r['統一編號']));
   const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r['統一編號']) : new Set(['N']));
   // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const dailyChecks = (r, latest) => [
+    !!rateFreeOf(r, latest),
     r['期別'] === latest,
     r.rk === 'up',
     EXPAND_RE.test(r.reason),   // 遷址、加營業項目、設分公司：在長大的公司才會動這些
@@ -624,11 +642,13 @@
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
+    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就只看增資／擴張 */ } }
     const cm = customerMap();
     return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)) && !delOf(r))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
-        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
+        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))
+          .map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r, latest)}）` : x));
         const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
         r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
@@ -653,6 +673,7 @@
       group('行業（依營業項目大類）', el('div', { className: 'chips', id: 'leads-fInd' })),
       group('成立年數（依核准設立日期；變更清冊的是查商工登記來的）', el('div', { className: 'chips', id: 'leads-fAge' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'leads-fMine' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'leads-fRate' })),
       group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'leads-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
@@ -719,6 +740,7 @@
     $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     ready = true;
     if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
+    if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
     const rerender = async () => { limit = PAGE; await ensureLoaded(); render(); };
     $('#leads-period').onchange = async () => { await rerender(); };
     $('#leads-capMin').oninput = () => { limit = PAGE; render(); };
@@ -730,7 +752,7 @@
     $('#leads-more').onclick = () => { limit += PAGE; render(); };
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
-      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.q = ''; showHidden = false;
+      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = ''; showHidden = false;
       $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };
