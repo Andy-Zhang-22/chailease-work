@@ -720,5 +720,22 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  /*
+   * 每日新名單揉合用（使用者：「除了商行那頁外其他五頁揉在一起，照總分挑但每分頁至少保底」）：
+   * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
+   */
+  function dailyFacts(r) {
+    return { key: String(r.cust.id || '').replace(/\D/g, '') || String(r.cust.name || '').replace(/\s/g, ''), name: r.cust.name, signals: [],
+      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r) };
+  }
+  /** 統編 → 這家最近一次買設備（契約起，日期不合理改用登記核准日）：grade 0＝3 個月內、1＝6 個月內、2＝1 年內、3＝更早或沒有 */
+  function recentBuyOf(taxId) {
+    let best = null;
+    casesOf(taxId).forEach((c) => {
+      const g = RECENT_GRADE[c.recent] == null ? 3 : RECENT_GRADE[c.recent];
+      if (!best || g < best.grade || (g === best.grade && startKey(c) > startKey(best.c))) best = { grade: g, c };
+    });
+    return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name) } : { grade: 3, ym: '', lender: '' };
+  }
+  global.Chattel = { show, dailyFacts, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

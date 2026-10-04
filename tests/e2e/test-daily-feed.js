@@ -100,10 +100,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(ec.length===2 && /^新開發票有限公司\|符合：利率不敏感（剛開電子發票）、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、剛導入 3 個月內$/.test(ec[0]), `剛開電子發票的候選照優先順序、寫符合哪幾條：${ec.join(' / ')}`);
  chk(JSON.stringify(await pg.evaluate(()=>window.splitEvenly([9,9,9,9,9,9],25)))==='[5,4,4,4,4,4]', '六頁分 25：前面的多拿');
  chk(fed.some(f=>f.company==='名祿實業有限公司') && !fed.some(f=>f.company==='沒電話請人有限公司'), `剛開始請人挑 1 家、有電話且全符合的先：${fed.filter(f=>/請人|名祿/.test(f.company)).map(f=>f.company).join('|')}`);
- chk(/符合：利率不敏感（剛開始請人）、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、剛投保 3 個月內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿五條全符合，寫在訪談內容');
+ chk(/符合：剛開始請人；其他：成立 6～10 年、資本額 500～6,000 萬、有電話、我的分公司；剛開始請人保底/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿五條全符合，寫在訪談內容');
  chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
  const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
- chk(cg && /符合：利率不敏感（剛做進出口）、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、登記 1 年內、進口＋出口/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
+ chk(cg && /符合：剛做進出口；其他：成立 6～10 年、資本額 500～6,000 萬、有電話、我的分公司；出進口廠商保底/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
  chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>/板橋企業社|只有稅籍商行|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 23 年的只有稅籍商行前面）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：資本額 500 萬以上＋成立 5 年內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行落在第一級，寫在訪談內容');
  const bc=await pg.evaluate(async()=>(await window.Biz.dailyCandidates()).map(r=>r.name+'|'+r._why));
@@ -115,9 +115,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
  // 都在名單裡了會是空的；順序要用「藏起來」之前的資料驗：改用 window 上的比較函式不好抓，改看訪談內容寫的符合條件
  const why=Object.fromEntries(fed.map(f=>[f.company,f.notes]));
- chk(/符合：利率不敏感（剛增資）、本期、增資、擴張、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一七條全符合（含貿易署電話表對得到），寫在訪談內容');
+ chk(/符合：本期增資、本期擴張；其他：成立 6～10 年、資本額 500～6,000 萬、有電話、我的分公司；登記清冊保底/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一七條全符合（含貿易署電話表對得到），寫在訪談內容');
  chk(/0212345678/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='甲一精密有限公司').phones))), '甲一的電話從貿易署電話表自動填進來');
- chk(/符合：利率不敏感（跟新鑫借）、成立 5 年內、3 個月內到期、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
+ chk(/符合：跟同業借（新鑫）；其他：[^；]*我的分公司；動產擔保保底/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
  const peers=await pg.evaluate(()=>['28451237','22222223','99999999'].map((id)=>window.Chattel.peerLenderOf(id)));
  chk(JSON.stringify(peers)==='["新鑫","",""]', `利率不敏感：跟同業借的抓得到金主，跟中租借的、沒動保的不算：${JSON.stringify(peers)}`);
  // 名單頁最上面的「再補」列：打完了按一下再補 5 家

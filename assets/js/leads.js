@@ -794,5 +794,17 @@
     start().catch((err) => { console.error(err); toast(`新公司名單載入失敗：${err.message}`); });
   }
 
-  global.Leads = { show, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  /*
+   * 每日新名單揉合用（使用者：「除了商行那頁外其他五頁揉在一起，照總分挑但每分頁至少保底」）：
+   * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
+   */
+  function dailyFacts(r) {
+    const now = r['期別'] === latestPeriod();
+    const signals = [];
+    if (now && r.rk === 'up') signals.push('本期增資');
+    if (now && EXPAND_RE.test(r.reason || '')) signals.push('本期擴張');
+    return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
+      ageRank: ageRankOf(r), capOk: r.capital >= 5000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r) };
+  }
+  global.Leads = { show, dailyFacts, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);
