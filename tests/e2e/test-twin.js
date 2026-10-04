@@ -47,6 +47,26 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await pg.click('#menu [data-act="review"]'); await pg.waitForSelector('#editorBody .review');
  await pg.click('#editorBody button:has-text("複製給 Claude 整理")'); await pg.waitForTimeout(150);
  chk((await pg.evaluate(()=>window.__opened))[1]==='https://claude.ai/project/abc123', '今日覆盤的「複製給 Claude 整理」也開分身');
+ // 手機：Claude App 只接 claude.ai/new，專案網址會變成開網頁版（使用者：「我用手機點問分身為什麼沒有連動到我手機上的 claude」）
+ // → 開 claude.ai/new（用真的連結在同一次點擊裡打開），複製的內容前面附分身說明書；手機上沒設網址也能用
+ const mctx=await br.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'});
+ await mctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T10:00:00').getTime();
+   class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
+ await mctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');}catch(e){}
+   window.__copied=[]; window.__opened=[]; window.__links=[]; window.open=(u)=>{window.__opened.push(u); return null;};
+   document.addEventListener('click',(e)=>{ const a=e.target&&e.target.closest&&e.target.closest('a'); if(a&&/claude\.ai/.test(a.href)){ window.__links.push(a.href+'|'+a.target); e.preventDefault(); } },true);
+   try{ Object.defineProperty(navigator,'clipboard',{value:{writeText:async(t)=>{window.__copied.push(t);}},configurable:true}); }catch(e){} });
+ await mctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
+ const mp=await mctx.newPage(); mp.on('pageerror',e=>errs.push('手機：'+e.message)); mp.on('dialog',d=>d.accept());
+ await mp.goto('http://localhost:9553/index.html'); await mp.waitForSelector('#dropzone');
+ await mp.evaluate(()=>{ const c=document.querySelector('#importer .drawer-close'); if(c) c.click(); });
+ await mp.evaluate(async(r)=>{ await window.Store.saveRecords([r]); },REC);
+ await mp.reload(); await mp.waitForSelector('#btnImport'); await mp.waitForTimeout(800);
+ await mp.locator('#cards .card .card-name').first().click(); await mp.waitForSelector('#drawerBody h2');
+ await mp.click('#drawerBody button:has-text("問分身")'); await mp.waitForTimeout(300);
+ const ml=await mp.evaluate(()=>({links:window.__links,opened:window.__opened,copied:window.__copied[window.__copied.length-1]||'',setup:/Claude 分身/.test((document.querySelector('#editor:not([hidden]) #editorBody')||{}).textContent||'')}));
+ chk(JSON.stringify(ml.links)==='["https://claude.ai/new|_blank"]' && !ml.opened.length && !ml.setup, `手機開 claude.ai/new（App 接得到），沒設網址也不跳設定：${JSON.stringify(ml.links)} ${JSON.stringify(ml.opened)}`);
+ chk(/^你是我的分身：中租租賃新莊分公司的企金業務/.test(ml.copied) && /以下是這次要你看的/.test(ml.copied) && /星辰精密有限公司（統編 20000001）/.test(ml.copied), `手機複製的內容前面附上分身說明書，後面是這家：${ml.copied.slice(0,60)}…`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
