@@ -49,7 +49,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
  chk(JSON.stringify(await names(pg))==='["乙精密股份有限公司","甲工程有限公司"]', `九月先匯兩家：${JSON.stringify(await names(pg))}`);
 
  // 在甲身上記一通電話，等一下要確認整份刪掉時紀錄也一起走
- await pg.click('.card:has-text("甲工程")'); await pg.waitForSelector('#drawerBody h2');
+ await pg.click('.card:has-text("甲工程") .card-name'); await pg.waitForSelector('#drawerBody h2');
  await pg.fill('#drawerBody textarea','總機說不用了');
  await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(1200);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(400);

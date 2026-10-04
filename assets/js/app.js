@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-271';
+  const APP_VERSION = '20261004-272';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4761,45 +4761,21 @@
     };
     addrRow('登記地址', r.addressRegistered);
     addrRow('實際地址', r.addressActual);
-    // 動產擔保（同業）：這家現在跟誰借錢、什麼時候到期
+    // 動產擔保（同業）：這家現在跟誰借錢、什麼時候到期。
+    // 使用者：「顯示在詳細頁中，別收在下面，但僅顯示最新一筆，資訊越簡單越好」——一行：金主短名、金額、到期日（還有幾天）、共幾件
     {
       dl.append(el('dt', { textContent: '動產擔保' }));
       const dd = el('dd', { className: 'detail-chattel' });
       if (r.chattel && r.chattel.length) {
-        const ol = el('ol', { className: 'reg-history' });
-        // 照日期新到舊列（使用者：「動擔的詳細資訊請按照日期排序，最新到最舊」）：登記核准日，沒有就契約起；都沒有的排最後
+        // 最新一筆＝登記核准日最新的（沒有就契約起）；都沒有的排最後
         const dk = (c) => { const m = String(c.approved || c.start || '').match(/^(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : -1; };
-        // 收起來只留最新的兩筆，其他的按「展開其他 N 件」才出來（使用者：「動產擔保這個在詳細頁做成可以收放的，收起來後只顯示最新的兩筆」）
-        const SHOW = 2;
-        const sorted = [...r.chattel].sort((a, b) => dk(b) - dk(a));
-        sorted.forEach((c, i) => {
-          const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天，未註銷` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天到期`;
-          const li = el('li', { className: `${c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : ''}${i >= SHOW ? ' is-more' : ''}`.trim(), hidden: i >= SHOW }, [
-            el('b', { textContent: `${c.lender.name || '不明'}　${window.Chattel.typeShort(c.type)}　${chattelMoney(c.amount)}` }),
-            el('div', { className: 'muted', textContent: `契約 ${c.start || '？'} → ${c.end || '？'}${when ? `（${when}）` : ''}` }),
-            c.addr ? el('div', { className: 'muted', textContent: `標的物所在地 ${c.addr}${c.items ? `，${c.items} 件` : ''}` }) : '',
-            c.no ? el('div', { className: 'muted', textContent: `登記 ${c.no}` }) : '',
-          ]);
-          ol.append(li);
-        });
-        dd.append(ol);
-        if (sorted.length > SHOW) {
-          const more = sorted.length - SHOW;
-          const soonHidden = sorted.slice(SHOW).filter((c) => c.days != null && c.days >= 0 && c.days <= 92).length;
-          const toggle = el('button', { className: 'link-btn chattel-more', type: 'button', 'aria-expanded': 'false' });
-          const label = (open) => `${open ? '收起，只看最新兩筆 ▴' : `展開其他 ${more} 件 ▾`}${!open && soonHidden ? `（其中 ${soonHidden} 件 3 個月內到期）` : ''}`;
-          toggle.textContent = label(false);
-          toggle.onclick = () => {
-            const open = toggle.getAttribute('aria-expanded') !== 'true';
-            ol.querySelectorAll('li.is-more').forEach((li) => { li.hidden = !open; });
-            toggle.setAttribute('aria-expanded', String(open));
-            toggle.textContent = label(open);
-          };
-          dd.append(toggle);
-        }
-        dd.append(el('div', { className: 'muted', textContent: `新北市動產擔保登記清冊（每月更新）裡登記的案件，共 ${sorted.length} 件；快到期的就是換約時機。` }));
+        const c = [...r.chattel].sort((a, b) => dk(b) - dk(a))[0];
+        const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天`;
+        const due = c.end ? `${c.end} 到期${when ? `（${when}）` : ''}` : '沒有到期日';
+        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${due}` }));
+        if (r.chattel.length > 1) dd.append(el('span', { className: 'muted', textContent: `　共 ${r.chattel.length} 件` }));
       } else {
-        dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有這家（只有在新北市登記的動產抵押、附條件買賣）' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
+        dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
       }
       dl.append(dd);
     }
@@ -4868,7 +4844,11 @@
      */
     {
       // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）
-      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '最近異動日期', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      // 動產擔保接在最近異動日期後面、下次聯絡前面（跟成立年、資本額這些判斷用的放一起）
+      const dtOf = (t) => [...dl.children].find((n) => n.tagName === 'DT' && n.textContent.trim() === t);
+      const ch = dtOf('動產擔保'); const nx = dtOf('下次聯絡');
+      if (ch && nx) { const chDd = ch.nextElementSibling; nx.before(ch); if (chDd && chDd.tagName === 'DD') nx.before(chDd); }
       const more = el('dl', { className: 'detail-grid detail-more-grid' });
       [...dl.children].forEach((node) => {
         if (node.tagName !== 'DT') return;
@@ -4882,7 +4862,7 @@
       body.append(dl);
       if (more.childElementCount) {
         const det = el('details', { className: 'detail-section detail-more' });
-        det.append(el('summary', {}, [el('h3', { textContent: '更多資料（統編、產業、動產擔保、變更登記…）' })]), more);
+        det.append(el('summary', {}, [el('h3', { textContent: '更多資料（統編、產業、變更登記…）' })]), more);
         body.append(det);
       }
     }
