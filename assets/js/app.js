@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-282';
+  const APP_VERSION = '20261004-283';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2808,6 +2808,62 @@
     return take;
   }
   /**
+   * 五頁的候選依統編合成一家：各頁看到的訊號聯集（本期增資／擴張、剛做進出口、剛開始請人、剛開電子發票），
+   * 再用動保清冊補「最近買設備（6 個月內）」「跟同業借」——不管這家是從哪一頁進來的。
+   * 排法：訊號越多越前面 → 最近買設備越近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近 → 原本在各頁的名次。
+   */
+  function mergeFeed(sources) {
+    const byKey = new Map();
+    sources.forEach((src) => {
+      src.list.forEach((r, idx) => {
+        const f = src.mod.dailyFacts ? src.mod.dailyFacts(r) : null;
+        if (!f || !f.key) return;
+        let c = byKey.get(f.key);
+        if (!c) { c = { key: f.key, name: f.name, recs: {}, signals: new Set(), ageRank: f.ageRank, capOk: f.capOk, phone: f.phone, branchRank: f.branchRank, order: idx }; byKey.set(f.key, c); }
+        if (c.recs[src.key]) return;   // 動保一家好幾件：留在那一頁排最前面的那件
+        c.recs[src.key] = r;
+        f.signals.forEach((x) => c.signals.add(x));
+        c.ageRank = Math.min(c.ageRank, f.ageRank);
+        if (f.capOk) c.capOk = true;
+        c.phone = c.phone || f.phone;
+        c.branchRank = Math.min(c.branchRank, f.branchRank);
+        c.order = Math.min(c.order, idx);
+      });
+    });
+    const out = [...byKey.values()];
+    out.forEach((c) => {
+      const tax = /^\d{8}$/.test(c.key) ? c.key : '';
+      c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
+      if (c.buy.grade <= 1) c.signals.add(`最近買設備（${c.buy.ym}）`);
+      const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
+      if (peer) c.signals.add(`跟同業借（${peer}）`);
+    });
+    out.sort((a, b) => b.signals.size - a.signals.size || a.buy.grade - b.buy.grade || a.ageRank - b.ageRank
+      || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || a.order - b.order);
+    return out;
+  }
+  /** 每頁先保底一家（那一頁裡總排名最前面、還沒被挑的），剩下照總排名挑滿 n 家 */
+  function pickMerged(merged, n, srcKeys) {
+    const out = [];
+    const used = new Set();
+    for (const k of srcKeys) {
+      if (out.length >= n) break;
+      const c = merged.find((x) => !used.has(x.key) && x.recs[k]);
+      if (c) { out.push({ c, via: k }); used.add(c.key); }
+    }
+    for (const c of merged) {
+      if (out.length >= n) break;
+      if (!used.has(c.key)) { out.push({ c, via: null }); used.add(c.key); }
+    }
+    return out;
+  }
+  window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
+    const lists = await Promise.all([window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv].map((m) => m.dailyCandidates().catch(() => [])));
+    const keys = ['ch', 'le', 'tr', 'nh', 'ei'];
+    return mergeFeed(keys.map((key, i) => ({ key, mod: [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv][i], list: lists[i] })))
+      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs) }));
+  };
+  /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
    * opts.more：再補一批（額度那麼多家），不管今天已經幾家——使用者：「當天我名單用完後，我會再要求你再補給我」。
    */
@@ -2858,37 +2914,49 @@
       let tombs = {};
       try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
       const buried = (company, taxId) => window.Normalize.companyKeys({ company, taxId }).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
-      const seen = new Set();
-      const fresh = (company, taxId) => {
-        const key = String(taxId || '').replace(/\D/g, '') || String(company || '').replace(/\s/g, '');
-        if (!key || seen.has(key) || buried(company, taxId)) return false;
-        seen.add(key);
-        return true;
-      };
-      const ch = chAll.filter((r) => fresh(r.cust.name, r.cust.id));
-      const le = leAll.filter((r) => fresh(r['公司名稱'], r['統一編號']));
-      const bz = bzAll.filter((r) => fresh(r.name, r.taxId));
-      const tr = trAll.filter((r) => fresh(r.name, r.taxId));
-      const nh = nhAll.filter((r) => fresh(r.name, r.taxId));
-      const ei = eiAll.filter((r) => fresh(r.name, r.taxId));
-      // 六頁平分；一頁不夠其他頁補：輪流一家一家拿，拿到額度滿或都沒得拿。剛開始請人、剛開電子發票排最後，額度不整除時少拿
-      const take = splitByShares([ch.length, le.length, bz.length, tr.length, nh.length, ei.length], need, feedShares());
-      const pickC = ch.slice(0, take[0]);
-      const pickL = le.slice(0, take[1]);
-      const pickB = bz.slice(0, take[2]);
-      const pickT = tr.slice(0, take[3]);
-      const pickN = nh.slice(0, take[4]);
-      const pickE = ei.slice(0, take[5]);
-      if (!pickC.length && !pickL.length && !pickB.length && !pickT.length && !pickN.length && !pickE.length) { registryPref('daily-feed-on', today); if (force || more) toast('六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      const notBuried = (company, taxId) => !buried(company, taxId);
+      /*
+       * 商行以外的五頁揉在一起（使用者：「除了商行那頁外其他五頁揉在一起，照總分挑但每分頁至少保底」）：
+       * 依統編合成一家，各頁的訊號加總算分（mergeFeed），每頁先保底挑一家（照總排名），剩下照總分挑。
+       * 商行照原本的規則與比例，自己一份。
+       */
+      const SRC = [
+        { key: 'ch', label: '動產擔保', mod: window.Chattel, list: chAll.filter((r) => notBuried(r.cust.name, r.cust.id)) },
+        { key: 'le', label: '登記清冊', mod: window.Leads, list: leAll.filter((r) => notBuried(r['公司名稱'], r['統一編號'])) },
+        { key: 'tr', label: '出進口廠商', mod: window.Trade, list: trAll.filter((r) => notBuried(r.name, r.taxId)) },
+        { key: 'nh', label: '剛開始請人', mod: window.Nhi, list: nhAll.filter((r) => notBuried(r.name, r.taxId)) },
+        { key: 'ei', label: '剛開電子發票', mod: window.Einv, list: eiAll.filter((r) => notBuried(r.name, r.taxId)) },
+      ];
+      const merged = mergeFeed(SRC);
+      const mergedKeys = new Set(merged.map((c) => c.key));
+      const bizKey = (r) => String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, '');
+      const bzSeen = new Set();
+      const bz = bzAll.filter((r) => { const k = bizKey(r); if (!k || bzSeen.has(k) || mergedKeys.has(k) || !notBuried(r.name, r.taxId)) return false; bzSeen.add(k); return true; });
+      // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
+      const per = (k) => merged.filter((c) => c.recs[k]).length;
+      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei')], need, feedShares());
+      let bizTake = Math.min(bz.length, take[2]);
+      const mixTake = Math.min(merged.length, need - bizTake);
+      bizTake = Math.min(bz.length, need - mixTake);
+      const picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
+      const pickB = bz.slice(0, bizTake);
+      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more) toast('六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      // 每家用哪一頁的資料匯入：保底挑到的用那一頁，其他照動保 → 登記清冊 → 出進口 → 請人 → 電子發票；「符合：」改寫成合併後的訊號
+      const bySrc = new Map(SRC.map((x) => [x.key, []]));
+      picks.forEach(({ c, via }) => {
+        const k = via || SRC.find((x) => c.recs[x.key]).key;
+        const r = c.recs[k];
+        const also = SRC.filter((x) => x.key !== k && c.recs[x.key]).map((x) => x.label);
+        const sig = [...c.signals];
+        const extra = [c.ageRank === 0 ? '成立 6～10 年' : '', c.capOk ? '資本額 500～6,000 萬' : '', c.phone ? '有電話' : '', c.branchRank === 0 ? '我的分公司' : ''].filter(Boolean);
+        r._why = `${sig.length ? `符合：${sig.join('、')}` : '沒有擴張或同業訊號，補位'}${extra.length ? `；其他：${extra.join('、')}` : ''}${also.length ? `；也在：${also.join('、')}` : ''}${via ? `；${SRC.find((x) => x.key === via).label}保底` : ''}`;
+        bySrc.get(k).push(r);
+      });
       const parts = [];
-      if (pickC.length) parts.push(window.Chattel.toStandardCsv(pickC, pickC.map(() => day)));
-      if (pickL.length) parts.push(window.Leads.toStandardCsv(pickL, pickL.map(() => day)));
+      SRC.forEach((x) => { const list = bySrc.get(x.key); if (list.length) parts.push(x.mod.toStandardCsv(list, list.map(() => day))); });
       if (pickB.length) parts.push(window.Biz.toStandardCsv(pickB, pickB.map(() => day)));
-      if (pickT.length) parts.push(window.Trade.toStandardCsv(pickT, pickT.map(() => day)));
-      if (pickN.length) parts.push(window.Nhi.toStandardCsv(pickN, pickN.map(() => day)));
-      if (pickE.length) parts.push(window.Einv.toStandardCsv(pickE, pickE.map(() => day)));
-      // 兩份都是同一個標準表頭，接起來只留第一份的表頭
-      const csv = parts.map((t, i) => (i ? t.replace(/^\uFEFF?[^\n]*\n/, '') : t)).join('');
+      // 都是同一個標準表頭，接起來只留第一份的表頭
+      const csv = parts.map((t, i) => (i ? t.replace(/^﻿?[^\n]*\n/, '') : t)).join('');
       // 來源名稱一天一個；再補的另外取名——同名重匯是「更新」，會把早上那一批整批換掉
       const batches = new Set(state.records.map((r) => r.source).filter((x) => String(x || '').startsWith(`每日新名單-${today}`)));
       const name = batches.size ? `每日新名單-${today}-補${batches.size}.csv` : `每日新名單-${today}.csv`;
@@ -2897,10 +2965,12 @@
       registryPref('daily-feed-on', today);
       tradePhones(name).catch((e) => console.error('出進口廠商補電話失敗', e)).then(() => autoPhones(name)).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
-      const picked = pickC.length + pickL.length + pickB.length + pickT.length + pickN.length + pickE.length;
+      const picked = picks.length + pickB.length;
       const got = state.records.filter((r) => r.source === name).length;
       const lost = picked - got;
-      toast(`${more ? '再補了' : '今天從'}動產擔保 ${pickC.length} 家、登記清冊 ${pickL.length} 家、商行／企業社 ${pickB.length} 家、出進口廠商 ${pickT.length} 家${pickN.length ? `、剛開始請人 ${pickN.length} 家` : ''}${pickE.length ? `、剛開電子發票 ${pickE.length} 家` : ''}進名單，都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
+      const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
+      const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
+      toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
@@ -3150,7 +3220,7 @@
           hint,
         ]));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。優先順序（不是門檻，全符合的先挑、不夠往下補）：動產擔保最前面是「最近買設備」（契約起算 3 個月內 → 6 個月內 → 1 年內）；商行／企業社以外，每一頁接著都是「利率不敏感」——動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛增資／擴張、剛做進出口、剛開始請人、剛開電子發票的；接著登記清冊＝本期 → 增資 → 擴張（遷址／加營業項目） → 有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年，再比資本額；動產擔保＝最近買設備 → 利率不敏感 → 成立 5 年內 → 3 個月內到期 → 有電話 → 我的分公司 → 擔保 500 萬以上，再比到期日；商行／企業社只看資本額跟成立年＝500 萬以上＋成立 5 年內 → 500 萬以上＋5 年以上 → 200 萬以上＋5 年內 → 其他，同一級資本額高的先；出進口廠商＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 登記 1 年內 → 進口＋出口，再比登記日期；剛開始請人＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛投保 3 個月內，再比投保月份；剛開電子發票＝有電話 → 資本額 500～6,000 萬 → 我的分公司 → 成立 6～10 年 → 剛導入 3 個月內，再比導入月份。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票挑 ${quota} 家進名單（六頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的五頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;

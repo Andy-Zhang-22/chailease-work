@@ -526,5 +526,13 @@
     render();
   }
 
-  global.Trade = { show, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, telOf, nearby, dailyCandidates, DAILY_PRIORITY };
+  /*
+   * 每日新名單揉合用（使用者：「除了商行那頁外其他五頁揉在一起，照總分挑但每分頁至少保底」）：
+   * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
+   */
+  function dailyFacts(r) {
+    return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: (r.firstMonths != null && r.firstMonths < 12) ? ['剛做進出口'] : [],
+      ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r) };
+  }
+  global.Trade = { show, dailyFacts, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, telOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);
