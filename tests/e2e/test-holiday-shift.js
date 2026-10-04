@@ -34,7 +34,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  await pg.clock.install({ time: new Date('2026-09-24T10:00:00') });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.clock.resume(); await pg.waitForTimeout(600);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("甲公司")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("甲公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody button:has-text("明天")'); await pg.waitForTimeout(400);
  const v1=await pg.inputValue('#drawerBody input[type="date"]');
  chk(v1==='2026-09-29', `按「明天」（9/25 中秋）順延到 9/29：${v1}`);

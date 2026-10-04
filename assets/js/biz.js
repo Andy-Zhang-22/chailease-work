@@ -234,15 +234,14 @@
   try { found = new Map(Object.entries(JSON.parse(localStorage.getItem(FOUND_KEY) || '{}'))); } catch (e) { found = new Map(); }
   const saveFound = () => { try { localStorage.setItem(FOUND_KEY, JSON.stringify(Object.fromEntries(found))); } catch (e) { /* 無痕 */ } };
   const foundOf = (r) => { const f = found.get(r.key); return f && f.tel ? f : null; };
+  // 公司名底下那排 Google／地圖／104／1111（使用者：「所有分頁的公司名底下都要有，無論有無電話；有電話的就不用輸入框」）
   function phoneBox(r, key, hasAuto) {
-    if (hasAuto) return '';
     const stop = (e) => e.stopPropagation();
     const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || ((found.get(key) || {}).tel || ''), onclick: stop });
     input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
     return el('div', { className: 'card-actions phone-search', onclick: stop }, [
-      el('span', { className: 'muted', textContent: '找電話：' }),
       ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
-      input,
+      hasAuto ? '' : input,
     ]);
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
@@ -292,7 +291,7 @@
         : el('button', { className: 'btn btn-tiny biz-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
     r.__name = r.name; r.__addr = r.address;
-    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, mine ? '' : phoneBox(r, r.key, hasPhone(r)), actions]);
+    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneBox(r, r.key, hasPhone(r) || !!mine), meta, actions]);
   }
 
   function chips(host, options, set) {

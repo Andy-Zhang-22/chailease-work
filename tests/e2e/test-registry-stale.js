@@ -27,7 +27,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};document.querySelectorAll('#drawerB
    await pg.click('button:has-text("先試一筆")'); await pg.waitForTimeout(1500);
    await pg.click('button:has-text("全部更新")'); await pg.waitForTimeout(2500);
    const res=(await pg.textContent('#editorBody .rule-result:not(.proxy-diag)')).replace(/\s+/g,' '); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300); return res; };
- const detail=async()=>{ await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300); await pg.locator('.card:has-text("甲工程")').click(); await pg.waitForSelector('#drawerBody h2'); const g=await grid(pg); const hist=(await pg.textContent('#drawerBody')).replace(/\s+/g,' '); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300); return {g,hist}; };
+ const detail=async()=>{ await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300); await pg.locator('.card:has-text("甲工程") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); const g=await grid(pg); const hist=(await pg.textContent('#drawerBody')).replace(/\s+/g,' '); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300); return {g,hist}; };
  // 1. 鏡像回 1/21 的舊地址 562 → 不套用
  let res=await run(row('新北市新莊區富貴路562號6樓','1150121'));
  chk(/1 筆查到的比名單上的舊/.test(res), `結果說明有 1 筆較舊沒套用：${res.slice(0,140)}`);

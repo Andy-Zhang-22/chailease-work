@@ -23,7 +23,7 @@ const SEED=[{id:'R1',source:'A.csv',company:'貝邦有限公司',aliases:[],taxI
  const chips=await pg.evaluate(()=>[...document.querySelectorAll('#fltOutcome .chip')].map(c=>c.textContent.trim()));
  chk(chips.some(c=>/^1 未撥打/.test(c)), `洽談狀態篩選也是未撥打：${chips}`);
  // 使用者自己記的結果仍優先
- await pg.click('.card'); await pg.waitForSelector('#drawerBody h2');
+ await pg.click('.card .card-name'); await pg.waitForSelector('#drawerBody h2');
  await pg.fill('#drawerBody textarea','打過了，老闆說再看看'); await pg.selectOption('#drawerBody select','contacted');
  await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(1000); await pg.keyboard.press('Escape'); await pg.waitForTimeout(400);
  chk(/已聯絡/.test((await pg.textContent('.card')).replace(/\s+/g,' ')), '自己記了通話後顯示自己選的結果');

@@ -46,7 +46,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk(clip==='0211111111', `剪貼簿裡就是號碼：${clip}`);
 
  // 詳細頁：公司名稱旁也是一顆點
- await pg.locator('.card').first().click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
  chk(await pg.locator('#drawerBody .detail-title .copy-dot').count()===1, '公司名稱旁一顆點');
  await pg.click('#drawerBody .detail-title .copy-dot'); await pg.waitForTimeout(200);
  chk(/已複製：甲公司/.test(await pg.textContent('#toast')), `複製公司名稱：${await pg.textContent('#toast')}`);

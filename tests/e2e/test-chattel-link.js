@@ -47,24 +47,17 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  chk(names.join('|')==='禾泰精密工業有限公司', `只看 3 個月內到期：${names.join('|')}`);
  await pg.locator('#fltChattel .chip:has-text("3 個月內到期")').click(); await pg.waitForTimeout(300);
  // 詳細頁
- await pg.locator('#paneList .card:has-text("禾泰")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
- await pg.click('#drawerBody details.detail-more > summary'); await pg.waitForTimeout(150);   // 動產擔保收在「更多資料」裡
- const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ');
- chk(/新鑫股份有限公司 附條件買賣 1,200 萬/.test(det) && /2023\/10\/15 → 2026\/11\/12（還有 38 天到期）/.test(det), `詳細頁第一件：${det.slice(0,120)}`);
- chk(/合迪股份有限公司 動產抵押 450 萬/.test(det) && /登記 110新經動字第007355號/.test(det), '第二件也列了');
- chk(det.indexOf('新鑫股份有限公司') < det.indexOf('合迪股份有限公司'), '照日期新到舊：2023 的新鑫排在 2021 的合迪前面');
- // 收起來只顯示最新兩筆：2019 的裕融藏著，按展開才出來（使用者：「收起來後只顯示最新的兩筆」）
- const lis=pg.locator('#drawerBody .detail-chattel li');
- const visible=async()=>(await lis.evaluateAll(a=>a.filter(x=>!x.hidden).map(x=>x.querySelector('b').textContent.split('　')[0])));
- const tg=pg.locator('#drawerBody .chattel-more');
- chk((await lis.count())===3 && JSON.stringify(await visible())==='["新鑫股份有限公司","合迪股份有限公司"]' && /展開其他 1 件 ▾（其中 1 件 3 個月內到期）/.test(await tg.textContent()), `收起：只看最新兩筆、按鈕講還有幾件：${JSON.stringify(await visible())} ${await tg.textContent()}`);
- await tg.click(); await pg.waitForTimeout(150);
- chk(JSON.stringify(await visible())==='["新鑫股份有限公司","合迪股份有限公司","裕融企業股份有限公司"]' && /收起，只看最新兩筆/.test(await tg.textContent()) && /共 3 件/.test(await pg.textContent('#drawerBody .detail-chattel')), `展開：三件都在：${JSON.stringify(await visible())}`);
- await tg.click(); await pg.waitForTimeout(150);
- chk((await visible()).length===2, '再按收回去');
+ await pg.locator('#paneList .card:has-text("禾泰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ // 使用者：「動產登記也顯示在詳細頁中，別收在下面，但僅顯示最新一筆，資訊越簡單越好」
+ const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ').trim();
+ chk(det==='新鑫 1,200 萬，2026/11/12 到期（還有 38 天） 共 3 件', `只顯示最新一筆（2023 的新鑫，不是 2019 的裕融）、一行、共幾件：${det}`);
+ chk(await pg.locator('#drawerBody .detail-chattel .is-soon').count()===1, '3 個月內到期的標起來');
+ const order=await pg.evaluate(()=>[...document.querySelectorAll('#drawerBody > dl.detail-grid > dt')].map(x=>x.textContent.trim()));
+ chk(order.indexOf('最近異動日期')>=0 && order.indexOf('動產擔保')===order.indexOf('最近異動日期')+1 && order.indexOf('下次聯絡')===order.indexOf('動產擔保')+1, `直接顯示，在最近異動日期後面、下次聯絡前面：${order.join('、')}`);
+ chk(await pg.locator('#drawerBody details.detail-more .detail-chattel').count()===0, '不收在「更多資料」裡');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
- await pg.locator('#paneList .card:has-text("沒動保")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
- chk(/清冊裡沒有這家/.test(await pg.textContent('#drawerBody .detail-chattel')), '沒對到的講清楚');
+ await pg.locator('#paneList .card:has-text("沒動保") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ chk((await pg.textContent('#drawerBody .detail-chattel')).trim()==='清冊裡沒有', '沒對到的只寫「清冊裡沒有」');
  await pg.keyboard.press('Escape');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close(); console.log(bad?`\n${bad} 個失敗`:'\n全部通過'); process.exit(bad?1:0);

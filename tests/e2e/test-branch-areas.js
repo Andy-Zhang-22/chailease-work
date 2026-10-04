@@ -56,7 +56,7 @@ const SEED=[mk('1','新莊甲','新北市新莊區中正路1號'),mk('5','宜蘭
  // 詳細頁的行銷區域列（依登記地址）
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(400);
- const detail=async(name)=>{ await pg.locator(`.card:has-text("${name}")`).click(); await pg.waitForSelector('#drawerBody h2'); const t=(await pg.textContent('#drawerBody')).replace(/\s+/g,' '); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300); return t; };
+ const detail=async(name)=>{ await pg.locator(`.card:has-text("${name}") .card-name`).click(); await pg.waitForSelector('#drawerBody h2'); const t=(await pg.textContent('#drawerBody')).replace(/\s+/g,' '); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300); return t; };
  let t=await detail('新莊甲'); chk(/行銷區域\s*新莊分公司（北二分處）/.test(t), `新莊甲：${t.match(/行銷區域.{0,40}/)?.[0]}`);
  t=await detail('淡水乙'); chk(/行銷區域\s*城北、新莊分公司共同區（申覆對象：城北分公司）/.test(t), `淡水乙：${t.match(/行銷區域.{0,60}/)?.[0]}`);
  t=await detail('龜山丙'); chk(/行銷區域\s*桃園分公司（北二分處）/.test(t), `龜山丙（登記地址新寫法）：${t.match(/行銷區域.{0,40}/)?.[0]}`);

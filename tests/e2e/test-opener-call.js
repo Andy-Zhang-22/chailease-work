@@ -30,7 +30,7 @@ const RECS=[
  chk(/進出口/.test(await op('遠帆')), `剛做進出口的卡片有開場白：${await op('遠帆')}`);
  chk((await op('律森'))==='', '只有成立年的卡片上不放（太普遍），詳細頁才有');
  chk((await op('範例'))==='', '沒訊號的沒有開場白');
- await pg.locator('#cards .card:has-text("律森")').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ await pg.locator('#cards .card:has-text("律森") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  const dop=(await pg.locator('#drawerBody .detail-opener').textContent()).replace(/\s+/g,' ');
  chk(/成立 7 年/.test(dop) && (await pg.locator('#drawerBody .detail-opener .copy-dot').count())===1, `詳細頁有成立年的開場白＋複製點：${dop}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);

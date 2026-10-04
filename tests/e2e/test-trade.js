@@ -92,7 +92,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  chk(xc && xc.phones.length===1 && /0211111111/.test(xc.phones[0]) && !xc.src, `星辰本來的電話不動：${JSON.stringify(xc)}`);
  chk(/對到 1 家/.test(await pg.textContent('#toast')), `提示：${await pg.textContent('#toast')}`);
  // 詳細頁註明來源
- await pg.locator('#cards .card:has-text("遠帆")').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ await pg.locator('#cards .card:has-text("遠帆") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/電話來自貿易署出進口廠商登記（核發 2025\/01\/15）/.test(await pg.textContent('#drawerBody')), '詳細頁寫電話來自貿易署');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
 

@@ -293,13 +293,15 @@
       ] : []),
     ]) : (r.chairman ? el('p', { className: 'muted owner-note', textContent: `董事長 ${r.chairman} 名下沒查到其他公司${index && index.chairmenLeft ? '（或還沒查到，Actions 還在補）' : ''}` }) : '');
     const dynBox = dynBoxOf(r);
+    // 公司名底下那排找電話（使用者：「所有分頁的公司名底下都要有」）；上市櫃加入名單是一家一家從投資公司加，不給輸入框
+    const phoneLinks = typeof global.phoneSearchLinks === 'function' ? el('div', { className: 'card-actions phone-search', onclick: (e) => e.stopPropagation() }, global.phoneSearchLinks(r.name, r.address)) : '';
     // 使用者：整張卡的「把 N 家投資公司加入客戶名單」用不到；要加就在展開的清單裡一家一家加，或用上面的整批按鈕
     const actions = el('div', { className: 'card-actions' }, [
       deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
         ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
         : el('button', { className: 'btn btn-tiny listed-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
-    return el('article', { className: `card leads-card listed-card${r.sameSpot.length ? ' is-same' : r.invest.length ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, meta, dynBox, ownerBox, actions]);
+    return el('article', { className: `card leads-card listed-card${r.sameSpot.length ? ' is-same' : r.invest.length ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneLinks, meta, dynBox, ownerBox, actions]);
   }
 
   /** 卡片上的「動態」：營收、基本資料異動、重大訊息（先 3 則，點開全部） */

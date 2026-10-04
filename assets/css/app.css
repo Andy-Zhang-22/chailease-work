@@ -471,8 +471,7 @@ details.nearby[open] > summary::before { content: '▾ '; }
 .badge-regchange { border-color: #d97706; color: #b45309; }
 .badge-chattel { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); color: var(--primary); }
 .badge-chattel.is-soon { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); font-weight: 600; }
-.detail-chattel .reg-history li.is-soon > b { color: var(--danger); }
-.detail-chattel .reg-history li[hidden] { display: none; }
+.detail-chattel .is-soon { color: var(--warn); font-weight: 600; }   /* 3 個月內到期：橘色 */
 .chattel-more { background: none; border: 0; padding: 4px 0; margin: 2px 0 6px; color: var(--primary); font-weight: 600; cursor: pointer; font: inherit; font-size: 14px; }
 .branch-common { color: #b45309; }
 .badge-branch { border-color: #0f766e; color: #0f766e; }

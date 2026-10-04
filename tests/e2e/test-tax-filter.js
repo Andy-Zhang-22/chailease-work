@@ -35,7 +35,7 @@ const SEED=[mk('1','有統編甲公司','12345678'),mk('2','無統編乙公司',
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  chk((await names()).length===3&&await pg.getAttribute('#fltTax .chip[data-value="no"]','aria-pressed')==='false', '清除篩選後全部回來、晶片取消');
  // 在網站上幫乙公司補上統編 → 變成有統編
- await pg.locator('.card:has-text("無統編乙公司")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("無統編乙公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody button:has-text("編輯資料")'); await pg.waitForSelector('#editor h2');
  await pg.locator('#editor label.rule-field:has(span:text-is("統一編號")) input').fill('87654321'); await pg.click('#editor button:has-text("儲存")'); await pg.waitForTimeout(800);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(400);
