@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-275';
+  const APP_VERSION = '20261004-276';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -7671,6 +7671,8 @@ export default {
       const result = await window.DriveSync.sync({ interactive });
       await reload();
       render();
+      // 同步途中本機又有變動（例如剛刪掉一家）：那些還沒上雲端，接著再推一次
+      if (result && result.changedDuring) scheduleSync();
       await showSyncTime();
       autoRegistryTick();   // 今天的自動查核等同步成功才跑（見 maybeAutoRegistry）
       if (!quiet) {

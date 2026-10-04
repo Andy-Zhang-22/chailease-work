@@ -510,6 +510,9 @@
 
   /* ---------------- 同步流程 ---------------- */
 
+  /** 本機資料有沒有變：exportedAt 每次都不同，不算 */
+  const fingerprint = (d) => JSON.stringify([d.records, d.logs, d.states, d.tombstones, d.settings]);
+
   let running = null;
 
   /**
@@ -527,15 +530,25 @@
 
       const merged = mergeDumps(local, remote);
       const fileId = await uploadFile(file ? file.id : null, merged, token);
-      await global.Store.replaceAll(merged);
-      try { await weeklyBackup(merged, token, false); } catch (e) { console.error('每週備份失敗', e); }   // 備份失敗不擋同步
+      /*
+       * 下載、合併、上傳要好幾秒；這段時間本機又有變動（刪掉一家、記一通電話）的話，
+       * 不能拿開始時的快照整個蓋回去——使用者回報「刪名單時有時都需要再重按一次」就是這個：
+       * 刪掉的被同步用刪除前的快照蓋回來。改成用當下的本機再合併一次才寫回，
+       * 這些變動還沒上雲端，回報 changedDuring 讓呼叫端接著再同步一次。
+       */
+      const latest = await global.Store.exportAll();
+      const changedDuring = fingerprint(latest) !== fingerprint(local);
+      const final = changedDuring ? mergeDumps(latest, merged) : merged;
+      await global.Store.replaceAll(final);
+      try { await weeklyBackup(final, token, false); } catch (e) { console.error('每週備份失敗', e); }   // 備份失敗不擋同步
       await global.Store.setMeta('lastSyncAt', Date.now());
       await global.Store.setMeta('driveFileId', fileId);
 
       return {
-        merged,
-        gained: diffSummary(local, merged),
+        merged: final,
+        gained: diffSummary(local, final),
         firstTime: !file,
+        changedDuring,
       };
     })().finally(() => { running = null; });
     return running;
