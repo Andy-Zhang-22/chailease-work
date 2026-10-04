@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-268';
+  const APP_VERSION = '20261004-269';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3250,13 +3250,15 @@
     cold: (r) => (r.cold ? 'cold' : 'ok'),
   };
   const facetHas = (set, value) => (Array.isArray(value) ? value.some((v) => set.has(v)) : set.has(value));
+  const dealingDue = (r) => { const t = todayISO(); return !!r.nextDate && r.nextDate <= t && r.dueDoneOn !== t; };
   /** 這筆有沒有通過目前的條件；skip 指定「不算哪一組」，算該組晶片家數時用。 */
   function passesFilters(r, skip, terms) {
     const f = state.filters;
     // 「隱藏禁止推廣」對洽談狀態那組不算：禁打的家數還是要看得到，才知道藏了幾筆
     if (state.hideBlocked && r.blocked && skip !== 'outcome') return false;
     // 「隱藏中租往來」對往來情形那組不算（家數照樣看得到）；自己在篩選點了「中租往來」就不藏，不然點了會是空的
-    if (state.hideDealing && r.dealingKind === 'active' && skip !== 'relation' && !state.filters.relation.has('active')) return false;
+    // 但下次聯絡日到了（今天或逾期、今天還沒在提醒列按完成）的照樣列（使用者：藏起來的到期了不能漏打）
+    if (state.hideDealing && r.dealingKind === 'active' && skip !== 'relation' && !state.filters.relation.has('active') && !dealingDue(r)) return false;
     for (const key of Object.keys(FACET_VALUE)) {
       if (key === skip) continue;
       if (f[key].size && !facetHas(f[key], FACET_VALUE[key](r))) return false;
