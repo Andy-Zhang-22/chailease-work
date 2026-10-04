@@ -1076,3 +1076,11 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .cal-route { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }
 .cal-route .muted { font-size: 12px; }
 .cal-no { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-size: 12px; font-weight: 700; }
+
+/* 今日覆盤 */
+.review-sum { font-size: 15px; }
+.review h3 { margin: 14px 0 6px; font-size: 14px; }
+.review-points { list-style: none; margin: 0; padding: 0; }
+.review-points li { padding: 5px 0 5px 10px; border-left: 2px solid var(--border); line-height: 1.5; }
+.review-points li + li { margin-top: 2px; }
+.review .link-btn { font-weight: 600; }
