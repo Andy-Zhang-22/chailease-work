@@ -308,7 +308,38 @@
         r.no ? el('span', { textContent: `🧾 登記 ${r.no}` }) : '',
         r.cust.id ? el('span', { textContent: `#${r.cust.id}` }) : '',
       ]),
+      casesTable(r),
       el('div', { className: 'card-actions' }, actions),
+    ]);
+  }
+
+  /*
+   * 這家公司的每一件動保（使用者：「動產擔保的分頁裡，能幫我列出各家公司的每筆契約起訖及金額嗎」）。
+   * 卡片是一件一張，同一家的其他件散在別張；這裡用統編把同一家的全部列在一起：金主｜起訖（年月）｜金額，
+   * 新的在上、這張卡片那件粗體、3 個月內到期的橘色。超過 4 件先收起，點「其他 N 件」展開。只有一件的不列（上面就是了）。
+   */
+  const openCases = new Set();
+  const ymOf = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : '？'; };
+  function casesTable(r) {
+    const list = r.cust.id ? casesOf(r.cust.id) : [r];
+    if (list.length < 2) return '';
+    const key = (c) => String(c.start || c.approved || '').replace(/\D/g, '');
+    const sorted = [...list].sort((a, b) => key(b).localeCompare(key(a)));
+    const SHOW = 4;
+    const open = openCases.has(r.cust.id);
+    const rows = sorted.map((c, i) => el('tr', { className: `chattel-line${c === r ? ' is-self' : ''}${c.days != null && c.days >= 0 && c.days <= 92 ? ' is-soon' : ''}`, hidden: !open && i >= SHOW }, [
+      el('td', { className: 'ch-lender', textContent: lenderShort(c.lender.name) }),
+      el('td', { className: 'ch-ym', textContent: `${ymOf(c.start || c.approved)}～${c.end ? ymOf(c.end) : '無迄日'}` }),
+      el('td', { className: 'ch-amt', textContent: wan(c.amount) }),
+    ]));
+    const total = sorted.reduce((sum, c) => sum + (c.amount || 0), 0);
+    const toggle = sorted.length > SHOW ? el('button', { className: 'link-btn chattel-more', type: 'button',
+      textContent: open ? '收起 ▴' : `其他 ${sorted.length - SHOW} 件 ▾`,
+      onclick: () => { if (open) openCases.delete(r.cust.id); else openCases.add(r.cust.id); render(); } }) : '';
+    return el('div', { className: 'chattel-cases' }, [
+      el('div', { className: 'muted chattel-cases-head', textContent: `這家共 ${sorted.length} 件動保，擔保合計 ${Math.round(total / 1e4).toLocaleString()} 萬` }),   // 合計用萬，不四捨五入成「1.1 億」
+      el('table', { className: 'chattel-table' }, [el('tbody', {}, rows)]),
+      toggle,
     ]);
   }
 
