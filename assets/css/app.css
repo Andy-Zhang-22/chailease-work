@@ -1093,3 +1093,7 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .review-points li { padding: 5px 0 5px 10px; border-left: 2px solid var(--border); line-height: 1.5; }
 .review-points li + li { margin-top: 2px; }
 .review .link-btn { font-weight: 600; }
+
+/* Claude 分身設定 */
+.twin-steps { margin: 6px 0 10px; padding-left: 20px; line-height: 1.6; }
+.twin-url { width: 100%; margin: 4px 0; }
