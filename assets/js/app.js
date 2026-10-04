@@ -4892,11 +4892,12 @@
         const dk = (c) => { const m = String(c.approved || c.start || '').match(/^(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : -1; };
         const c = [...r.chattel].sort((a, b) => dk(b) - dk(a))[0];
         const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天`;
-        const due = c.end ? `${c.end} 到期${when ? `（${when}）` : ''}` : '沒有到期日';
-        // 跟同業什麼時候開始往來（使用者：「動產擔保的細節也要給我什麼時候他跟同業往來的月份」）：契約起的年月，沒有就登記核准日
-        const sm = String(c.start || c.approved || '').match(/^(\d{4})\D(\d{1,2})/);
-        const since = sm ? `${sm[1]}/${sm[2].padStart(2, '0')} 起，` : '';
-        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${since}${due}` }));
+        // 日期只到年月（使用者：「只要給我年份跟月就好，不需要到日」）
+        const ym = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : ''; };
+        const due = c.end ? `${ym(c.end) || c.end} 到期${when ? `（${when}）` : ''}` : '沒有到期日';
+        // 最近一次買設備是哪個月擺最前面（使用者：「我只是要判斷他最近一次買設備是什麼時候而已」）：契約起的年月，沒有就登記核准日
+        const since = ym(c.start || c.approved);
+        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${since ? `最近一次 ${since}：` : ''}${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${due}` }));
         if (r.chattel.length > 1) dd.append(el('span', { className: 'muted', textContent: `　共 ${r.chattel.length} 件` }));
       } else {
         dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
