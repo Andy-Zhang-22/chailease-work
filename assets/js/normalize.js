@@ -1370,18 +1370,24 @@
     ['address', /^(公司所在地|商業所在地|地址|登記地址|營業地址)$/],
     ['founded', /^(核准設立日期|設立日期|成立日期|核准設立)$/],
     ['changed', /^(最後核准變更日期|最近核准變更日期|最後變更日期)$/],
-    ['phone', /^(電話|聯絡電話|公司電話)$/],
+    ['phone', /^(電話|聯絡電話|公司電話|市話)$/],
+    // 名片（分身讀名片照固定格式回）：聯絡人、職稱、手機
+    ['contact', /^(聯絡人|窗口|姓名)$/],
+    ['title', /^職稱$/],
+    ['mobile', /^(手機|行動電話)$/],
     ['industry', /^(產業別|營業項目|行業)$/],
   ];
   function parseKeyValue(text) {
     const lines = toHalfWidth(String(text || '')).split(/\r?\n/);
     const got = {};
-    lines.forEach((line) => {
+    lines.forEach((raw) => {
+      // 分身回的常帶 Markdown：「- **公司名稱**：…」，粗體與項目符號拿掉再認
+      const line = raw.replace(/\*\*|__/g, '').replace(/^\s*(?:[-•・*]|\d+[.、])\s+/, '');
       const m = line.match(/^\s*([^\t:：]{2,12}?)\s*(?:\t+|[:：]|\s{2,})\s*(.+?)\s*$/);
       if (!m) return;
       const key = m[1].trim();
       const value = m[2].trim();
-      if (!value || value === '值') return;
+      if (!value || value === '值' || /^[（(]?(無|沒有|空白?|—|-|不明|未知)[）)]?$/.test(value)) return;
       for (const [field, re] of KV_FIELDS) {
         if (re.test(key) && got[field] === undefined) { got[field] = value; break; }
       }
@@ -1394,7 +1400,8 @@
     if (got.taxId && /^\d{8}$/.test(got.taxId.replace(/\D/g, ''))) out.taxId = got.taxId.replace(/\D/g, '');
     if (got.owner) out.owner = got.owner;
     if (got.address) out.address = got.address;
-    if (got.phone) out.phoneRaw = got.phone;
+    if (got.phone || got.mobile) out.phoneRaw = [got.phone, got.mobile].filter(Boolean).join(' / ');
+    if (got.contact) out.keyman = [got.contact, got.title].filter(Boolean).join(' ');
     if (got.industry) out.industry = got.industry;
     /*
      * 資本額：名單上的「資本總額」用來分微企／一般組／大企部，實收資本額另外存一格。

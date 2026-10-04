@@ -1,0 +1,41 @@
+// 拜訪準備問分身、追蹤訊息草稿（使用者：「都做」）：拜訪準備頁「🤖 問分身怎麼談」、詳細頁「訊息草稿」選情境交給分身；都不帶電話、負責人、KEYMAN
+const { chromium } = require('playwright');
+const http=require('http'),fs=require('fs'),path=require('path');
+const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
+const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
+ fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9577);
+const TODAY='2026-10-05';
+const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],taxId:'20000001',grade:'',founded:'2018',capital:'30,000',phoneRaw:'02-2222-3331',phones:[{digits:'0222223331',ext:'',note:''}],owner:'王O明',keyman:'陳經理',industry:'金屬加工',address:'新北市新莊區中正路1號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'contacted',nextDate:'2026-10-20',lastDate:'2026-10-05',addedDate:'2026-09-01'};
+(async()=>{
+ let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
+ const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
+ const ctx=await br.newContext({viewport:{width:1300,height:1000}});
+ await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T10:00:00').getTime();
+   class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
+ await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('claude-twin-url','https://claude.ai/project/abc123');}catch(e){}
+   window.__copied=[]; window.__opened=[]; window.open=(u)=>{window.__opened.push(u); return null;};
+   try{ Object.defineProperty(navigator,'clipboard',{value:{writeText:async(t)=>{window.__copied.push(t);}},configurable:true}); }catch(e){} });
+ await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
+ const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
+ await pg.goto('http://localhost:9577/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords([r]);
+   await window.Store.addLog({recordId:'1',date:'2026-10-05',text:'老闆要買 CNC 約 800 萬，寄報價到 0912-345-678 的 LINE',outcome:'contacted',createdAt:Date.now()-1e6}); },REC);
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ const last=()=>pg.evaluate(()=>window.__copied[window.__copied.length-1]||'');
+ await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.click('#drawerBody button:has-text("訊息草稿")'); await pg.waitForSelector('#editorBody .msg-kinds');
+ chk((await pg.locator('#editorBody .msg-kinds button').count())===4, '四個情境：道謝、確認拜訪、追蹤資料、沒接到');
+ await pg.click('#editorBody .msg-kinds button[data-kind="after"]'); await pg.waitForTimeout(200);
+ let p=await last();
+ chk(/幫我寫一則傳給這家窗口的 LINE／簡訊：前幾天寄了資料／報價/.test(p) && /LINE 版、簡訊版/.test(p) && /星辰精密有限公司/.test(p) && /CNC 約 800 萬/.test(p), `訊息草稿的指示與資料：${p.slice(0,120)}`);
+ chk(!/0912|02-2222-3331|王O明|陳經理/.test(p), '不帶電話、負責人、KEYMAN');
+ chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123', '打開分身');
+ chk(await pg.locator('#editor').isHidden(), '送出後關掉情境選單，詳細頁還在');
+ await pg.click('#drawerBody button:has-text("拜訪準備")'); await pg.waitForSelector('#editorBody .brief');
+ await pg.click('#editorBody button:has-text("問分身怎麼談")'); await pg.waitForTimeout(200);
+ p=await last();
+ chk(/我要去拜訪這家，幫我準備/.test(p) && /要問老闆的問題/.test(p) && /CNC 約 800 萬/.test(p) && !/0912|王O明|陳經理/.test(p), `拜訪準備問分身：${p.slice(0,80)}`);
+ chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
+ console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
+ await br.close(); srv.close(); process.exit(bad?1:0);
+})();

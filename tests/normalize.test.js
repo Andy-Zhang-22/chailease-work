@@ -190,3 +190,22 @@ test('findbizUrl：公司直達登記頁、商業與分公司連用統編查的�
   assert.equal(Normalize.findbizUrl('', '穩基機械有限公司'), '');
   assert.equal(Normalize.findbizUrl('6041-8429', ' 穩基機械 有限公司 '), 'https://findbiz.nat.gov.tw/fts/company/60418429', '統編只留數字、名稱去空白');
 });
+
+test('parseKeyValue：分身讀名片回的格式（Markdown、聯絡人＋職稱、電話＋手機、沒有的欄位）', () => {
+  const got = Normalize.parseKeyValue([
+    '好的，名片內容如下：',
+    '- **公司名稱**：星辰精密有限公司',
+    '- **統一編號**：（無）',
+    '- **聯絡人**：陳大明',
+    '- **職稱**：財務經理',
+    '- **電話**：02-2222-3331 #12',
+    '- **手機**：0912-345-678',
+    '- **地址**：新北市新莊區中正路1號',
+  ].join('\n'));
+  assert.equal(got.company, '星辰精密有限公司');
+  assert.equal(got.taxId, undefined);
+  assert.equal(got.keyman, '陳大明 財務經理');
+  assert.equal(got.phoneRaw, '02-2222-3331 #12 / 0912-345-678');
+  assert.equal(got.address, '新北市新莊區中正路1號');
+  assert.equal(Normalize.extractPhones(got.phoneRaw).length, 2);
+});

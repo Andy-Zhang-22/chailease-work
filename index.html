@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261004-283">
+<link rel="stylesheet" href="assets/css/app.css?v=20261004-284">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261004-283"></script>
+<script src="assets/js/lock.js?v=20261004-284"></script>
 </head>
 <body data-theme="auto">
 
@@ -45,6 +45,7 @@
         <div class="menu-cap">每天</div>
         <button data-act="twin-plan">今日撥打戰略</button>
         <button data-act="review">今日覆盤</button>
+        <button data-act="weekly">每週覆盤</button>
         <button data-act="day-load">每天打得完幾家</button>
         <button data-act="feed-more">再補一批新名單</button>
         <button data-act="spread-undo" hidden>復原剛才的重排</button>
@@ -134,6 +135,10 @@
       <label>有沒有機會（自己標的，關係企業算一家）</label>
       <div class="chips" id="fltChance"></div>
     </div>
+    <div class="filter-group" data-group="opp">
+      <label>重新聯絡的時機</label>
+      <div class="chips" id="fltOpp"></div>
+    </div>
     <div class="filter-group" data-group="cold">
       <label>冷名單（連續未接太多次自動移出）</label>
       <div class="chips" id="fltCold"></div>
@@ -186,6 +191,7 @@
     <div id="paneList">
       <div id="feedBar" class="feed-bar" hidden></div>
       <div id="remindBar" class="remind-bar" hidden></div>
+      <div id="oppBar" class="opp-bar" hidden></div>
       <div class="list-head">
         <span id="listSummary">—</span>
         <label class="only-open"><input type="checkbox" id="hideBlocked" checked> 隱藏「禁止推廣」</label>
@@ -248,7 +254,7 @@
       </button>
       <button class="way" type="button" data-act="new-customer">
         <strong>✍️ 手動輸入一筆</strong>
-        <small>名片或轉介的客戶；可貼上商工登記資料自動填表</small>
+        <small>名片或轉介的客戶；可貼上商工登記資料、或拍名片給分身讀，自動填表</small>
       </button>
     </div>
     <div id="dropzone" class="dropzone">
@@ -330,24 +336,24 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261004-283"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261004-283"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261004-284"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261004-284"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261004-283"></script>
-<script src="assets/js/normalize.js?v=20261004-283"></script>
-<script src="assets/js/holidays.js?v=20261004-283"></script>
-<script src="assets/js/registry.js?v=20261004-283"></script>
-<script src="assets/js/ocr.js?v=20261004-283"></script>
-<script src="assets/js/rules.js?v=20261004-283"></script>
-<script src="assets/js/store.js?v=20261004-283"></script>
-<script src="assets/js/sync.js?v=20261004-283"></script>
-<script src="assets/js/leads.js?v=20261004-283"></script>
-<script src="assets/js/chattel.js?v=20261004-283"></script>
-<script src="assets/js/listed.js?v=20261004-283"></script>
-<script src="assets/js/biz.js?v=20261004-283"></script>
-<script src="assets/js/trade.js?v=20261004-283"></script>
-<script src="assets/js/nhi.js?v=20261004-283"></script>
-<script src="assets/js/einv.js?v=20261004-283"></script>
-<script src="assets/js/app.js?v=20261004-283"></script>
+<script src="assets/js/pdf-table.js?v=20261004-284"></script>
+<script src="assets/js/normalize.js?v=20261004-284"></script>
+<script src="assets/js/holidays.js?v=20261004-284"></script>
+<script src="assets/js/registry.js?v=20261004-284"></script>
+<script src="assets/js/ocr.js?v=20261004-284"></script>
+<script src="assets/js/rules.js?v=20261004-284"></script>
+<script src="assets/js/store.js?v=20261004-284"></script>
+<script src="assets/js/sync.js?v=20261004-284"></script>
+<script src="assets/js/leads.js?v=20261004-284"></script>
+<script src="assets/js/chattel.js?v=20261004-284"></script>
+<script src="assets/js/listed.js?v=20261004-284"></script>
+<script src="assets/js/biz.js?v=20261004-284"></script>
+<script src="assets/js/trade.js?v=20261004-284"></script>
+<script src="assets/js/nhi.js?v=20261004-284"></script>
+<script src="assets/js/einv.js?v=20261004-284"></script>
+<script src="assets/js/app.js?v=20261004-284"></script>
 </body>
 </html>
