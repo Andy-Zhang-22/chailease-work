@@ -19,6 +19,10 @@ const SEED=[{id:'D1',source:'名單.pdf',company:'甲工程有限公司',aliases
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
  pg.on('dialog',d=>d.accept());
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
+ // 其他沒特別指定的政府資料集一律回空（先註冊，下面指定的會蓋過它）：以前沒擋的那幾支會真的連到政府網站，
+ // CI 上偶爾慢，2.5 秒內等不到結果就失敗（這支測試在 CI 偶發失敗的原因）
+ await pg.route('**/data.gcis.nat.gov.tw/**',(r)=>r.fulfill({status:200,contentType:'application/json;charset=UTF-8',body:''}));
+ await pg.route('**/company.g0v.ronny.tw/**',(r)=>r.fulfill({status:200,contentType:'application/json',body:'{}'}));
  // 內建的兩個資料集：一律回空的 JSON，重現「政府換了編號」的症狀
  await pg.route('**/data.gcis.nat.gov.tw/od/data/api/5F64D864**',(r)=>
    r.fulfill({status:200,contentType:'application/json;charset=UTF-8',body:''}));
@@ -39,15 +43,17 @@ const SEED=[{id:'D1',source:'名單.pdf',company:'甲工程有限公司',aliases
  chk(/5F64D864/.test(await pg.locator('#datasetUrl').getAttribute('placeholder')||'')&&/7E6AFA72/.test(await pg.locator('#datasetTaxUrl').getAttribute('placeholder')||''), '兩個資料集欄位的提示文字是內建的那組');
 
  // 內建的都回空 → 連台積電都查不到 → 指出整條路不通
- await pg.click('button:has-text("先試一筆")'); await pg.waitForTimeout(2500);
+ await pg.click('button:has-text("先試一筆")');
+ await pg.waitForFunction(()=>{const e=document.querySelector('#editorBody .rule-result:not(.proxy-diag)');return e&&/連台積電都查不到|路是通的/.test(e.textContent);},null,{timeout:20000}).catch(()=>{});
  let res=(await pg.textContent('#editorBody .rule-result:not(.proxy-diag)')).replace(/\s+/g,' ');
- chk(/連台積電都查不到/.test(res), '內建的都回空時，指出整條路不通');
+ chk(/連台積電都查不到/.test(res), `內建的都回空時，指出整條路不通：${res.slice(0,300)}`);
 
  // 填入新的統編資料集網址 → 應該查得到（這家有統編，走統編資料集）
  await pg.locator('#datasetTaxUrl').fill('https://data.gcis.nat.gov.tw/od/data/api/CORRECT-ID?$format=json&$top=1');
  await pg.dispatchEvent('#datasetTaxUrl','change');
  // 第一次的結果把面板撐長，Playwright 的座標點擊會落空；直接派事件
- await pg.locator('#editorBody button', {hasText:'先試一筆'}).dispatchEvent('click'); await pg.waitForTimeout(2500);
+ await pg.locator('#editorBody button', {hasText:'先試一筆'}).dispatchEvent('click');
+ await pg.waitForFunction(()=>{const e=document.querySelector('#editorBody .rule-result:not(.proxy-diag)');return e&&/查詢成功/.test(e.textContent);},null,{timeout:20000}).catch(()=>{});
  res=(await pg.textContent('#editorBody .rule-result:not(.proxy-diag)')).replace(/\s+/g,' ');
  chk(/查詢成功/.test(res), '換成正確的資料集網址後查得到');
  chk(/幸福東路79號4樓/.test(res), '查回來的地址正確');
