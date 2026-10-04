@@ -1110,3 +1110,12 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .chattel-cases-head { font-size: 12.5px; margin-bottom: 2px; }
 .chattel-cases .chattel-table tr.is-self td { font-weight: 600; }
 .chattel-cases .chattel-table tr.is-soon td { color: var(--warn); }
+/* 重新聯絡的時機：🔁 換約時機、📈 有新變化 */
+.opp-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.opp-bar .opp-label { color: var(--muted); }
+.opp-bar .opp-btn.is-on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.badge-opp { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--text); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); }
+/* 讓分身整理：貼回來的框 */
+.tidy-row { margin: 4px 0; }
+.tidy-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 8px; margin: 6px 0; }
+.tidy-box .tidy-paste { width: 100%; box-sizing: border-box; }

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-283';
+  const APP_VERSION = '20261004-284';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -78,7 +78,7 @@
     hideBlocked: true,
     // 隱藏「中租往來」（使用者：「請幫我像隱藏禁止推廣一樣，隱藏中租往來的客戶」）：預設勾、每台記自己的（hide-dealing＝'0' 是取消）
     hideDealing: (() => { try { return localStorage.getItem('hide-dealing') !== '0'; } catch (e) { return true; } })(),
-    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), industry: '' },
+    filters: { due: '', dueFrom: '', dueTo: '', dueNone: false, source: new Set(), outcome: new Set(), city: new Set(), scale: new Set(), territory: new Set(), relation: new Set(), visit: new Set(), chance: new Set(), taxKind: new Set(), phoneKind: new Set(), regChange: new Set(), chattel: new Set(), branch: new Set(), added: new Set(), cold: new Set(), opp: new Set(), industry: '' },
   };
 
   /* ---------------- 工具 ---------------- */
@@ -462,8 +462,38 @@
     bar.hidden = false;
   }
 
+  /*
+   * 重新聯絡的時機：🔁 換約時機、📈 有新變化（定義見 oppOf）。按一下把名單篩成那幾家，再按一次取消。
+   * 打過（30 天內聯絡過）或排了 7 天內的下次聯絡日就自動不列了，不用另外按掉。
+   */
+  function renderOppBar() {
+    const bar = $('#oppBar');
+    if (!bar) return;
+    bar.textContent = '';
+    const views = allViews();
+    const btns = OPP_ORDER.map((k) => {
+      const who = views.filter((v) => (v.opp || []).includes(k));
+      if (!who.length) return null;
+      const on = state.filters.opp.has(k);
+      const b = el('button', { className: `btn btn-tiny opp-btn${on ? ' is-on' : ''}`, type: 'button', 'data-opp': k,
+        textContent: `${k === 'renew' ? '🔁 換約時機' : '📈 有新變化'} ${who.length} 家${on ? '（看全部）' : ''}`,
+        title: who.slice(0, 12).map((v) => `${v.company}：${oppText(v, k)}`).join('\n') + (who.length > 12 ? `\n…還有 ${who.length - 12} 家` : '') });
+      b.onclick = () => {
+        state.filters.opp.clear();
+        if (!on) { state.filters.opp.add(k); applyDueQuick(''); }
+        state.limit = PAGE_SIZE;
+        render();
+      };
+      return b;
+    }).filter(Boolean);
+    bar.hidden = !btns.length;
+    if (!btns.length) return;
+    bar.append(el('span', { className: 'opp-label', textContent: '重新聯絡的時機' }), ...btns);
+  }
+
   function renderRemindBar() {
     renderFeedBar();
+    renderOppBar();
     const bar = $('#remindBar');
     if (!bar) return;
     const items = remindItems();
@@ -2294,8 +2324,50 @@
       return v;
     });
     linkGroupDates(viewsCache);
+    viewsCache.forEach((v) => { v.opp = oppOf(v); });
     viewsKey = key;
     return viewsCache;
+  }
+
+  /*
+   * 重新聯絡的時機（提醒列下面那條「🔁 換約時機」「📈 有新變化」、篩選「重新聯絡的時機」）。
+   *
+   * 換約時機：名單裡已經有的客戶，跟同業（租賃／融資，不是銀行、不是中租）的動保 3 個月內到期，
+   *   而且 30 天內沒聯絡過——到期前是換約時機，這週該打。
+   * 有新變化：標了無機會、或 90 天以上沒聯絡的，之後商工登記又有增資、遷址、換負責人等變更
+   *   （120 天內、而且是在上次聯絡／標無機會之後）——當初沒機會，現在情況不一樣了。
+   * 禁止推廣的不算；7 天內本來就排了下次聯絡日的也不算（已經在行程上了）。
+   */
+  const OPP_LABEL = { renew: '🔁 換約時機（同業動保 3 個月內到期）', fresh: '📈 有新變化（無機會／久沒聯絡後又變更登記）' };
+  const OPP_ORDER = ['renew', 'fresh'];
+  const OPP_REG_KINDS = ['capitalUp', 'address', 'owner', 'other'];
+  function oppOf(r) {
+    if (r.blocked) return [];
+    const today = todayISO();
+    if (r.nextDate && r.nextDate >= today && dayDiff(r.nextDate) <= 7) return [];
+    if (r.nextDate && r.nextDate < today) return [];   // 逾期的本來就在待打清單上
+    const out = [];
+    const sinceLast = r.lastDate ? -dayDiff(r.lastDate) : Infinity;
+    const peer = (r.chattel || []).find((c) => c.days != null && c.days >= 0 && c.days <= 92 && window.Chattel && window.Chattel.isPeerCase(c));
+    if (peer && sinceLast >= 30) { out.push('renew'); r.oppRenew = peer; }
+    const chanceNo = r.chance === 'no';
+    const stale = r.outcome !== 'new' && sinceLast >= 90;
+    if (chanceNo || stale) {
+      const ref = [chanceNo && r.chanceAt ? isoOfMs(r.chanceAt) : '', r.lastDate || ''].filter(Boolean).sort().pop() || '';
+      const ch = (r.regChanges || []).find((c) => c.date && (!ref || c.date > ref) && -dayDiff(c.date) <= 120
+        && (c.kinds || []).some((k) => OPP_REG_KINDS.includes(k)));
+      if (ch) { out.push('fresh'); r.oppFresh = ch; }
+    }
+    return out;
+  }
+  /** 卡片、提醒列上的一句話：「新鑫 2026/12 到期」「增資 9/16」 */
+  function oppText(r, kind) {
+    if (kind === 'renew' && r.oppRenew) return `${window.Chattel.lenderShort(r.oppRenew.lender.name)} ${String(r.oppRenew.end || '').slice(0, 7)} 到期`;
+    if (kind === 'fresh' && r.oppFresh) {
+      const k = (r.oppFresh.kinds || []).filter((x) => OPP_REG_KINDS.includes(x)).map((x) => REG_KIND_LABEL[x]).join('、');
+      return `${k} ${regKindDateLabel(r.oppFresh.date)}`;
+    }
+    return '';
   }
 
   /*
@@ -3355,10 +3427,95 @@
     const body = [...d.reached, ...d.blocked].map((c) => {
       const v = c.v;
       const info = [v.founded ? `成立 ${v.founded}` : '', v.capital ? `資本額 ${v.capital} 仟元` : '', v.industry || ''].filter(Boolean).join('、');
-      return [`■ ${v.company}（${OUT[c.outcome] || c.outcome}${info ? `；${info}` : ''}）`, ...c.texts.map((x) => `  ${x.replace(/\n/g, ' ')}`)].join('\n');
+      return [`■ ${v.company}（${OUT[c.outcome] || c.outcome}${info ? `；${info}` : ''}）`, ...c.texts.map((x) => `  ${maskPhones(x).replace(/\n/g, ' ')}`)].join('\n');
     });
     if (d.missed.length) body.push(`■ 未接：${d.missed.map((c) => c.v.company).join('、')}`);
-    return [...head, ...body].join('\n');
+    return [...head, ...body, '', '（訪談內容裡的電話號碼已遮掉）'].join('\n');
+  }
+
+  /* ---------------- 每週覆盤 ---------------- */
+
+  /*
+   * 使用者：「都做」（每週覆盤交給分身）。一週（週一到週日）的數字：每天打幾通、聯絡幾家、接通幾家；
+   * 整週接通率、新標有機會、約到拜訪、禁止推廣；各來源與每日新名單各訊號的成效（聯絡幾家、接通幾家、有機會幾家）；
+   * 跟上一週比。數字照紀錄算，「交給分身」把數字＋每家接通的重點交給分身看趨勢、給下週的建議。
+   */
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+  function weeklyReview(anyDay) {
+    const [from, to] = weekOf(anyDay || todayISO(), 0);
+    const days = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) days.push(dailyReview(d));
+    const seen = new Map();   // 這週聯絡過的每家：最後一次的結果、有沒有接通、重點
+    days.forEach((d) => d.companies.forEach((c) => {
+      const prev = seen.get(c.v.id);
+      seen.set(c.v.id, { v: c.v, reached: (prev && prev.reached) || c.reached, outcome: c.outcome, points: [prev && prev.points, c.points].filter(Boolean).join('；') });
+    }));
+    const all = [...seen.values()];
+    const groupBy = (keyOf) => {
+      const m = new Map();
+      all.forEach((c) => (keyOf(c.v) || []).forEach((k) => {
+        if (!m.has(k)) m.set(k, { n: 0, reached: 0, chance: 0 });
+        const t = m.get(k); t.n += 1; if (c.reached && c.outcome !== 'blocked') t.reached += 1; if (c.v.chance === 'yes') t.chance += 1;
+      }));
+      return [...m.entries()].sort((a, b) => b[1].n - a[1].n);
+    };
+    const signalsOf = (v) => {
+      const m = String(v.notesRaw || '').match(/每日新名單，符合：([^；\n]+)/);
+      return m ? m[1].split('、').map((x) => x.trim().replace(/（[^）]*）$/, '')).filter(Boolean) : [];
+    };
+    const sum = (k) => days.reduce((a, d) => a + (Array.isArray(d[k]) ? d[k].length : d[k]), 0);
+    return {
+      from, to, days, companies: all,
+      calls: sum('calls'),
+      reached: all.filter((c) => c.reached && c.outcome !== 'blocked'),
+      missed: all.filter((c) => !c.reached),
+      blocked: all.filter((c) => c.outcome === 'blocked'),
+      chance: sum('chance'), meetings: sum('meetings'), added: sum('added'),
+      bySource: groupBy((v) => [freshOrigin(v) || '自己的名單']),
+      bySignal: groupBy(signalsOf),
+    };
+  }
+  window.weeklyReview = (day) => { const w = weeklyReview(day); return { from: w.from, to: w.to, calls: w.calls, companies: w.companies.length, reached: w.reached.length, missed: w.missed.length, blocked: w.blocked.length, chance: w.chance, meetings: w.meetings, bySource: Object.fromEntries(w.bySource), bySignal: Object.fromEntries(w.bySignal), perDay: w.days.map((d) => d.calls) }; };   // 測試用
+  const weekRange = (w) => `${dateLabel(w.from).slice(5)}～${dateLabel(w.to).slice(5)}`;
+  function weeklyLines(w, prev) {
+    const rate = pct(w.reached.length, w.companies.length);
+    const out = [`📊 ${dateLabel(w.from)}～${dateLabel(w.to).slice(5)} 每週覆盤`,
+      `打了 ${w.calls} 通、聯絡 ${w.companies.length} 家：接通 ${w.reached.length}（${rate}）、未接 ${w.missed.length}、禁止推廣 ${w.blocked.length}`,
+      `新標有機會 ${w.chance} 家、約到拜訪 ${w.meetings} 家、加進名單 ${w.added} 家`];
+    if (prev) out.push(`上週（${weekRange(prev)}）：打了 ${prev.calls} 通、聯絡 ${prev.companies.length} 家、接通 ${prev.reached.length}（${pct(prev.reached.length, prev.companies.length)}）、有機會 ${prev.chance}、拜訪 ${prev.meetings}`);
+    out.push('', '每天：' + w.days.map((d) => `${'一二三四五六日'[(new Date(`${d.day}T00:00:00`).getDay() + 6) % 7]} ${d.calls}`).join('　'));
+    const table = (title, rows) => { if (!rows.length) return; out.push('', title); rows.forEach(([k, t]) => out.push(`・${k}：聯絡 ${t.n}、接通 ${t.reached}（${pct(t.reached, t.n)}）、有機會 ${t.chance}`)); };
+    table('各來源', w.bySource);
+    table('每日新名單各訊號', w.bySignal);
+    return out;
+  }
+  function weeklyPrompt(w, prev) {
+    const body = w.reached.map((c) => `■ ${c.v.company}：${maskPhones(c.points || '（沒寫內容）')}`);
+    return ['請照專案說明，幫我做這週的覆盤：', '1. 三、四句話總結這週（跟上週比）', '2. 哪個來源、哪種訊號的名單比較打得出東西，下週名單要怎麼調',
+      '3. 列出下週要追的事（哪家、什麼時候、做什麼）', '4. 下週的目標建議（通數、接通、拜訪）', '',
+      ...weeklyLines(w, prev), '', '【這週接通的客戶重點】', ...(body.length ? body : ['（沒有接通的）']), '', '（電話、負責人、KEYMAN 沒有附上；內容裡的電話號碼已遮掉）'].join('\n');
+  }
+  function openWeeklyReview(anyDay) {
+    const host = $('#editorBody');
+    const draw = (day) => {
+      const w = weeklyReview(day);
+      const prev = weeklyReview(addDays(w.from, -7));
+      host.textContent = '';
+      const back = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '◀ 上一週', onclick: () => draw(addDays(w.from, -7)) });
+      const fwd = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '下一週 ▶', disabled: w.to >= todayISO(), onclick: () => draw(addDays(w.from, 7)) });
+      host.append(el('h2', { textContent: '📊 每週覆盤' }), el('div', { className: 'card-actions' }, [back, el('strong', { textContent: weekRange(w) }), fwd]));
+      const box = el('div', { className: 'review weekly' });
+      weeklyLines(w, prev).slice(1).forEach((line) => box.append(line ? el('p', { textContent: line }) : el('hr')));
+      if (!w.companies.length) box.append(el('p', { className: 'muted', textContent: '這週沒有通話紀錄。' }));
+      host.append(box);
+      const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(weeklyLines(w, prev).join('\n')); toast('每週覆盤已複製'); } });
+      const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '交給分身', title: '把這週的數字和接通客戶的重點交給分身，看趨勢、給下週建議（不附電話）',
+        onclick: () => sendToTwin(weeklyPrompt(w, prev), '這週的數字') });
+      host.append(el('div', { className: 'card-actions' }, [copy, w.companies.length ? ask : '']));
+      host.append(el('p', { className: 'muted', textContent: '接通率＝接通的家數／聯絡的家數（同一家打好幾通算一家）。「各訊號」是每日新名單挑進來時符合的條件，一家可能算在好幾條裡。' }));
+    };
+    draw(anyDay || todayISO());
+    $('#editor').hidden = false;
   }
   /* ---------------- Claude 分身 ---------------- */
 
@@ -3489,11 +3646,86 @@
     window.open(twinUrl() || CLAUDE_NEW, '_blank', 'noopener');
     toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
   }
+  /*
+   * 拜訪準備問分身、追蹤訊息草稿（使用者：「都做」）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
+   */
+  const twinAsk = (r, ask) => [ask, ...twinPrompt(r).split('\n').slice(1)].join('\n');
+  const visitPrompt = (r) => twinAsk(r, '請照專案說明，我要去拜訪這家，幫我準備：1. 這次要談的重點（兩三點）2. 對方可能的需求與我可以提的方案（週轉金、投資額度、設備）3. 要先準備的資料 4. 要問老闆的問題（五題內）5. 可能遇到的拒絕與一兩句應對。簡短、條列。');
+  const MSG_KINDS = [
+    ['thanks', '打完電話道謝', '剛跟對方通完電話，傳一則道謝＋重點確認，順便留下聯絡方式的訊息'],
+    ['confirm', '確認拜訪時間', '已經約好拜訪，傳一則確認時間地點的訊息'],
+    ['after', '寄資料後追蹤', '前幾天寄了資料／報價給對方，傳一則追蹤對方看過沒、有沒有問題的訊息'],
+    ['missed', '沒接到電話', '剛打電話沒人接，傳一則簡短自我介紹、請對方方便時回電的訊息'],
+  ];
+  const msgPrompt = (r, kind) => {
+    const k = MSG_KINDS.find((x) => x[0] === kind) || MSG_KINDS[0];
+    return twinAsk(r, `請照專案說明，幫我寫一則傳給這家窗口的 LINE／簡訊：${k[2]}。根據下面的紀錄抓一個具體的點，80 字內，口語、客氣但不油，不要用表情符號；稱呼和我的名字用「○○」代替，我自己改。給兩個版本：LINE 版、簡訊版。`);
+  };
+  function openMsgDraft(r) {
+    if (!isPhone() && !twinUrl()) { openTwinSetup(() => openMsgDraft(r)); return; }
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: `✉️ 追蹤訊息草稿：${r.company}` }),
+      el('p', { className: 'muted', textContent: '選一個情境，分身照這家的紀錄寫 LINE 版和簡訊版，你改一下稱呼再傳。不帶電話、負責人、KEYMAN 欄位。' }));
+    host.append(el('div', { className: 'card-actions msg-kinds' }, MSG_KINDS.map(([key, label]) => el('button', { className: 'btn', type: 'button', textContent: label, 'data-kind': key,
+      onclick: () => { sendToTwin(msgPrompt(r, key), '這家的資料'); $('#editor').hidden = true; } }))));
+    $('#editor').hidden = false;
+  }
+  window.visitPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? visitPrompt(v) : ''; };   // 測試用
+  window.msgPrompt = (id, kind) => { const v = allViews().find((x) => x.id === id); return v ? msgPrompt(v, kind) : ''; };   // 測試用
   async function askTwin(r) {
     // 手機用不到專案網址；電腦沒設網址才先跳設定
     if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
     sendToTwin(twinPrompt(r), '這家的資料');
   }
+  /*
+   * 打完電話讓分身整理（使用者：「都做」）：記錄這通電話的筆記亂打就好，按「🤖 讓分身整理」交給分身，
+   * 分身照固定格式回「結果／結論／下一步／下次聯絡」，整段貼回來按「填進表單」，內容、結果、下次聯絡日自動填好，
+   * 使用者看過再按「儲存紀錄」（不自動存：分身寫的不一定對）。
+   */
+  const WEEK_ZH = '日一二三四五六';
+  function tidyPrompt(r, memo) {
+    const t = todayISO();
+    const d = new Date(`${t}T00:00:00`);
+    const before = maskPhones(notesBundle(r).text).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3)
+      .map((x) => (x.length > 200 ? `${x.slice(0, 200)}…` : x));
+    return [`請照專案說明，把我剛打完的這通電話筆記整理好。今天是 ${t.replace(/-/g, '/')}（週${WEEK_ZH[d.getDay()]}），筆記裡的「下週三」「月底」請換算成日期。`,
+      '回覆格式要固定（我會整段貼回系統自動填進表單），只要這四行，不要加其他段落：',
+      '結果：接通／未接／禁止推廣（三選一）', '結論：一兩句，對方的狀況、金額、時間點、態度', '下一步：我接下來要做什麼', '下次聯絡：YYYY/MM/DD（建議哪天再打；沒必要就寫「不用」）', '',
+      `【公司】${r.company}`, before.length ? `【之前的紀錄（新到舊）】\n${before.join('\n')}` : '【之前的紀錄】還沒有', '',
+      '【這通的筆記】', maskPhones(memo).trim(), '', '（電話、負責人、KEYMAN 欄位沒有附上；筆記裡的電話號碼已遮掉）'].join('\n');
+  }
+  /** 分身回的「結果／結論／下一步／下次聯絡」→ { outcome, text, nextDate }；認不出來的欄位是空的 */
+  function parseTidy(reply, today) {
+    const lines = String(reply || '').replace(/\r/g, '').split('\n').map((x) => x.replace(/^[\s*＊#>-]+/, '').replace(/[*＊]+/g, '').trim());
+    const field = (label) => {
+      const at = lines.findIndex((l) => new RegExp(`^${label}\\s*[:：]`).test(l));
+      if (at < 0) return '';
+      const out = [lines[at].replace(new RegExp(`^${label}\\s*[:：]\\s*`), '')];
+      for (let k = at + 1; k < lines.length && lines[k] && !/^(結果|結論|下一步|下次聯絡)\s*[:：]/.test(lines[k]); k += 1) out.push(lines[k]);
+      return out.join('\n').trim();
+    };
+    const res = field('結果');
+    const outcome = /禁止|不要再|拒絕推廣/.test(res) ? 'blocked' : /未接|沒接|無人接/.test(res) ? 'noanswer' : /接通|談|聊/.test(res) ? 'contacted' : '';
+    const sum = field('結論');
+    const step = field('下一步');
+    const when = field('下次聯絡');
+    let nextDate = '';
+    const full = when.match(/(\d{4})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})/);
+    const short = !full && when.match(/(\d{1,2})\s*[/月]\s*(\d{1,2})/);
+    const pad = (n) => String(n).padStart(2, '0');
+    if (full) nextDate = `${full[1]}-${pad(full[2])}-${pad(full[3])}`;
+    else if (short) {
+      const y = Number(today.slice(0, 4));
+      nextDate = `${y}-${pad(short[1])}-${pad(short[2])}`;
+      if (nextDate < today) nextDate = `${y + 1}-${pad(short[1])}-${pad(short[2])}`;
+    }
+    const text = [sum, step ? `下一步：${step}` : ''].filter(Boolean).join('\n');
+    return { outcome, text, nextDate };
+  }
+  window.parseTidy = (reply, today) => parseTidy(reply, today || todayISO());   // 測試用
+  window.tidyPrompt = (id, memo) => { const v = allViews().find((x) => x.id === id); return v ? tidyPrompt(v, memo) : ''; };   // 測試用
+
   /* ---------------- 今日撥打戰略（分身排順序、寫開場白） ---------------- */
 
   /*
@@ -3681,6 +3913,7 @@
     branch: (r) => r.branchKey,
     added: (r) => r.addedBucket,
     cold: (r) => (r.cold ? 'cold' : 'ok'),
+    opp: (r) => r.opp,
   };
   const facetHas = (set, value) => (Array.isArray(value) ? value.some((v) => set.has(v)) : set.has(value));
   const dealingDue = (r) => { const t = todayISO(); return !!r.nextDate && r.nextDate <= t && r.dueDoneOn !== t; };
@@ -3938,6 +4171,10 @@
     const coldCounts = [['cold', 0], ['ok', 0]];
     all.forEach((r) => { coldCounts[r.cold ? 0 : 1][1] += 1; });
     chips($('#fltCold'), 'cold', coldCounts, state.filters.cold, (v) => (v === 'cold' ? '冷名單（未接太多次）' : '正常'));
+    // 重新聯絡的時機：固定兩顆含 0 筆；一家可能兩顆都算
+    const oppCounts = new Map(OPP_ORDER.map((k) => [k, 0]));
+    all.forEach((r) => { (r.opp || []).forEach((k) => oppCounts.set(k, (oppCounts.get(k) || 0) + 1)); });
+    chips($('#fltOpp'), 'opp', OPP_ORDER.map((k) => [k, oppCounts.get(k)]), state.filters.opp, (v) => OPP_LABEL[v]);
 
     // 統編：固定「有統編 → 無統編」兩顆，含 0 筆
     const taxCounts = [['yes', 0], ['no', 0]];
@@ -4204,6 +4441,8 @@
       r.regChange && r.regKinds[0] !== 'none' && r.regKinds[0] !== 'unchecked'
         ? el('span', { className: 'badge badge-regchange', textContent: regBadgeText(r), title: regChangeBrief(r) }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
+      (r.opp || []).includes('renew') ? el('span', { className: 'badge badge-opp', textContent: '🔁 換約時機', title: `跟同業的動保 ${oppText(r, 'renew')}，30 天內沒聯絡過` }) : '',
+      (r.opp || []).includes('fresh') ? el('span', { className: 'badge badge-opp', textContent: `📈 ${oppText(r, 'fresh')}`, title: r.chance === 'no' ? '標了無機會之後，商工登記又有變更' : '很久沒聯絡，這段時間商工登記有變更' }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
@@ -4415,6 +4654,8 @@
     const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
     const byOrigin = new Map(FUNNEL_ORIGINS.map((k) => [k, blank()]));
     const byRule = new Map();   // 「動產擔保｜成立 5 年內」→ 統計
+    const bySignal = new Map();   // 「本期增資」→ 統計（不分來源）
+    const bySigCount = new Map(['3 個以上', '2 個', '1 個', '沒有（補位）'].map((k) => [k, blank()]));
     const add = (t, v) => {
       t.n += 1;
       const called = v.blocked || (v.outcome && v.outcome !== 'new');
@@ -4434,12 +4675,22 @@
         if (!byRule.has(k)) byRule.set(k, blank());
         add(byRule.get(k), v);
       });
+      /*
+       * 訊號成效（使用者：「都做」）：五頁揉在一起之後，同一個訊號（增資、跟同業借、剛開始請人…）不分來源一起算；
+       * 再看「同時有幾個訊號」——兩個以上的是不是真的比較打得出東西，挑名單的加總算分才有根據。
+       */
+      if (/每日新名單，/.test(String(v.notesRaw || ''))) {
+        const sigs = m ? [...new Set(m[1].split('、').map((x) => x.trim().replace(/（[^）]*）$/, '')).filter(Boolean))] : [];
+        sigs.forEach((sg) => { if (!bySignal.has(sg)) bySignal.set(sg, blank()); add(bySignal.get(sg), v); });
+        const c = sigs.length >= 3 ? '3 個以上' : sigs.length === 2 ? '2 個' : sigs.length === 1 ? '1 個' : '沒有（補位）';
+        add(bySigCount.get(c), v);
+      }
     });
-    return { byOrigin, byRule };
+    return { byOrigin, byRule, bySignal, bySigCount };
   }
-  window.funnelStats = (views) => { const f = funnelStats(views || allViews()); return { byOrigin: Object.fromEntries(f.byOrigin), byRule: Object.fromEntries(f.byRule) }; };   // 測試用
+  window.funnelStats = (views) => { const f = funnelStats(views || allViews()); return { byOrigin: Object.fromEntries(f.byOrigin), byRule: Object.fromEntries(f.byRule), bySignal: Object.fromEntries(f.bySignal), bySigCount: Object.fromEntries(f.bySigCount) }; };   // 測試用
   function funnelSection(views) {
-    const { byOrigin, byRule } = funnelStats(views);
+    const { byOrigin, byRule, bySignal, bySigCount } = funnelStats(views);
     const total = [...byOrigin.values()].reduce((a, t) => a + t.n, 0);
     const box = el('div', { className: 'bars funnel' }, [el('h3', { textContent: '新名單成效（每日新名單與三個分頁加進來的）' })]);
     if (!total) { box.append(el('p', { className: 'muted', textContent: '還沒有從動產擔保、登記清冊、商行／企業社、出進口廠商、剛開始請人、剛開電子發票加進來的名單。' })); return box; }
@@ -4456,6 +4707,16 @@
       return t;
     };
     box.append(table([...byOrigin.entries()].filter(([, x]) => x.n), '來源'));
+    // 訊號：不分來源；樣本少的（打過不到 3 家）排後面、標「樣本少」
+    const rate = (x) => (x.called ? x.chance / x.called : -1);
+    const sigRows = [...bySignal.entries()].sort((a, b) => (Number(b[1].called >= 3) - Number(a[1].called >= 3)) || rate(b[1]) - rate(a[1]) || b[1].n - a[1].n)
+      .map(([k, x]) => [x.called >= 3 ? k : `${k}（樣本少）`, x]);
+    if (sigRows.length) {
+      box.append(el('h3', { textContent: '每日新名單：依訊號（不分來源，有機會率高的在前）' }));
+      box.append(table(sigRows, '訊號'));
+      box.append(el('h3', { textContent: '每日新名單：同時有幾個訊號' }));
+      box.append(table([...bySigCount.entries()].filter(([, x]) => x.n), '訊號數'));
+    }
     const rules = [...byRule.entries()].filter(([, x]) => x.called >= 3).sort((a, b) => (b[1].chance / b[1].called) - (a[1].chance / a[1].called) || b[1].called - a[1].called);
     if (rules.length) {
       box.append(el('h3', { textContent: '每日新名單：依符合的優先條件（打過 3 家以上才列，有機會率高的在前）' }));
@@ -4827,10 +5088,98 @@
   }
   window.routeLinks = routeLinks;   // 測試用
 
+  /*
+   * 拜訪路線排順路（使用者：「都做」）。
+   *
+   * 有抵達時間的照時間排在前面（那是跟客戶約好的）；沒時間的從上一站（沒有就從自己的分公司）開始，
+   * 每次挑最近的下一家（最近鄰居法，十家以內夠用）。距離用座標：有 Google 地圖金鑰、按過「用地圖座標排」的用門牌座標
+   * （存在這台裝置 30 天，Google 規定座標快取不能超過 30 天），沒有就用行政區的中心點——同一區的照路名、門牌排在一起。
+   */
+  const DIST_XY = {
+    '臺北市中正區': [25.032, 121.519], '臺北市大同區': [25.063, 121.513], '臺北市中山區': [25.069, 121.538], '臺北市松山區': [25.050, 121.558],
+    '臺北市大安區': [25.026, 121.543], '臺北市萬華區': [25.028, 121.497], '臺北市信義區': [25.031, 121.571], '臺北市士林區': [25.093, 121.525],
+    '臺北市北投區': [25.132, 121.501], '臺北市內湖區': [25.069, 121.589], '臺北市南港區': [25.055, 121.607], '臺北市文山區': [24.989, 121.570],
+    '新北市板橋區': [25.011, 121.459], '新北市三重區': [25.062, 121.488], '新北市中和區': [24.999, 121.499], '新北市永和區': [25.008, 121.516],
+    '新北市新莊區': [25.036, 121.450], '新北市新店區': [24.968, 121.541], '新北市樹林區': [24.991, 121.420], '新北市鶯歌區': [24.955, 121.354],
+    '新北市三峽區': [24.934, 121.369], '新北市淡水區': [25.169, 121.441], '新北市汐止區': [25.068, 121.661], '新北市瑞芳區': [25.109, 121.810],
+    '新北市土城區': [24.972, 121.444], '新北市蘆洲區': [25.085, 121.474], '新北市五股區': [25.083, 121.438], '新北市泰山區': [25.059, 121.431],
+    '新北市林口區': [25.077, 121.392], '新北市深坑區': [25.002, 121.616], '新北市石碇區': [24.991, 121.659], '新北市坪林區': [24.937, 121.711],
+    '新北市三芝區': [25.258, 121.501], '新北市石門區': [25.290, 121.568], '新北市八里區': [25.147, 121.399], '新北市平溪區': [25.026, 121.739],
+    '新北市雙溪區': [25.034, 121.866], '新北市貢寮區': [25.022, 121.909], '新北市金山區': [25.222, 121.637], '新北市萬里區': [25.179, 121.689],
+    '新北市烏來區': [24.865, 121.550],
+  };
+  const GEO_KEY = 'geo:';
+  const GEO_DAYS = 30;
+  const visitAddr = (v) => (v.addressActual || v.address || '');
+  function geoCached(addr) {
+    try {
+      const g = JSON.parse(localStorage.getItem(GEO_KEY + addr) || 'null');
+      if (g && Date.now() - g.at < GEO_DAYS * 864e5) return [g.lat, g.lng];
+    } catch (e) { /* 無痕模式 */ }
+    return null;
+  }
+  function districtXY(v) {
+    const a = window.Normalize.parseAddress(visitAddr(v));
+    const city = String(a.city || v.city || '').replace(/台/g, '臺');
+    const dist = a.district || v.district || '';
+    return DIST_XY[`${city}${dist}`] || Object.entries(DIST_XY).find(([k]) => dist && k.endsWith(dist))?.[1] || null;
+  }
+  const stopXY = (v) => geoCached(visitAddr(v)) || districtXY(v);
+  function homeXY() {
+    const b = String(registryPref('my-branch') || '新莊').replace(/分公司$/, '');
+    return DIST_XY[`新北市${b}區`] || DIST_XY[`臺北市${b}區`] || Object.entries(DIST_XY).find(([k]) => k.includes(b))?.[1] || DIST_XY['新北市新莊區'];
+  }
+  const kmBetween = (a, b) => {
+    const R = 6371; const rad = (d) => (d * Math.PI) / 180;
+    const dLat = rad(b[0] - a[0]); const dLng = rad(b[1] - a[1]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+  /** 拜訪的排法：有時間的照時間在前；沒時間的從上一站開始挑最近的。回傳新順序（不改原陣列） */
+  function routeOrder(items) {
+    const timed = items.filter((x) => x.time);
+    const rest = items.filter((x) => !x.time);
+    let here = timed.length ? stopXY(timed[timed.length - 1].v) : null;
+    here = here || homeXY();
+    const out = [...timed];
+    const pool = rest.map((x) => ({ x, xy: stopXY(x.v) }));
+    while (pool.some((p) => p.xy)) {
+      let best = -1; let bestD = Infinity;
+      pool.forEach((p, i) => { if (!p.xy) return; const d = kmBetween(here, p.xy); if (d < bestD - 1e-9) { bestD = d; best = i; } });
+      const [p] = pool.splice(best, 1);
+      out.push(p.x); here = p.xy;
+    }
+    pool.forEach((p) => out.push(p.x));   // 看不出在哪一區的放最後，照原本的順序
+    return out;
+  }
+  window.routeOrder = (items) => routeOrder(items).map((x) => x.v.company);   // 測試用
+  /** 用 Google 地圖查門牌座標（只查還沒有的）；查到的存 30 天 */
+  async function geocodeStops(vs) {
+    const key = placesKey();
+    let got = 0;
+    for (const v of vs) {
+      const addr = visitAddr(v);
+      if (!addr || geoCached(addr)) continue;
+      const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.location' },
+        body: JSON.stringify({ textQuery: addr, languageCode: 'zh-TW', regionCode: 'TW', pageSize: 1 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}${res.status === 403 || res.status === 400 ? '，多半是金鑰沒開 Places API (New)' : ''}`);
+      const j = await res.json();
+      const loc = j.places && j.places[0] && j.places[0].location;
+      if (loc && loc.latitude) {
+        try { localStorage.setItem(GEO_KEY + addr, JSON.stringify({ lat: loc.latitude, lng: loc.longitude, at: Date.now() })); } catch (e) { /* 無痕模式 */ }
+        got += 1;
+      }
+    }
+    return got;
+  }
+
   function calAgenda(iso, list) {
     const H = window.Holidays;
     const box = el('div', { className: 'cal-agenda' });
-    const planned = list.filter((x) => !x.done);
+    const planned = routeOrder(list.filter((x) => !x.done));
     const done = list.filter((x) => x.done);
     const off = H ? H.holidayName(iso) : '';
     const what = planned.length
@@ -4850,8 +5199,19 @@
     if (routes.length) {
       box.append(el('div', { className: 'cal-route' }, [
         ...routes.map((r) => el('a', { className: 'btn btn-tiny btn-primary', href: r.href, target: '_blank', rel: 'noopener', textContent: r.label, title: '從現在位置出發，照下面的順序一次串好（Google 地圖）' })),
-        planned.length > 1 ? el('span', { className: 'muted', textContent: routes.length > 1 ? '照下面的順序；手機上一段最多 4 家，跑完一段按下一段' : '照下面的順序' } ) : '',
+        planned.length > 1 ? el('span', { className: 'muted', textContent: `${routes.length > 1 ? '照下面的順序；手機上一段最多 4 家，跑完一段按下一段' : '照下面的順序'}（已排順路：有約時間的照時間，其他從${planned.some((x) => x.time) ? '上一站' : '分公司'}挑最近的）` }) : '',
       ]));
+      // 有 Google 地圖金鑰：用門牌座標排得更準（沒查過座標的才查）
+      const missing = planned.filter((x) => visitAddr(x.v) && !geoCached(visitAddr(x.v)));
+      if (planned.length > 2 && placesKey() && missing.length) {
+        const geo = el('button', { className: 'btn btn-tiny cal-geo', type: 'button', textContent: '📍 用地圖座標排', title: `用 Google 地圖查 ${missing.length} 家的門牌座標，排得比只看行政區準（座標存在這台裝置 30 天）` });
+        geo.onclick = async () => {
+          geo.disabled = true; geo.textContent = '查座標中…';
+          try { const n = await geocodeStops(missing.map((x) => x.v)); toast(`查到 ${n} 家的座標，已重排`); } catch (err) { toast(`查不到座標：${err && err.message ? err.message : err}`); }
+          render();
+        };
+        box.lastChild.append(geo);
+      }
     }
     let lastDist = null;
     planned.forEach((x, i) => {
@@ -5027,6 +5387,8 @@
     // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
     const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '問分身', title: '把這家的資料和訪談內容複製起來、打開你的 Claude 分身（不帶電話、負責人、KEYMAN 欄位）' });
     twinBtn.onclick = () => askTwin(r);
+    const msgBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '訊息草稿', title: '請分身寫一則傳給這家的 LINE／簡訊（道謝、確認拜訪、追蹤資料、沒接到電話）' });
+    msgBtn.onclick = () => openMsgDraft(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
     xlsxBtn.onclick = () => exportOneXlsx(r.id);
@@ -5078,6 +5440,7 @@
         dealBtn,
         briefBtn,
         twinBtn,
+        msgBtn,
         xlsxBtn,
         deleteBtn(r),
       ].filter(Boolean)),
@@ -5579,7 +5942,35 @@
       openDetail(r.id);
       scheduleSync();
     };
-    form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
+    // 🤖 讓分身整理：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
+    const tidyBox = el('div', { className: 'tidy-box', hidden: true });
+    {
+      const paste = el('textarea', { className: 'tidy-paste', rows: 4, placeholder: '把分身的回覆整段貼在這裡（結果：…／結論：…／下一步：…／下次聯絡：…）' });
+      const msg = el('p', { className: 'muted tidy-msg', hidden: true });
+      const fill = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '填進表單' });
+      fill.onclick = () => {
+        const got = parseTidy(paste.value, todayISO());
+        if (!got.text && !got.nextDate && !got.outcome) { msg.textContent = '認不出來。請確認貼的是分身照格式回的那段（結果：／結論：／下一步：／下次聯絡：）。'; msg.hidden = false; return; }
+        const raw = memo.value.trim();
+        memo.value = got.text || raw;
+        if (got.outcome) outcomeSel.value = got.outcome;
+        if (got.nextDate) { nextInput.value = got.nextDate; nextInput.dispatchEvent(new Event('change')); }
+        writeDraft();
+        msg.textContent = `已填好${got.nextDate ? `，下次聯絡 ${dateLabel(got.nextDate)}` : ''}。看過沒問題再按「儲存紀錄」。`;
+        msg.hidden = false;
+        paste.value = '';
+        memo.focus();
+      };
+      tidyBox.append(paste, el('div', { className: 'card-actions' }, [fill]), msg);
+    }
+    const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓分身整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
+    tidy.onclick = () => {
+      if (!memo.value.trim()) { toast('先把這通聊了什麼隨手打進去，再交給分身整理'); memo.focus(); return; }
+      if (!isPhone() && !twinUrl()) { openTwinSetup(() => tidy.click()); return; }
+      sendToTwin(tidyPrompt(r, memo.value), '這通的筆記');
+      tidyBox.hidden = false;
+    };
+    form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy]), tidyBox, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
       el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));
@@ -5852,7 +6243,12 @@
       const ok = await copyText(lines.join('\n'));
       toast(ok ? '已複製整頁文字，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
     };
-    actions.append(printBtn, copyBtn);
+    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 問分身怎麼談', title: '把這家的資料交給分身，準備談話重點、方案、要問的問題、拒絕應對（不帶電話、負責人、KEYMAN 欄位）' });
+    twinBtn.onclick = () => {
+      if (!isPhone() && !twinUrl()) { openTwinSetup(() => openVisitBrief(recordId)); return; }
+      sendToTwin(visitPrompt(r), '這家的資料');
+    };
+    actions.append(printBtn, copyBtn, twinBtn);
     if (r.addressActual) {
       actions.append(el('a', {
         className: 'btn btn-tiny', target: '_blank', rel: 'noopener', textContent: '導航到實際地址',
@@ -6396,6 +6792,8 @@
   }
 
   /** 手動新增一筆客戶（例如客戶轉介或名片）。 */
+  const CARD_PROMPT = ['我會附上一張名片的照片，請讀出來，照下面的格式回（我會整段貼回系統自動填表）。只回這幾行，看不到或沒有的欄位寫「無」，不要猜：',
+    '公司名稱：', '統一編號：', '聯絡人：（姓名）', '職稱：', '電話：（公司電話，含分機）', '手機：', '地址：', '產業別：（看名片上的營業項目判斷，一個詞）'].join('\n');
   function openNewCustomer() {
     const host = $('#editorBody');
     host.textContent = '';
@@ -6421,9 +6819,19 @@
     };
     kvBox.oninput = kvRun;
     kvBox.onpaste = () => setTimeout(kvRun, 0);
+    /*
+     * 拍名片給分身讀（使用者：「都做」）：系統讀不了照片（要付費的 API），所以把「照固定格式讀名片」的指示交給分身，
+     * 使用者在 Claude 那邊附上名片照片送出，回覆整段貼回上面的框，欄位自動填好（parseKeyValue 認得聯絡人、職稱、手機）。
+     */
+    const cardBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '📇 拍名片給分身讀', title: '複製讀名片的指示、打開 Claude；你在那邊附上名片照片送出，回覆貼回上面的框' });
+    cardBtn.onclick = () => {
+      if (!isPhone() && !twinUrl()) { openTwinSetup(() => openNewCustomer()); return; }
+      sendToTwin(CARD_PROMPT, '讀名片的指示');
+      kvNote.textContent = '到 Claude 那邊貼上指示、附上名片照片送出；分身回覆後整段複製，貼到上面的框。';
+    };
     host.append(el('label', { className: 'rule-field' }, [
       el('span', { textContent: '貼上公司資料（選填）' }), kvBox,
-    ]), kvNote);
+    ]), el('div', { className: 'card-actions' }, [cardBtn]), kvNote);
     host.append(form.node);
 
     const save = el('button', { className: 'btn btn-primary', type: 'button', textContent: '新增' });
@@ -8331,6 +8739,7 @@ export default {
       if (act === 'backups') { await openBackups(); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'review') { openDailyReview(); return; }
+      if (act === 'weekly') { openWeeklyReview(); return; }
       if (act === 'twin') { openTwinSetup(); return; }
       if (act === 'twin-plan') { openTwinPlan(); return; }
       if (act === 'day-load') { openDayLoad(); return; }

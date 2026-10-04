@@ -35,11 +35,15 @@ const RECS=[
  chk(JSON.stringify(f.byOrigin['登記清冊'])===JSON.stringify({n:2,called:1,reached:1,chance:1,blocked:0}), `登記清冊：${JSON.stringify(f.byOrigin['登記清冊'])}`);
  chk(f.byOrigin['商行／企業社'].n===1 && f.byOrigin['商行／企業社'].called===0, `商行：${JSON.stringify(f.byOrigin['商行／企業社'])}`);
  chk(f.byRule['動產擔保｜成立 5 年內'].n===3 && f.byRule['動產擔保｜成立 5 年內'].called===3 && f.byRule['登記清冊｜增資'].chance===1, `依條件：${JSON.stringify(f.byRule)}`);
+ // 訊號成效：不分來源、同時有幾個訊號（使用者：「都做」）
+ chk(f.bySignal['成立 5 年內'].n===3 && f.bySignal['成立 5 年內'].called===3 && f.bySignal['增資'].chance===1 && f.bySignal['3 個月內到期'].n===1, `依訊號（不分來源）：${JSON.stringify(f.bySignal)}`);
+ chk(f.bySigCount['2 個'].n===3 && f.bySigCount['1 個'].n===2 && f.bySigCount['2 個'].chance===2, `依訊號數：${JSON.stringify(f.bySigCount)}`);
  await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(500);
  const txt=(await pg.innerText('#paneStats .funnel')).replace(/\s+/g,' ');
  chk(/新名單成效/.test(txt) && /動產擔保 4 4（100%） 50% 25% 1/.test(txt) && /登記清冊 2 1（50%） 100% 100% 0/.test(txt), `統計頁表格：${txt.slice(0,260)}`);
  chk(/動產擔保・成立 5 年內/.test(txt), '打過 3 家以上的條件有列出來');
  chk(!/主力客戶/.test(txt), '主力名單不算');
+ chk(/依訊號（不分來源/.test(txt) && /成立 5 年內 3 3（100%）/.test(txt) && /同時有幾個訊號/.test(txt) && /2 個 3 2（67%）/.test(txt), '統計頁有訊號、訊號數兩張表');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'全部通過');
  await br.close(); srv.close();
