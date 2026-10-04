@@ -63,8 +63,8 @@ const SEED=[mk('1','新莊甲','新北市新莊區中正路1號'),mk('5','宜蘭
  // 服務區域那一列只剩「範圍外」會顯示，所以這裡改驗：行銷區域看登記地址（台中），
  // 而實際地址在新莊＝服務範圍內，不會出現範圍外的協銷提醒
  t=await detail('登記在台中實際在新莊'); chk(/行銷區域\s*北台中、南台中分公司共同區/.test(t)&&!/範圍外/.test(t), `行銷區域看登記地址、服務區域看實際地址：${t.match(/行銷區域.{0,50}/)?.[0]}`);
- // 卡片標示與「歸屬分公司」篩選
- const badge=async(name)=>pg.evaluate((n)=>{const c=[...document.querySelectorAll('.card')].find(x=>x.textContent.includes(n)); return c?[...c.querySelectorAll('.badge-branch')].map(b=>b.textContent).join('|'):'';},name);
+ // 歸屬分公司（卡片變短後籤不放卡片了，驗每家算出來的分公司；篩選照舊）
+ const badge=async(name)=>pg.evaluate((n)=>{const v=window.customerViews().find(x=>x.company.includes(n)); return v?(v.branch&&v.branch.kind==='shared'?'全公司共同區域':(v.branchKey||'')):'';},name);
  chk(await badge('新莊甲')==='新莊分公司', `卡片標示分公司：${await badge('新莊甲')}`);
  chk(await badge('淡水乙')==='城北／新莊共同區', `共同區的卡片標示：${await badge('淡水乙')}`);
  chk(await badge('宜蘭戊')==='宜花分公司'&&await badge('花蓮己')==='宜花分公司'&&await badge('台東庚')==='高屏／宜花共同區', `宜蘭、花蓮都只標「宜花分公司」，台東標高屏／宜花共同區：${await badge('宜蘭戊')}｜${await badge('花蓮己')}｜${await badge('台東庚')}`);

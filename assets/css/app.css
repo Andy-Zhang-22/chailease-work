@@ -195,9 +195,21 @@ button, input, select { font: inherit; color: inherit; }
 .card-opener, .detail-opener { margin: 6px 0 0; font-size: 13px; color: var(--primary); line-height: 1.5; }
 .detail-opener { font-size: 14px; margin-top: 8px; }
 .card-notes {
-  margin-top: 8px; font-size: 13px; color: var(--muted);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 6px; font-size: 13px; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* 卡片變短：要注意的籤一行、下次聯絡日＋電話一行 */
+.card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.card-due { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 8px; font-size: 13px; }
+.card-next { color: var(--muted); }
+.card-next.is-overdue { color: var(--danger); font-weight: 600; }
+/* 詳細頁「更多資料」 */
+details.detail-more > summary { cursor: pointer; list-style: none; }
+details.detail-more > summary::-webkit-details-marker { display: none; }
+details.detail-more > summary h3 { display: inline; }
+details.detail-more > summary::before { content: '▸ '; color: var(--muted); }
+details.detail-more[open] > summary::before { content: '▾ '; }
+.detail-more-grid { margin-top: 10px; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
 .badge {

@@ -32,11 +32,11 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1200);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const c1=pg.locator('#paneList .card:has-text("禾泰")');
- const top=(await c1.locator('.card-top').textContent()).replace(/\s+/g,' ');
+ const top=(await c1.locator('.card-tags').textContent()).replace(/\s+/g,' ');
  chk(/動保 新鑫 11\/12 到期/.test(top), `卡片標最近到期的那件：${top}`);
  chk(await c1.locator('.badge-chattel.is-soon').count()===1, '38 天內到期標紅');
- const meta=(await c1.locator('.card-meta').textContent()).replace(/\s+/g,' ');
- chk(/🏦 新鑫 附條件買賣 1,200 萬・還有 38 天（共 3 件）/.test(meta), `卡片內容：${meta}`);
+ const meta=(await c1.locator('.badge-chattel').getAttribute('title'))||'';
+ chk(meta.split('\n').length===3 && /新鑫 附條件買賣 1,200 萬，2023\/10\/15 → 2026\/11\/12（還有 38 天）/.test(meta), `滑過動保籤看到全部 3 件：${meta.replace(/\n/g,' ／ ')}`);
  const c2=pg.locator('#paneList .card:has-text("昱昌")');
  chk(await c2.locator('.badge-chattel').count()===0, '只有過期案件的不標到期');
  // 篩選
@@ -48,6 +48,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  await pg.locator('#fltChattel .chip:has-text("3 個月內到期")').click(); await pg.waitForTimeout(300);
  // 詳細頁
  await pg.locator('#paneList .card:has-text("禾泰")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ await pg.click('#drawerBody details.detail-more > summary'); await pg.waitForTimeout(150);   // 動產擔保收在「更多資料」裡
  const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ');
  chk(/新鑫股份有限公司 附條件買賣 1,200 萬/.test(det) && /2023\/10\/15 → 2026\/11\/12（還有 38 天到期）/.test(det), `詳細頁第一件：${det.slice(0,120)}`);
  chk(/合迪股份有限公司 動產抵押 450 萬/.test(det) && /登記 110新經動字第007355號/.test(det), '第二件也列了');

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-262';
+  const APP_VERSION = '20261003-263';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3723,50 +3723,46 @@
       className: `card${bucket === 'today' ? ' is-due' : ''}${bucket === 'overdue' ? ' is-overdue' : ''}`,
       tabIndex: 0,
     });
+    /*
+     * 卡片變短（使用者：「你能夠幫我把系統畫面簡化嗎」→ 卡片只留重點，「能再多顯示中租往來及變更登記的事項嗎」
+     * 「中租曾往來的不用標，只標有往來的就好」）。四行：
+     *   1. 公司名、狀態、自己標的有機會／無機會（禁止推廣也在這行）
+     *   2. 要注意的事（有才出現）：中租往來、變更登記、動保到期、回撥、固定、冷名單、已拜訪、同老闆幾家
+     *   3. 下次聯絡日（逾期幾天）＋ 一支電話
+     *   4. 最新一句談話（一行）；有增資、剛做進出口這類訊號的，下面再一行開場白（跟以前一樣）
+     * 產業、負責人、地區、資本額、最近聯絡、名單檔名、範疇、分公司都在詳細頁。
+     */
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name', textContent: r.company }),
       outcomeBadge(r),
       r.chance === 'yes' ? el('span', { className: 'badge badge-chance-yes', textContent: '有機會' }) : '',
       r.chance === 'no' ? el('span', { className: 'badge badge-chance-no', textContent: '無機會' }) : '',
-      (r.scale || capitalScale(r)) === '微企範疇' ? el('span', { className: 'badge badge-micro', textContent: '微企範疇' }) : '',
-      (r.scale || capitalScale(r)) === '大企部範疇' ? el('span', { className: 'badge badge-large', textContent: '大企部範疇' }) : '',
+      r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
+    ].filter(Boolean));
+    node.append(top);
+    const tags = [
+      r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.regChange && r.regKinds[0] !== 'none' && r.regKinds[0] !== 'unchecked'
         ? el('span', { className: 'badge badge-regchange', textContent: regBadgeText(r), title: regChangeBrief(r) }) : '',
-      r.branch && r.branch.kind === 'branch' ? el('span', { className: 'badge badge-branch', textContent: r.branchKey, title: r.branch.label }) : '',
-      r.branch && r.branch.kind === 'common' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: r.branchKey, title: r.branch.label }) : '',
-      r.branch && r.branch.kind === 'shared' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: '全公司共同區域' }) : '',
-      // 「優先區域」拿掉：新莊一帶幾乎每筆都是，標了等於沒標，只是讓卡片更擠
-      r.territory === '範圍外' ? el('span', { className: 'badge badge-outside', textContent: '範圍外·需協銷' }) : '',
-      r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
+      r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
-      r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
-      r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
-    ].filter(Boolean));
-    node.append(top);
-
-    const meta = el('div', { className: 'card-meta' });
-    const bits = [
-      r.industry && `🏷 ${r.industry}`,
-      (r.keyman || r.owner) && `👤 ${r.keyman || r.owner}`,
-      (r.city || r.address) && `📍 ${r.city}${r.district}`,
-      r.capital && `💰 ${r.capital} 仟元`,
-      r.chattelNext && `🏦 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${window.Chattel.typeShort(r.chattelNext.type)} ${chattelMoney(r.chattelNext.amount)}・${r.chattelNext.days === 0 ? '今天到期' : `還有 ${r.chattelNext.days} 天`}${r.chattel.length > 1 ? `（共 ${r.chattel.length} 件）` : ''}`,
-      r.nextDate && `📅 下次 ${dateLabel(r.nextDate)}${bucket === 'overdue' ? `（逾期 ${-dayDiff(r.nextDate)} 天）` : ''}`,
-      r.lastDate && `🕘 最近 ${dateLabel(r.lastDate)}`,
-      `📄 ${r.source.replace(/\.pdf$/i, '')}`,
     ].filter(Boolean);
-    bits.forEach((b) => meta.append(el('span', { textContent: b })));
-    node.append(meta);
+    if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
+
+    const row = el('div', { className: 'card-due' });
+    if (r.nextDate) row.append(el('span', { className: `card-next${bucket === 'overdue' ? ' is-overdue' : ''}`, textContent: `📅 下次 ${dateLabel(r.nextDate)}${bucket === 'overdue' ? `（逾期 ${-dayDiff(r.nextDate)} 天）` : ''}` }));
+    else row.append(el('span', { className: 'card-next muted', textContent: '📅 未排定' }));
+    if (r.phones.length) telLinks(r, 1).forEach((a) => row.append(a));
+    node.append(row);
+    if (!r.phones.length && !r.blocked) node.append(phoneSearchRow(r));   // 沒電話的直接在卡片上找、貼
 
     /*
      * 卡片上那一句要是「最新的談話內容」，不管它是檔案帶進來的還是在網站上記的。
-     * 之前只看檔案的訪談內容，在網站上打完電話記的那則永遠上不了卡片，
-     * 使用者看到的一直是匯入時的舊話。兩邊各取最新的一則比日期，同一天算
-     * 網站上記的比較新（它是匯入之後才寫的）。
+     * 兩邊各取最新的一則比日期，同一天算網站上記的比較新（它是匯入之後才寫的）。只顯示一行。
      */
     const fromFile = (r.timeline || [])[0];
     const mine = notesBundle(r).logs[0];
@@ -3775,14 +3771,7 @@
       latest = { text: mine.text || `（${window.Normalize.outcomeLabel(mine.outcome)}）` };
     }
     if (latest) node.append(el('p', { className: 'card-notes', textContent: latest.text }));
-    { const o = openerFor(r); if (o && o.kind !== 'age') node.append(openerNode(r, 'card-opener')); }   // 成立年那種太普遍，卡片上不放
-    if (r.phones.length) {
-      const actions = el('div', { className: 'card-actions' });
-      telLinks(r, 2).forEach((a) => actions.append(a));
-      node.append(actions);
-    } else if (!r.blocked) {
-      node.append(phoneSearchRow(r));   // 沒電話的直接在卡片上找、貼
-    }
+    { const o = openerFor(r); if (o && o.kind !== 'age') node.append(openerNode(r, 'card-opener')); }   // 開場白：有增資、剛做進出口這類訊號才放；成立年那種太普遍，卡片上不放
     node.onclick = () => openDetail(r.id);
     node.onkeydown = (e) => { if (e.key === 'Enter') openDetail(r.id); };
     return node;
@@ -4863,8 +4852,29 @@
       }
       dl.append(dd);
     }
-    // 名單來源不在詳細頁列出（使用者說看起來亂），卡片上仍有、篩選也有
-    body.append(dl);
+    /*
+     * 詳細頁的資料分兩層（使用者：「你能夠幫我把系統畫面簡化嗎」→ 選「資料欄位分兩層」，「成立年不要藏起來，這是我判斷的重要指標」）：
+     * 常看的直接顯示；其他的收進「更多資料 ▸」。卡片上拿掉的名單檔名、產業別也在這裡。
+     */
+    {
+      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      const more = el('dl', { className: 'detail-grid detail-more-grid' });
+      [...dl.children].forEach((node) => {
+        if (node.tagName !== 'DT') return;
+        if (KEEP.has(node.textContent.trim())) return;
+        // 一個 dt 後面可能跟著一個 dd（少數區塊 dd 是後來才 append 的，跟著搬）
+        const dds = [];
+        for (let n = node.nextElementSibling; n && n.tagName === 'DD'; n = n.nextElementSibling) dds.push(n);
+        more.append(node, ...dds);
+      });
+      if (r.source) more.append(el('dt', { textContent: '名單來源' }), el('dd', { textContent: r.source.replace(/\.pdf$/i, '') }));
+      body.append(dl);
+      if (more.childElementCount) {
+        const det = el('details', { className: 'detail-section detail-more' });
+        det.append(el('summary', {}, [el('h3', { textContent: '更多資料（統編、產業、最近異動、動產擔保、變更登記…）' })]), more);
+        body.append(det);
+      }
+    }
     body.append(nearbySection(r));
 
     // 通話紀錄表單
