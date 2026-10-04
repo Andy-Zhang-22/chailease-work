@@ -103,6 +103,9 @@
       if (hist.length) { out.regChanges = hist; [out.regChange] = hist; }
       else { delete out.regChanges; delete out.regChange; }
     }
+    // 分身的撥打戰略：取存的時間比較新的那份（同一天在手機貼、電腦又貼，以後貼的為準）
+    if (((older.twinPlan && older.twinPlan.at) || 0) > ((newer.twinPlan && newer.twinPlan.at) || 0)) out.twinPlan = older.twinPlan;
+    if (!out.twinPlan) delete out.twinPlan;
     // 有機會／無機會：取標記時間比較新的那份（取消標記也算一次）
     if ((older.chanceAt || 0) > (newer.chanceAt || 0)) {
       out.chance = older.chance;
