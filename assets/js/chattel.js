@@ -87,6 +87,17 @@
     if (!e) return null;
     return Math.round((dayStart(e) - dayStart(today || new Date())) / 86400000);
   }
+  /*
+   * 最近買設備（使用者：「幫我整理出最近有買設備的，然後以最近有買設備進來的公司優先提供名單給我，
+   * 並且該分頁排序以契約最新到最舊排序」）：看契約起算多久，3 個月內／6 個月內／1 年內／更早。
+   */
+  const RECENT = [['m3', '3 個月內', 92], ['m6', '6 個月內', 183], ['y1', '1 年內', 366], ['all', '全部', Infinity]];
+  function recentOf(since) {
+    if (since == null) return 'none';
+    return since <= 92 ? 'm3' : since <= 183 ? 'm6' : since <= 366 ? 'y1' : 'old';
+  }
+  const passesRecent = (key, since) => key === 'all' || (since != null && since <= RECENT.find((x) => x[0] === key)[2]);
+  const startKey = (r) => String(r.start || r.approved || '').replace(/\D/g, '').padEnd(8, '0');
   function dueOf(days) {
     if (days == null) return 'none';
     if (days < 0) return 'expired';
@@ -158,6 +169,9 @@
     r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.days = daysLeft(r.end, today);
     r.due = dueOf(r.days);
+    // 最近買設備：契約起（沒有就登記核准日）離今天幾天；還沒到的（未來起算）當 0
+    { const d = daysLeft(r.start || r.approved, today); r.sinceDays = d == null ? null : Math.max(0, -d); }
+    r.recent = recentOf(r.sinceDays);
     r.family = lenderFamily(r.lender.name);
     r.custIsFin = LENDER_RE.test(r.cust.name);
     r.branch = branchOf(r.addr);
@@ -176,7 +190,7 @@
   let showHidden = false;
   // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
   const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
-  const f = { rate: new Set(rateDefault()), due: 'm6', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), phone: new Set(), q: '' };
+  const f = { rate: new Set(rateDefault()), due: 'all', recent: 'all', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), phone: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -213,6 +227,7 @@
   function passes(r, c, except, F = f) {
     const mine = mineOf(r, c.cm);
     return (except === 'due' || passesDue(F.due, r.days))
+      && (except === 'recent' || passesRecent(F.recent || 'all', r.sinceDays))
       && (except === 'lenders' || (F.lenders.size ? F.lenders.has(r.family) : r.family !== 'chailease'))
       && (except === 'types' || !F.types.size || F.types.has(r.type))
       && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
@@ -229,7 +244,8 @@
   function visible(c) {
     const list = rows.filter((r) => passes(r, c, null));
     const sort = $('#chattel-sort').value;
-    list.sort((a, b) => (sort === 'amount' ? b.amount - a.amount
+    list.sort((a, b) => (sort === 'start' ? startKey(b).localeCompare(startKey(a)) || b.amount - a.amount
+      : sort === 'amount' ? b.amount - a.amount
       : sort === 'company' ? a.cust.name.localeCompare(b.cust.name, 'zh-Hant')
         : (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days)));
     return list;
@@ -296,7 +312,7 @@
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card chattel-card${mine ? ' is-mine' : r.days != null && r.days >= 0 && r.days <= 30 ? ' is-overdue' : r.days != null && r.days > 30 && r.days <= 90 ? ' is-due' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [
-      el('div', { className: 'card-top' }, [name, dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
+      el('div', { className: 'card-top' }, [name, (r.recent === 'm3' || r.recent === 'm6') ? el('span', { className: 'badge badge-new', textContent: `🆕 最近買設備 ${ymOf(r.start || r.approved)}`, title: '契約起算 6 個月內' }) : '', dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
         r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.custIsFin ? el('span', { className: 'badge badge-ind', textContent: '客戶那一方也是金融業' }) : '']),
       el('div', { className: 'card-meta' }, [
@@ -363,6 +379,16 @@
   function drawChips(c) {
     const facet = (except, pred) => { let n = 0; rows.forEach((r) => { if (pred(r) && passes(r, c, except)) n += 1; }); return n; };
     chips($('#chattel-fDue'), DUE.map(([k, label]) => [k, label, facet('due', (r) => passesDue(k, r.days))]), null, true);
+    {
+      const host = $('#chattel-fRecent');
+      host.textContent = '';
+      RECENT.forEach(([k, label]) => {
+        const b = el('button', { className: 'chip', type: 'button' }, [document.createTextNode(label), el('small', { textContent: String(facet('recent', (r) => passesRecent(k, r.sinceDays))) })]);
+        b.setAttribute('aria-pressed', String(f.recent === k));
+        b.onclick = () => { f.recent = k; limit = PAGE; render(); };
+        host.append(b);
+      });
+    }
     chips($('#chattel-fLender'), LENDERS.map(([k, label]) => [k, k === 'chailease' ? '中租（自家，預設藏起來）' : label, facet('lenders', (r) => r.family === k)]), f.lenders);
     const types = [...new Set(rows.map((r) => r.type))].sort();
     chips($('#chattel-fType'), types.map((t) => [t, typeShort(t), facet('types', (r) => r.type === t)]), f.types);
@@ -470,7 +496,9 @@
    */
   // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——跟同業（租賃／融資，不含銀行）借的排最前面，
   // 原本第三條的「同業」併進去（銀行借的不算：會拿銀行利率來比）
-  const DAILY_PRIORITY = ['利率不敏感', '成立 5 年內', '3 個月內到期', '有電話', '我的分公司', '500 萬以上'];
+  // 使用者：「以最近有買設備進來的公司優先提供名單給我」——契約起算越近越前面（3 個月內 → 6 個月內 → 1 年內 → 更早），排在利率不敏感之前
+  const DAILY_PRIORITY = ['3 個月內買設備', '利率不敏感', '成立 5 年內', '3 個月內到期', '有電話', '我的分公司', '500 萬以上'];
+  const RECENT_GRADE = { m3: 0, m6: 1, y1: 2, old: 3, none: 3 };
   const rateFreeOf = (r) => (isPeerCase(r) ? lenderShort(r.lender.name) : peerLenderOf(r.cust.id));
   // 分頁篩選的「利率不敏感」：跟每日新名單同一套
   const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
@@ -481,6 +509,7 @@
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
+    RECENT_GRADE[r.recent] == null ? 3 : RECENT_GRADE[r.recent],   // 數字越小越好
     !!rateFreeOf(r),
     ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
@@ -524,6 +553,7 @@
     const filters = el('details', { className: 'leads-filters', id: 'chattel-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
       el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。金主沒勾＝同業全部（中租自家不算）。' }),
+      group('最近買設備（契約起算）', el('div', { className: 'chips', id: 'chattel-fRecent' })),
       group('契約到期時間', el('div', { className: 'chips', id: 'chattel-fDue' })),
       group('金主（債權人）', el('div', { className: 'chips', id: 'chattel-fLender' })),
       group('案件類別', el('div', { className: 'chips', id: 'chattel-fType' })),
@@ -539,7 +569,8 @@
       el('div', { className: 'leads-group' }, [el('label', {}, [el('input', { type: 'checkbox', id: 'chattel-hideFin', checked: true }), ' 藏起客戶那一方也是租賃／銀行的案件（同業之間的融資，不是要打的對象）'])]),
       group('關鍵字', el('input', { id: 'chattel-q', type: 'search', placeholder: '公司、統編、金主、地址、登記編號', autocomplete: 'off' }), 'chattel-q'),
       group('排序', el('select', { id: 'chattel-sort' }, [
-        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),   // 使用者：找名單的分頁預設都照金額高到低（動保沒有資本額，用擔保金額）
+        el('option', { value: 'start', textContent: '契約起（最新到最舊）' }),   // 使用者：「該分頁排序以契約最新到最舊排序」
+        el('option', { value: 'amount', textContent: '擔保金額（高到低）' }),
         el('option', { value: 'end', textContent: '到期日（近的在前）' }),
         el('option', { value: 'company', textContent: '公司名稱' })]), 'chattel-sort'),
       el('div', { className: 'leads-row' }, [
@@ -649,8 +680,8 @@
     $('#chattel-more').onclick = () => { limit += PAGE; render(); };
     $('#chattel-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#chattel-reset').onclick = () => {
-      f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = '';
-      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'amount';
+      f.due = 'all'; f.recent = 'all'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = '';
+      $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'start';
       showHidden = false;
       rerender();
     };

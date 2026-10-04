@@ -14,6 +14,7 @@ const ROWS=[
  C('A4','合迪股份有限公司','2022/04/01','2026/12/01','31800000'),
  C('A5','新鑫股份有限公司','2021/07/01','2031/07/01','4850000'),
  C('A6','合迪股份有限公司','2019/06/01','2029/06/01','5800000'),
+ ['動產抵押登記','N1','40000003','新買設備有限公司','20000003','和潤企業股份有限公司','2026/08/15','2031/08/15','12000000','新北市新莊區中正路3號','2','','','105/01/01'],
  ['動產抵押登記','B1','40000002','單件有限公司','20000002','和潤企業股份有限公司','2024/01/01','2027/01/01','3000000','新北市新莊區中正路2號','1','','','110/01/01'],
 ];
 const q=(v)=>/[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
@@ -45,6 +46,16 @@ const INDEX={generatedAt:'2026-10-01T02:00:00.000Z',dataThrough:'2026/09/01',tot
  chk((await rows()).length===6 && /收起/.test(await card.locator('.chattel-cases .chattel-more').textContent()), `「其他 2 件」展開全部 6 件：${(await rows()).length}`);
  const single=pg.locator('#chattel-cards .card:has-text("單件有限公司")');
  chk(await single.locator('.chattel-cases').count()===0, '只有一件的不另外列');
+ // 最近買設備（使用者：「幫我整理出最近有買設備的，以最近有買設備進來的公司優先提供名單給我，該分頁排序以契約最新到最舊」）
+ const order=await pg.$$eval('#chattel-cards .card .card-name',(a)=>a.map((x)=>x.textContent.trim()));
+ chk(order[0]==='新買設備有限公司' && (await pg.$eval('#chattel-sort',(x)=>x.value))==='start', `預設照契約起最新到最舊，最近買的在最上面：${order.slice(0,3).join('、')}`);
+ chk(/🆕 最近買設備 2026\/08/.test(await pg.locator('#chattel-cards .card:has-text("新買設備")').locator('.card-top').textContent()), '最近 6 個月買的標「🆕 最近買設備 年月」');
+ chk(await pg.locator('#chattel-cards .card:has-text("多件精密") .badge:has-text("最近買設備")').count()===0, '超過 6 個月的不標');
+ await pg.locator('#chattel-fRecent .chip:has-text("3 個月內")').click(); await pg.waitForTimeout(300);
+ const only=await pg.$$eval('#chattel-cards .card .card-name',(a)=>a.map((x)=>x.textContent.trim()));
+ chk(JSON.stringify([...new Set(only)])==='["新買設備有限公司"]', `「最近買設備：3 個月內」只剩最近買的：${only.join('、')}`);
+ const daily=await pg.evaluate(async()=>(await window.Chattel.dailyCandidates()).map((r)=>r.cust.name+'|'+r._why));
+ chk(/^新買設備有限公司\|符合：3 個月內買設備/.test(daily[0]), `每日新名單動保先挑最近買設備的：${daily[0]}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
