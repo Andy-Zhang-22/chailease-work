@@ -110,3 +110,19 @@ test('抓清冊的腳本：誰是客戶、誰是金主', async () => {
   const row = m.toRow({ casetype: '動產抵押登記', comaname: '甲', combname: '新鑫股份有限公司', casesyyyymmddroc: '20231015', caseeyyyymmddroc: '20261014', casetatol: '1,200,000', casecanyyyymmddroc: '' });
   assert.equal(row.start, '2023/10/15'); assert.equal(row.end, '2026/10/14'); assert.equal(row.amount, '1200000'); assert.equal(row.cancelled, '');
 });
+
+test('清冊打錯的日期不拿來算：起日在未來改用登記核准日、迄日不合理當沒有迄日（使用者截圖：契約 2133/12/22 → 2133/12/22）', () => {
+  const base = { '客戶統編': '34270072', '客戶名稱': '測試營造股份有限公司', '金主名稱': '合迪股份有限公司', '擔保金額': '33175200' };
+  const far = C.toRecord({ ...base, '契約起': '2133/12/22', '契約迄': '2133/12/22', '登記核准日': '2025/03/17' }, TODAY);
+  assert.equal(far.dateOdd, true);
+  assert.equal(far.startUse, '2025/03/17', '起日不合理改用登記核准日');
+  assert.equal(far.days, null, '迄日不合理不算到期');
+  assert.notEqual(far.recent, 'm3', '不會因為日期在未來就被當成最近買設備');
+  const same = C.toRecord({ ...base, '契約起': '2025/12/12', '契約迄': '2025/12/12', '登記核准日': '2025/02/07' }, TODAY);
+  assert.equal(same.dateOdd, true, '起訖同一天');
+  assert.equal(same.days, null);
+  const ok = C.toRecord({ ...base, '契約起': '2025/07/25', '契約迄': '2035/07/25', '登記核准日': '2025/07/31' }, TODAY);
+  assert.equal(ok.dateOdd, false);
+  assert.equal(ok.startUse, '2025/07/25');
+  assert.ok(ok.days > 3000);
+});

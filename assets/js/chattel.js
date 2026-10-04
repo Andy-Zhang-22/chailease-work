@@ -97,7 +97,7 @@
     return since <= 92 ? 'm3' : since <= 183 ? 'm6' : since <= 366 ? 'y1' : 'old';
   }
   const passesRecent = (key, since) => key === 'all' || (since != null && since <= RECENT.find((x) => x[0] === key)[2]);
-  const startKey = (r) => String(r.start || r.approved || '').replace(/\D/g, '').padEnd(8, '0');
+  const startKey = (r) => String(r.startUse || '').replace(/\D/g, '').padEnd(8, '0');
   function dueOf(days) {
     if (days == null) return 'none';
     if (days < 0) return 'expired';
@@ -167,10 +167,21 @@
       founded: parseFounded(o['成立日期']),
     };
     r.years = r.founded ? yearsSince(r.founded, today) : null;
-    r.days = daysLeft(r.end, today);
+    /*
+     * 清冊本身會打錯日期（使用者截圖：契約起訖都是 2133/12/22，登記核准日卻是 2025/03/17；另有起訖同一天、
+     * 迄日在 2060 年以後的）。不合理的日期不拿來算：契約起在未來（多給一個月）就改用登記核准日判斷買設備的時間；
+     * 契約迄不晚於契約起、或在 30 年以後，就當沒有迄日（不算到期、不排進快到期）。卡片標「清冊日期疑似有誤」。
+     */
+    const sDays = daysLeft(r.start, today);
+    const startOk = sDays != null && sDays <= 31;
+    const eDays = daysLeft(r.end, today);
+    const endOk = eDays != null && eDays <= 365 * 30 && (sDays == null || eDays > sDays);
+    r.dateOdd = (!!r.start && !startOk) || (!!r.end && !endOk);
+    r.startUse = startOk ? r.start : r.approved;   // 判斷「什麼時候買設備」用的日期
+    r.days = endOk ? eDays : null;
     r.due = dueOf(r.days);
-    // 最近買設備：契約起（沒有就登記核准日）離今天幾天；還沒到的（未來起算）當 0
-    { const d = daysLeft(r.start || r.approved, today); r.sinceDays = d == null ? null : Math.max(0, -d); }
+    // 最近買設備：契約起（不合理或沒有就登記核准日）離今天幾天；還沒到的（未來起算）當 0
+    { const d = daysLeft(r.startUse, today); r.sinceDays = d == null ? null : Math.max(0, -d); }
     r.recent = recentOf(r.sinceDays);
     r.family = lenderFamily(r.lender.name);
     r.custIsFin = LENDER_RE.test(r.cust.name);
@@ -292,7 +303,7 @@
   }
   function cardBody(r, c) {
     const mine = mineOf(r, c.cm);
-    const dueBadge = r.days == null ? el('span', { className: 'badge', textContent: '契約沒有迄日' })
+    const dueBadge = r.days == null ? el('span', { className: 'badge', textContent: r.dateOdd && r.end ? '迄日有誤' : '契約沒有迄日' })
       : el('span', { className: `badge${r.days < 0 ? ' badge-expired' : r.days <= 30 ? ' badge-overdue' : r.days <= 90 ? ' badge-due' : ''}`, textContent: dueText(r.days) });
     const lenderBadge = r.family === 'chailease'
       ? el('span', { className: 'badge', textContent: `自家：${r.lender.name}`, title: '中租自家的案件，預設藏起來' })
@@ -312,12 +323,13 @@
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card chattel-card${mine ? ' is-mine' : r.days != null && r.days >= 0 && r.days <= 30 ? ' is-overdue' : r.days != null && r.days > 30 && r.days <= 90 ? ' is-due' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [
-      el('div', { className: 'card-top' }, [name, (r.recent === 'm3' || r.recent === 'm6') ? el('span', { className: 'badge badge-new', textContent: `🆕 最近買設備 ${ymOf(r.start || r.approved)}`, title: '契約起算 6 個月內' }) : '', dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
+      el('div', { className: 'card-top' }, [name, (r.recent === 'm3' || r.recent === 'm6') ? el('span', { className: 'badge badge-new', textContent: `🆕 最近買設備 ${ymOf(r.startUse)}`, title: '契約起算 6 個月內' }) : '',
+        r.dateOdd ? el('span', { className: 'badge badge-overdue', textContent: '清冊日期疑似有誤', title: `清冊原始：契約 ${r.start || '？'} → ${r.end || '？'}，登記核准日 ${r.approved || '？'}。起日不合理改用登記核准日判斷，迄日不合理就不算到期。` }) : '', dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
         r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.custIsFin ? el('span', { className: 'badge badge-ind', textContent: '客戶那一方也是金融業' }) : '']),
       el('div', { className: 'card-meta' }, [
         el('span', { textContent: `💰 擔保 ${wan(r.amount)}` }),
-        el('span', { textContent: `📅 契約 ${r.start || '？'} → ${r.end || '？'}` }),
+        el('span', { textContent: `📅 契約 ${r.start || '？'} → ${r.end || '？'}${r.dateOdd ? `（疑似有誤；登記核准 ${r.approved || '？'}）` : ''}` }),
         r.items ? el('span', { textContent: `📦 標的 ${r.items} 件`, title: '清冊只有件數，沒有標的物內容' }) : '',
         r.addr ? el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.addr)}`, target: '_blank', rel: 'noopener', textContent: r.addr })]) : '',
         r.founded ? el('span', { textContent: `🎂 成立 ${fmtRoc(r.founded)}（${r.years} 年）`, title: '查商工登記來的' }) : '',
@@ -339,13 +351,12 @@
   function casesTable(r) {
     const list = r.cust.id ? casesOf(r.cust.id) : [r];
     if (list.length < 2) return '';
-    const key = (c) => String(c.start || c.approved || '').replace(/\D/g, '');
-    const sorted = [...list].sort((a, b) => key(b).localeCompare(key(a)));
+    const sorted = [...list].sort((a, b) => startKey(b).localeCompare(startKey(a)));
     const SHOW = 2;   // 使用者：「每張卡片最多顯示兩筆，其他收起來，我要看再點開看就好」
     const open = openCases.has(r.cust.id);
     const rows = sorted.map((c, i) => el('tr', { className: `chattel-line${c === r ? ' is-self' : ''}${c.days != null && c.days >= 0 && c.days <= 92 ? ' is-soon' : ''}`, hidden: !open && i >= SHOW }, [
       el('td', { className: 'ch-lender', textContent: lenderShort(c.lender.name) }),
-      el('td', { className: 'ch-ym', textContent: `${ymOf(c.start || c.approved)}～${c.end ? ymOf(c.end) : '無迄日'}` }),
+      el('td', { className: 'ch-ym', textContent: `${ymOf(c.startUse)}～${c.days == null ? (c.dateOdd ? '迄日有誤' : '無迄日') : ymOf(c.end)}`, title: c.dateOdd ? `清冊原始：${c.start || '？'} → ${c.end || '？'}（日期疑似有誤，起日改用登記核准日 ${c.approved || '？'}）` : '' }),
       el('td', { className: 'ch-amt', textContent: wan(c.amount) }),
     ]));
     const total = sorted.reduce((sum, c) => sum + (c.amount || 0), 0);
