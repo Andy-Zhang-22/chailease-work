@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-277';
+  const APP_VERSION = '20261004-278';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3390,11 +3390,37 @@
     input.focus();
   }
   /** 詳細頁「問分身」 */
+  /*
+   * 手機：Claude App 只接手 claude.ai/new 這類網址，專案網址（/project/…）不在它的清單裡，一點就變成開網頁版
+   * （使用者：「我用手機點問分身為什麼沒有連動到我手機上的 claude」，選「跳到 Claude App 開新對話」）。
+   * 所以手機上改開 claude.ai/new，複製的內容前面附上分身說明書，新對話一樣照使用者的標準回答。
+   * 用一個真的 <a> 在同一次點擊裡打開（不先 await），App 才接得到；複製也在同一次點擊裡開始。
+   */
+  const isPhone = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '') || (window.matchMedia && matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 900px)').matches);
+  const CLAUDE_NEW = 'https://claude.ai/new';
+  function openLink(url) {
+    const a = el('a', { href: url, target: '_blank', rel: 'noopener' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  }
+  const withGuide = (text) => `${TWIN_GUIDE}\n\n————（以上是你的角色說明，以下是這次要你看的）————\n\n${text}`;
+  /** 把一段要問分身的內容複製起來並打開：手機開 App 新對話（附說明書），電腦開分身專案（沒設就開新對話） */
+  function sendToTwin(text, what) {
+    if (isPhone()) {
+      copyText(withGuide(text));
+      openLink(CLAUDE_NEW);
+      toast(`${what}已複製（含分身說明書），到 Claude App 貼上送出`);
+      return;
+    }
+    copyText(text);
+    window.open(twinUrl() || CLAUDE_NEW, '_blank', 'noopener');
+    toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
+  }
   async function askTwin(r) {
-    if (!twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
-    await copyText(twinPrompt(r));
-    window.open(twinUrl(), '_blank', 'noopener');
-    toast('這家的資料已複製，到分身那邊貼上送出');
+    // 手機用不到專案網址；電腦沒設網址才先跳設定
+    if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
+    sendToTwin(twinPrompt(r), '這家的資料');
   }
   window.twinPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? twinPrompt(v) : ''; };   // 測試用
 
@@ -3427,7 +3453,7 @@
       host.append(box);
       const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(reviewText(d)); toast('覆盤已複製，可以貼到 LINE 或筆記'); } });
       const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '複製給 Claude 整理', title: '把今天每家的完整訪談內容複製起來、打開 Claude 網站，貼上送出就好（不附電話）',
-        onclick: async () => { await copyText(reviewPrompt(d)); window.open(twinUrl() || 'https://claude.ai/new', '_blank', 'noopener'); toast(twinUrl() ? '已複製，到分身那邊貼上送出' : '已複製，到 Claude 那邊貼上送出'); } });
+        onclick: () => sendToTwin(reviewPrompt(d), '今天的紀錄') });
       host.append(el('div', { className: 'card-actions' }, [copy, d.companies.length ? ask : '']));
       host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）；要真正讀懂的摘要按「複製給 Claude 整理」，用你現有的 Claude 訂閱，不另外收費。' }));
     };
