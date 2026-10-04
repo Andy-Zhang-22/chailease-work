@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-278';
+  const APP_VERSION = '20261004-279';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -491,6 +491,7 @@
       const onlyToday = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '只看今天到期', title: '把名單篩成下次聯絡日是今天的' });
       onlyToday.onclick = () => { applyDueQuick('today'); state.limit = PAGE_SIZE; render(); };
       tools.append(onlyToday);
+      tools.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🧭 戰略', title: '請分身排今天先打哪幾間、每間的開場白', onclick: () => openTwinPlan() }));
     }
     if ('Notification' in window && Notification.permission === 'default') {
       const btn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '開通知', title: '時間到了讓瀏覽器跳通知。網站開著才會提醒；手機請先把網站加到主畫面。' });
@@ -818,6 +819,7 @@
       starred: !!(mine && mine.starred),
       chance: (mine && mine.chance) || '',
       chanceAt: (mine && mine.chanceAt) || 0,
+      twinPlan: (mine && mine.twinPlan) || null,   // 分身的撥打戰略（今日撥打戰略貼回來的）
       edited: !!edits,
       group: groupMap().get(record.id) || '',
     };
@@ -3422,6 +3424,110 @@
     if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
     sendToTwin(twinPrompt(r), '這家的資料');
   }
+  /* ---------------- 今日撥打戰略（分身排順序、寫開場白） ---------------- */
+
+  /*
+   * 使用者：「能夠幫我把每天要撥打的名單，在撥打前也都請分身做過戰略分析嗎」、「比如哪幾間要先打或可以怎麼開場白」。
+   * 系統沒辦法自己叫分身（要付費的 API），所以是：今天要打的分批（一批 15 家）整理好交給分身 →
+   * 分身照固定格式回「■ 順序. 公司名／理由／開場白」→ 使用者整段貼回來 → 系統拆開存到每一家（twinPlan，會同步）。
+   * 卡片標「🧭 第 N 打」、名單可以依分身順序排、詳細頁看得到理由與開場白。
+   */
+  const PLAN_BATCH = 15;
+  /** 今天要打的：下次聯絡日是今天或逾期、沒禁打、今天還沒在提醒列按完成；先照下次聯絡日、再照公司名 */
+  function todayCallList() {
+    const t = todayISO();
+    return allViews().filter((v) => v.nextDate && v.nextDate <= t && !v.blocked && v.dueDoneOn !== t)
+      .sort((a, b) => a.nextDate.localeCompare(b.nextDate) || a.company.localeCompare(b.company, 'zh-Hant'));
+  }
+  /** 一家在批次裡的精簡資料：公司、動保、最近 3 次訪談（各 200 字內、電話遮掉） */
+  function planEntry(r, i) {
+    const full = twinPrompt(r).split('\n');
+    const pick = (head) => { const at = full.indexOf(head); if (at < 0) return []; const out = []; for (let k = at + 1; k < full.length && full[k]; k += 1) out.push(full[k]); return out; };
+    const notes = maskPhones(notesBundle(r).text).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3).map((x) => (x.length > 200 ? `${x.slice(0, 200)}…` : x));
+    return [`=== ${i}. ${r.company} ===`, ...pick('【公司】').slice(1), `動產擔保：${pick('【動產擔保】').map((x) => x.replace(/^- /, '')).join('；') || '清冊裡沒有'}`,
+      `最近訪談：${notes.length ? notes.join(' ／ ') : '還沒有紀錄'}`].join('\n');
+  }
+  function planPrompt(batch, k, total) {
+    return [`請照專案說明，幫我排今天要打的 ${batch.length} 家${total > 1 ? `（第 ${k} 批，共 ${total} 批）` : ''}：決定先打哪幾間，每間給開場白。`,
+      '回覆格式要固定（我會整段貼回系統自動拆開），照你建議的撥打順序，每家一段，不要加其他段落：',
+      '■ 1. 公司名稱（照我給的名稱，一字不差）', '理由：一句話，為什麼排這個順位', '開場白：兩三句，口語，有具體切入點', '',
+      '以下是名單：', '', ...batch.map((r, i) => planEntry(r, i + 1)), '', '（電話、負責人、KEYMAN 欄位沒有附上；訪談內容裡的電話號碼已遮掉）'].join('\n');
+  }
+  const normName = (x) => String(x || '').replace(/[\s（）()「」『』"'【】]/g, '').replace(/股份有限公司|有限公司/g, '');
+  /** 把分身的回覆拆成每家：■ 順序. 公司名／理由：…／開場白：…（開場白可以好幾行）；名字對不上的另外列出 */
+  function parsePlans(text, pool) {
+    const blocks = String(text || '').replace(/\r/g, '').split(/^\s*[■◼▪︎]+\s*/m).slice(1);
+    const got = []; const miss = [];
+    blocks.forEach((b) => {
+      const lines = b.split('\n');
+      const m = lines[0].match(/^(\d+)\s*[.、．:：)]?\s*(.+)$/);
+      if (!m) return;
+      const name = m[2].replace(/（.*$|\(.*$/, '').replace(/[*＊_#]/g, '').trim();
+      const key = normName(name);
+      const v = pool.find((x) => normName(x.company) === key) || pool.find((x) => key && (normName(x.company).includes(key) || key.includes(normName(x.company))));
+      const field = (label) => {
+        const at = lines.findIndex((l) => new RegExp(`^\\s*[*＊]*${label}[*＊]*\\s*[:：]`).test(l));
+        if (at < 0) return '';
+        const out = [lines[at].replace(new RegExp(`^\\s*[*＊]*${label}[*＊]*\\s*[:：]\\s*`), '')];
+        for (let k = at + 1; k < lines.length && !/^\s*[*＊]*(理由|開場白)[*＊]*\s*[:：]/.test(lines[k]); k += 1) out.push(lines[k]);
+        return out.join('\n').trim();
+      };
+      if (v) got.push({ v, n: Number(m[1]), reason: field('理由'), opener: field('開場白') });
+      else miss.push(name);
+    });
+    return { got, miss };
+  }
+  /** 今天的戰略：id → 第幾打（照批次、批次內順序） */
+  function twinRanks() {
+    const t = todayISO();
+    const list = allViews().filter((v) => v.twinPlan && v.twinPlan.day === t).sort((a, b) => a.twinPlan.order - b.twinPlan.order);
+    return new Map(list.map((v, i) => [v.id, i + 1]));
+  }
+  function openTwinPlan() {
+    const host = $('#editorBody');
+    const list = todayCallList();
+    const batches = [];
+    for (let i = 0; i < list.length; i += PLAN_BATCH) batches.push(list.slice(i, i + PLAN_BATCH));
+    const t = todayISO();
+    const done = list.filter((v) => v.twinPlan && v.twinPlan.day === t).length;
+    host.textContent = '';
+    host.append(el('h2', { textContent: '🧭 今日撥打戰略' }));
+    if (!list.length) { host.append(el('p', { className: 'muted', textContent: '今天沒有要打的（下次聯絡日是今天或逾期的）。' })); $('#editor').hidden = false; return; }
+    host.append(el('p', { textContent: `今天要打 ${list.length} 家${done ? `，已有戰略 ${done} 家` : ''}。分身會排先打哪幾間、每間給開場白。` }));
+    host.append(el('ol', { className: 'twin-steps' }, [
+      el('li', { textContent: `按「複製給分身」${batches.length > 1 ? `（${batches.length} 批，一批 ${PLAN_BATCH} 家，一批一批來）` : ''}，到分身那邊貼上送出。` }),
+      el('li', { textContent: '分身回覆後，整段複製，貼到下面的框，按「存起來」。' }),
+      el('li', { textContent: '名單的卡片會標「🧭 第幾打」，排序選「依分身建議順序」就照順序排；詳細頁看得到理由與開場白。' }),
+    ]));
+    let current = 0;
+    const row = el('div', { className: 'card-actions' }, batches.map((b, i) => el('button', { className: i ? 'btn' : 'btn btn-primary', type: 'button',
+      textContent: batches.length > 1 ? `複製第 ${i + 1} 批給分身（${b.length} 家）` : `複製給分身（${b.length} 家）`,
+      onclick: () => { current = i; sendToTwin(planPrompt(b, i + 1, batches.length), batches.length > 1 ? `第 ${i + 1} 批名單` : '今天的名單'); } })));
+    const box = el('textarea', { className: 'plan-paste', rows: 8, placeholder: '把分身的回覆整段貼在這裡（■ 1. 公司名／理由：…／開場白：…）' });
+    const msg = el('p', { className: 'muted', hidden: true });
+    const save = el('button', { className: 'btn btn-primary', type: 'button', textContent: '存起來' });
+    save.onclick = async () => {
+      const { got, miss } = parsePlans(box.value, list);
+      if (!got.length) { msg.textContent = '沒拆到任何一家。請確認貼的是分身照格式回的那段（每家用「■ 數字. 公司名」開頭）。'; msg.hidden = false; return; }
+      // 哪一批：看貼回來的公司落在哪一批（使用者可能沒照順序按）
+      const batchOf = (v) => batches.findIndex((b) => b.some((x) => x.id === v.id));
+      const at = Date.now();
+      for (const g of got) {
+        const k = batchOf(g.v) >= 0 ? batchOf(g.v) : current;
+        await saveState(g.v.id, { twinPlan: { day: t, order: k * 100 + g.n, reason: g.reason, opener: g.opener, at } });
+      }
+      await reload(); render(); scheduleSync();
+      msg.textContent = `已存 ${got.length} 家的戰略${miss.length ? `；這幾家名字對不上，沒存：${miss.join('、')}` : ''}。`;
+      msg.hidden = false;
+      box.value = '';
+      toast(`已存 ${got.length} 家的撥打戰略`);
+    };
+    host.append(row, box, el('div', { className: 'card-actions' }, [save]), msg);
+    $('#editor').hidden = false;
+  }
+  window.parsePlans = (text) => { const r = parsePlans(text, todayCallList()); return { got: r.got.map((g) => ({ company: g.v.company, n: g.n, reason: g.reason, opener: g.opener })), miss: r.miss }; };   // 測試用
+  window.planPrompt = () => { const l = todayCallList(); return l.length ? planPrompt(l.slice(0, PLAN_BATCH), 1, Math.ceil(l.length / PLAN_BATCH)) : ''; };   // 測試用
+
   window.twinPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? twinPrompt(v) : ''; };   // 測試用
 
   function openDailyReview(day) {
@@ -3530,6 +3636,7 @@
   function visibleRecords() {
     const terms = searchTerms();
     let list = allViews().filter((r) => passesFilters(r, '', terms));
+    state.twinRank = twinRanks();   // 卡片的「🧭 第幾打」、依分身順序排序用
 
 
     const num = (s) => Number(String(s || '').replace(/[^\d]/g, '')) || 0;
@@ -3540,6 +3647,8 @@
       // 最近核准變更：新到舊。沒查到日期的排最後（空字串當成最舊，不是最新）
       regchanged: (a, b) => (b.regChanged || '').localeCompare(a.regChanged || ''),
       company: (a, b) => a.company.localeCompare(b.company, 'zh-Hant'),
+      // 分身建議的順序：今天有戰略的照第幾打在前，其他照下次聯絡日
+      twin: (a, b) => (state.twinRank.get(a.id) || 1e9) - (state.twinRank.get(b.id) || 1e9) || (a.nextDate || '9999').localeCompare(b.nextDate || '9999'),
       territory: (a, b) => {
         const rank = { 優先區域: 0, 服務範圍: 1, '': 2, 範圍外: 3 };
         return (rank[a.territory] ?? 2) - (rank[b.territory] ?? 2)
@@ -3931,6 +4040,18 @@
     }
     return null;
   }
+  /** 詳細頁：分身給的理由與開場白（今天的寫第幾打；以前的寫哪天） */
+  function twinPlanNode(r) {
+    const p = r.twinPlan;
+    if (!p || !(p.reason || p.opener)) return '';
+    const t = todayISO();
+    const rank = p.day === t ? twinRanks().get(r.id) : 0;
+    return el('div', { className: 'twin-plan' }, [
+      el('div', { className: 'twin-plan-head', textContent: `🧭 分身建議${rank ? `（今天第 ${rank} 打）` : p.day ? `（${dateLabel(p.day)}）` : ''}` }),
+      p.reason ? el('div', { className: 'twin-plan-reason', textContent: p.reason }) : '',
+      p.opener ? el('div', { className: 'twin-plan-opener' }, [document.createTextNode(`開場白：${p.opener}`), copyDot(p.opener, '複製開場白', '已複製開場白')]) : '',
+    ]);
+  }
   function openerNode(r, cls) {
     const o = openerFor(r);
     if (!o) return '';
@@ -4018,6 +4139,7 @@
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
+      state.twinRank && state.twinRank.get(r.id) ? el('span', { className: 'badge badge-twin', textContent: `🧭 第 ${state.twinRank.get(r.id)} 打`, title: (r.twinPlan && r.twinPlan.reason) || '分身建議的撥打順序' }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
 
@@ -4891,6 +5013,7 @@
       ].filter(Boolean)),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
       openerNode(r, 'detail-opener'),
+      twinPlanNode(r),
     ].filter(Boolean)));
 
     /*
@@ -8139,6 +8262,7 @@ export default {
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'review') { openDailyReview(); return; }
       if (act === 'twin') { openTwinSetup(); return; }
+      if (act === 'twin-plan') { openTwinPlan(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
       if (act === 'stats' || act === 'rules') { switchTab(act); return; }
       if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
