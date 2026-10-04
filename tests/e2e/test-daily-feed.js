@@ -28,8 +28,9 @@ const CCSV='﻿'+[CHEAD,...CROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const CINDEX={generatedAt:'2026-09-26T14:36:42.637Z',dataThrough:'2026/07/02',total:19541,kept:CROWS.length,files:[{path:'ntpc.csv',rows:CROWS.length}]};
 const BHEAD='統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人,稅籍資本額,商業登記';
 const BROWS=[
- ['61111111','新莊好商行','獨資','12000000','2019/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','12000000','Y'],
+ ['61111111','新莊好商行','獨資','12000000','2023/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','12000000','Y'],
  ['62222222','板橋企業社','合夥','1500000','2010/05/01','新北市板橋區文化路1號','472','五金','','','Y','李板橋','1500000','Y'],
+ ['64444444','新設小商行','獨資','3000000','2024/01/01','新北市新莊區中正路2號','471','雜貨','','','N','','3000000','N'],
  ['63333333','只有稅籍商行','獨資','60000000','2003/08/01','新北市新莊區中正路1號','481','水電','','','N','','60000000','N'],
 ];
 const BCSV='\uFEFF'+[BHEAD,...BROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
@@ -103,8 +104,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
  const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
  chk(cg && /符合：利率不敏感（剛做進出口）、有電話、資本額 500～6,000 萬、我的分公司、成立 6～10 年、登記 1 年內、進口＋出口/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
- chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>f.company==='板橋企業社') && !fed.some(f=>f.company==='只有稅籍商行'), `商行／企業社挑 1 家、有商業登記且全符合的先：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
- chk(/符合：有商業登記、資本額 1,000 萬以上、我的分公司、設立 6～10 年、開發票/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行五條全符合，寫在訪談內容');
+ chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>/板橋企業社|只有稅籍商行|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 23 年的只有稅籍商行前面）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
+ chk(/符合：資本額 500 萬以上＋成立 5 年內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行落在第一級，寫在訪談內容');
+ const bc=await pg.evaluate(async()=>(await window.Biz.dailyCandidates()).map(r=>r.name+'|'+r._why));
+ chk(JSON.stringify(bc)===JSON.stringify(['只有稅籍商行|符合：資本額 500 萬以上＋成立 5 年以上','新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行的順序只看資本額跟成立年：${bc.join(' / ')}`);
  const split=await pg.evaluate(()=>[window.splitEvenly([10,10,10],15), window.splitEvenly([10,1,10],15), window.splitEvenly([0,0,2],15), window.splitEvenly([3,3,3],20)]);
  chk(JSON.stringify(split)==='[[5,5,5],[7,1,7],[0,0,2],[3,3,3]]', `三頁平分、一頁不夠另外兩頁補：${JSON.stringify(split)}`);
  chk(fed.some(f=>f.company==='禾泰精密工業有限公司') && fed.some(f=>f.company==='甲一精密有限公司'), '全符合的先挑到');
@@ -123,7 +126,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('#feedMore'); await pg.waitForTimeout(1500);
  const fed2=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.company));
  chk(fed2.length===10, `再補之後 10 家：${fed2.join('|')}`);
- chk(fed2.includes('板橋企業社') && !fed2.includes('只有稅籍商行'), `再補的商行是板橋企業社（有商業登記），只有稅籍的還沒輪到：${fed2.filter(x=>/商行|企業社/.test(x)).join('|')}`);
+ chk(fed2.includes('只有稅籍商行') && !fed2.includes('板橋企業社'), `再補的商行是只有稅籍商行（500 萬以上＋5 年以上），板橋企業社還沒輪到：${fed2.filter(x=>/商行|企業社/.test(x)).join('|')}`);
  chk(/符合：3 個月內到期、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='自家客戶有限公司'); return r?r.notesRaw:''; })) || !fed2.includes('自家客戶有限公司'), '中租自家的不算同業，排在後面補位');
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);
  chk(fed.every(f=>/^每日新名單-2026-10-05(-補1)?\.csv$/.test(f.source)), `來源名稱帶日期，再補的另外取名：${[...new Set(fed.map(f=>f.source))].join('|')}`);

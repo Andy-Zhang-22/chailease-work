@@ -459,22 +459,19 @@
 
   /* ---------------- 每日挑選（給 app.js 的每日新名單用） ---------------- */
 
-  // 有商業登記排最前：只有稅籍登記的沒負責人、資本額是自填的，排最後補位
-  // 分公司是遠近（Rules.branchRank：我的 0 → 共同區 1 → 鄰近 2… → 其他 9），新莊挑完就接新北，不是門檻
-  // 本期設立／變更：名單裡有在本期清冊出現的（dyn），或本期清冊裡資本額到門檻、名單沒有的（跟公司那頁的「本期」一樣排前面）
-  // 使用者：「案件成交金額都是 1000 萬、利率 8%-14%、成立 7-8 年的公司」。設立年改成離 7～8 年多遠（Rules.ageRank）、
-  // 本期只算「變更」——剛設立的才 0 年，離 7～8 年最遠。
-  // 使用者：「商行那分頁可以挑資本額大於 1000 萬的優先給我」：資本額提到第二（有商業登記之後——只有稅籍的資本額是自填的，
-  // 不能讓它靠自填的數字插隊），分級 1,000 萬以上 → 500 萬以上 → 100 萬以上 → 其他。
-  const DAILY_PRIORITY = ['利率不敏感', '有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
-  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的
+  // 使用者：「商行的話就單純看資本額跟成立年」——原本的商業登記、電話、本期變更、分公司、開發票、利率不敏感都不看，只分四級往下走，同一級資本額高的先：
+  //   500 萬以上＋成立 5 年內 → 500 萬以上＋5 年以上（成立年不明的也在這級）→ 200 萬以上＋5 年內 → 其他
+  // 名稱裡不用「、」：成效統計是用「、」切條件的
+  const DAILY_PRIORITY = ['資本額 500 萬以上＋成立 5 年內', '資本額 500 萬以上＋成立 5 年以上', '資本額 200 萬以上＋成立 5 年內'];
+  const youngBiz = (r) => !!r.setup && r.years < 5;
+  const tierOf = (r) => (r.capital >= 5000000 ? (youngBiz(r) ? 0 : 1) : r.capital >= 2000000 && youngBiz(r) ? 2 : 3);
+  // 分頁篩選的「利率不敏感」：動產擔保上跟同業（租賃／融資，不含銀行）借的（每日挑選不看，見上）
   const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
   const rateFreeOf = (r) => {
     const peer = peerOf(r.taxId);
     if (peer) return `跟${peer}借`;
     return '';
   };
-  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
   const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
@@ -485,14 +482,10 @@
     if (fp && fp.tel) return isMobile(fp.tel) ? new Set(['Y', 'M']) : new Set(['Y']);
     return global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.taxId) : new Set(['N']);
   };
-  const anyPhone = (r) => hasPhone(r) || !!foundOf(r);
   // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
-  const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
-  const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
-  const capRank = (r) => (r.capital >= 10000000 ? 0 : r.capital >= 5000000 ? 1 : r.capital >= 1000000 ? 2 : 3);
-  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
+  const dailyChecks = (r) => [tierOf(r)];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -502,12 +495,11 @@
     }
     return b.capital - a.capital;
   }
-  /** 「符合：…」那串；分公司放寬到鄰近的也寫出來 */
-  const whyOf = (r, hitAt) => {
-    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i)).map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r)}）` : x));
-    const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
-    const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
-    return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
+  /** 「符合：…」那串：落在哪一級；成立年不明的寫出來 */
+  const whyOf = (r) => {
+    const t = r._checks[0];
+    if (t > 2) return '基準都不符，補位';
+    return `符合：${t === 1 && !r.setup ? '資本額 500 萬以上＋成立年不明' : DAILY_PRIORITY[t]}`;
   };
   /** 同一區、還不在名單上的商行（客戶詳細頁「附近可以順訪的」用，店面型可以直接走進去）；有電話的在前 */
   async function nearby(district, limit) {
@@ -529,7 +521,6 @@
     await start();
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
-    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
     // 池子＝名單 ＋ 本期清冊裡資本額到門檻、名單裡沒有的（新設立的稅籍檔還沒收進去，只有清冊有）
     let extra = [];
@@ -540,7 +531,7 @@
       extra = [...mrows[p].setup, ...mrows[p].change].filter((r) => { if (!r.taxId || seen.has(r.taxId) || r.capital < minCap) return false; seen.add(r.taxId); return true; });
     } catch (e) { extra = []; }
     return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
-      .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
+      .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r); return r; })
       .sort(dailyCompare);
   }
 
