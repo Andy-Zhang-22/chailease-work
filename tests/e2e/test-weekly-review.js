@@ -41,11 +41,12 @@ const mk=(id,company,o)=>Object.assign({id,source:'A.csv',company,aliases:[],tax
  await pg.click('#editorBody button:has-text("上一週")'); await pg.waitForTimeout(200);
  const txt=await pg.textContent('#editorBody .weekly');
  chk(/打了 5 通、聯絡 4 家：接通 2（50%）、未接 1、禁止推廣 1/.test(txt) && /上週（09\/21～09\/27）：打了 1 通、聯絡 1 家、接通 1（100%）/.test(txt), `畫面：${txt.slice(0,200)}`);
- chk(/動產擔保：聯絡 1、接通 1（100%）/.test(txt) && /利率不敏感：聯絡 1/.test(txt), '畫面有各來源、各訊號');
+ chk(/動產擔保：聯絡 1、接通 1（100%）/.test(txt) && !/利率不敏感/.test(txt), '畫面只列各來源（各訊號在統計頁，畫面不要太複雜）');
  await pg.click('#editorBody button:has-text("交給分身")'); await pg.waitForTimeout(200);
  const p=await pg.evaluate(()=>window.__copied[window.__copied.length-1]||'');
  chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123' && /請照專案說明，幫我做這週的覆盤/.test(p) && /動保甲有限公司：老闆要週轉金 500 萬/.test(p), `交給分身：${p.slice(0,120)}`);
  chk(!/0912|345-678|02-2222-3333/.test(p) && /（電話略）/.test(p), '不帶電話、內容裡的電話遮掉');
+ chk(/利率不敏感：聯絡 1、接通 1/.test(p), '交給分身的有各訊號');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

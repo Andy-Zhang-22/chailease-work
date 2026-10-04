@@ -476,8 +476,8 @@
       if (!who.length) return null;
       const on = state.filters.opp.has(k);
       const b = el('button', { className: `btn btn-tiny opp-btn${on ? ' is-on' : ''}`, type: 'button', 'data-opp': k,
-        textContent: `${k === 'renew' ? '🔁 換約時機' : '📈 有新變化'} ${who.length} 家${on ? '（看全部）' : ''}`,
-        title: who.slice(0, 12).map((v) => `${v.company}：${oppText(v, k)}`).join('\n') + (who.length > 12 ? `\n…還有 ${who.length - 12} 家` : '') });
+        textContent: `${OPP_LABEL[k]} ${who.length} 家${on ? '（看全部）' : ''}`,
+        title: (k === 'renew' ? '跟同業的動保 3 個月內到期、30 天沒聯絡\n' : '標了無機會或久沒聯絡，之後又增資、遷址、換負責人\n') + who.slice(0, 12).map((v) => `${v.company}：${oppText(v, k)}`).join('\n') + (who.length > 12 ? `\n…還有 ${who.length - 12} 家` : '') });
       b.onclick = () => {
         state.filters.opp.clear();
         if (!on) { state.filters.opp.add(k); applyDueQuick(''); }
@@ -488,7 +488,7 @@
     }).filter(Boolean);
     bar.hidden = !btns.length;
     if (!btns.length) return;
-    bar.append(el('span', { className: 'opp-label', textContent: '重新聯絡的時機' }), ...btns);
+    bar.append(...btns);
   }
 
   function renderRemindBar() {
@@ -2338,7 +2338,7 @@
    *   （120 天內、而且是在上次聯絡／標無機會之後）——當初沒機會，現在情況不一樣了。
    * 禁止推廣的不算；7 天內本來就排了下次聯絡日的也不算（已經在行程上了）。
    */
-  const OPP_LABEL = { renew: '🔁 換約時機（同業動保 3 個月內到期）', fresh: '📈 有新變化（無機會／久沒聯絡後又變更登記）' };
+  const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
   const OPP_ORDER = ['renew', 'fresh'];
   const OPP_REG_KINDS = ['capitalUp', 'address', 'owner', 'other'];
   function oppOf(r) {
@@ -3477,7 +3477,7 @@
   }
   window.weeklyReview = (day) => { const w = weeklyReview(day); return { from: w.from, to: w.to, calls: w.calls, companies: w.companies.length, reached: w.reached.length, missed: w.missed.length, blocked: w.blocked.length, chance: w.chance, meetings: w.meetings, bySource: Object.fromEntries(w.bySource), bySignal: Object.fromEntries(w.bySignal), perDay: w.days.map((d) => d.calls) }; };   // 測試用
   const weekRange = (w) => `${dateLabel(w.from).slice(5)}～${dateLabel(w.to).slice(5)}`;
-  function weeklyLines(w, prev) {
+  function weeklyLines(w, prev, withSignals) {
     const rate = pct(w.reached.length, w.companies.length);
     const out = [`📊 ${dateLabel(w.from)}～${dateLabel(w.to).slice(5)} 每週覆盤`,
       `打了 ${w.calls} 通、聯絡 ${w.companies.length} 家：接通 ${w.reached.length}（${rate}）、未接 ${w.missed.length}、禁止推廣 ${w.blocked.length}`,
@@ -3486,14 +3486,14 @@
     out.push('', '每天：' + w.days.map((d) => `${'一二三四五六日'[(new Date(`${d.day}T00:00:00`).getDay() + 6) % 7]} ${d.calls}`).join('　'));
     const table = (title, rows) => { if (!rows.length) return; out.push('', title); rows.forEach(([k, t]) => out.push(`・${k}：聯絡 ${t.n}、接通 ${t.reached}（${pct(t.reached, t.n)}）、有機會 ${t.chance}`)); };
     table('各來源', w.bySource);
-    table('每日新名單各訊號', w.bySignal);
+    if (withSignals) table('每日新名單各訊號', w.bySignal);
     return out;
   }
   function weeklyPrompt(w, prev) {
     const body = w.reached.map((c) => `■ ${c.v.company}：${maskPhones(c.points || '（沒寫內容）')}`);
     return ['請照專案說明，幫我做這週的覆盤：', '1. 三、四句話總結這週（跟上週比）', '2. 哪個來源、哪種訊號的名單比較打得出東西，下週名單要怎麼調',
       '3. 列出下週要追的事（哪家、什麼時候、做什麼）', '4. 下週的目標建議（通數、接通、拜訪）', '',
-      ...weeklyLines(w, prev), '', '【這週接通的客戶重點】', ...(body.length ? body : ['（沒有接通的）']), '', '（電話、負責人、KEYMAN 沒有附上；內容裡的電話號碼已遮掉）'].join('\n');
+      ...weeklyLines(w, prev, true), '', '【這週接通的客戶重點】', ...(body.length ? body : ['（沒有接通的）']), '', '（電話、負責人、KEYMAN 沒有附上；內容裡的電話號碼已遮掉）'].join('\n');
   }
   function openWeeklyReview(anyDay) {
     const host = $('#editorBody');
@@ -3512,7 +3512,6 @@
       const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '交給分身', title: '把這週的數字和接通客戶的重點交給分身，看趨勢、給下週建議（不附電話）',
         onclick: () => sendToTwin(weeklyPrompt(w, prev), '這週的數字') });
       host.append(el('div', { className: 'card-actions' }, [copy, w.companies.length ? ask : '']));
-      host.append(el('p', { className: 'muted', textContent: '接通率＝接通的家數／聯絡的家數（同一家打好幾通算一家）。「各訊號」是每日新名單挑進來時符合的條件，一家可能算在好幾條裡。' }));
     };
     draw(anyDay || todayISO());
     $('#editor').hidden = false;
@@ -3666,7 +3665,7 @@
     const host = $('#editorBody');
     host.textContent = '';
     host.append(el('h2', { textContent: `✉️ 追蹤訊息草稿：${r.company}` }),
-      el('p', { className: 'muted', textContent: '選一個情境，分身照這家的紀錄寫 LINE 版和簡訊版，你改一下稱呼再傳。不帶電話、負責人、KEYMAN 欄位。' }));
+      el('p', { className: 'muted', textContent: '選一個，分身寫好 LINE 版和簡訊版。' }));
     host.append(el('div', { className: 'card-actions msg-kinds' }, MSG_KINDS.map(([key, label]) => el('button', { className: 'btn', type: 'button', textContent: label, 'data-kind': key,
       onclick: () => { sendToTwin(msgPrompt(r, key), '這家的資料'); $('#editor').hidden = true; } }))));
     $('#editor').hidden = false;
@@ -4712,10 +4711,9 @@
     const sigRows = [...bySignal.entries()].sort((a, b) => (Number(b[1].called >= 3) - Number(a[1].called >= 3)) || rate(b[1]) - rate(a[1]) || b[1].n - a[1].n)
       .map(([k, x]) => [x.called >= 3 ? k : `${k}（樣本少）`, x]);
     if (sigRows.length) {
-      box.append(el('h3', { textContent: '每日新名單：依訊號（不分來源，有機會率高的在前）' }));
-      box.append(table(sigRows, '訊號'));
-      box.append(el('h3', { textContent: '每日新名單：同時有幾個訊號' }));
-      box.append(table([...bySigCount.entries()].filter(([, x]) => x.n), '訊號數'));
+      const det = el('details', { className: 'funnel-signals' }, [el('summary', { textContent: '各訊號的成效（點開看）' })]);
+      det.append(table(sigRows, '訊號'), table([...bySigCount.entries()].filter(([, x]) => x.n).map(([k, x]) => [`${k}訊號`, x]), '同時有幾個'));
+      box.append(det);
     }
     const rules = [...byRule.entries()].filter(([, x]) => x.called >= 3).sort((a, b) => (b[1].chance / b[1].called) - (a[1].chance / a[1].called) || b[1].called - a[1].called);
     if (rules.length) {
@@ -5199,7 +5197,7 @@
     if (routes.length) {
       box.append(el('div', { className: 'cal-route' }, [
         ...routes.map((r) => el('a', { className: 'btn btn-tiny btn-primary', href: r.href, target: '_blank', rel: 'noopener', textContent: r.label, title: '從現在位置出發，照下面的順序一次串好（Google 地圖）' })),
-        planned.length > 1 ? el('span', { className: 'muted', textContent: `${routes.length > 1 ? '照下面的順序；手機上一段最多 4 家，跑完一段按下一段' : '照下面的順序'}（已排順路：有約時間的照時間，其他從${planned.some((x) => x.time) ? '上一站' : '分公司'}挑最近的）` }) : '',
+        planned.length > 1 ? el('span', { className: 'muted', textContent: routes.length > 1 ? '已排順路；一段最多 4 家，跑完按下一段' : '已排順路', title: '有約時間的照時間，其他從上一站（沒有就從分公司）挑最近的' }) : '',
       ]));
       // 有 Google 地圖金鑰：用門牌座標排得更準（沒查過座標的才查）
       const missing = planned.filter((x) => visitAddr(x.v) && !geoCached(visitAddr(x.v)));
@@ -5387,8 +5385,6 @@
     // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
     const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '問分身', title: '把這家的資料和訪談內容複製起來、打開你的 Claude 分身（不帶電話、負責人、KEYMAN 欄位）' });
     twinBtn.onclick = () => askTwin(r);
-    const msgBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '訊息草稿', title: '請分身寫一則傳給這家的 LINE／簡訊（道謝、確認拜訪、追蹤資料、沒接到電話）' });
-    msgBtn.onclick = () => openMsgDraft(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
     xlsxBtn.onclick = () => exportOneXlsx(r.id);
@@ -5440,7 +5436,6 @@
         dealBtn,
         briefBtn,
         twinBtn,
-        msgBtn,
         xlsxBtn,
         deleteBtn(r),
       ].filter(Boolean)),
@@ -5970,7 +5965,8 @@
       sendToTwin(tidyPrompt(r, memo.value), '這通的筆記');
       tidyBox.hidden = false;
     };
-    form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy]), tidyBox, el('div', { className: 'row' }, [
+    form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy,
+      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '✉️ 訊息草稿', title: '請分身寫一則傳給這家的 LINE／簡訊', onclick: () => openMsgDraft(r) })]), tidyBox, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
       el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));

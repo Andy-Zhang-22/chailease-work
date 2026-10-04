@@ -3795,3 +3795,6 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
   距離用行政區中心點，有 Google 地圖金鑰可以按「📍 用地圖座標排」查門牌座標（存在這台裝置 30 天）。
 - 測試：新 `test-opp.js`、`test-twin-tidy.js`、`test-weekly-review.js`、`test-twin-more.js`、`test-card-read.js`、`test-route-order.js`；
   `test-funnel.js` 加訊號表、`normalize.test.js` 加讀名片的格式。
+- 畫面收簡單（使用者：「一個原則，畫面別太複雜，簡單明瞭」）：時機列只剩兩顆「🔁 換約時機 N 家」「📈 有新變化 N 家」（說明放滑鼠提示）；
+  「訊息草稿」不加在詳細頁最上面那排，放在「記錄這通電話」的「🤖 讓分身整理」旁邊；統計頁的訊號表收在「各訊號的成效（點開看）」；
+  每週覆盤畫面只列各來源（各訊號只交給分身）；行事曆只寫「已排順路」。
