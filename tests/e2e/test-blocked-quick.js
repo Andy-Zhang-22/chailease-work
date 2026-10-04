@@ -14,7 +14,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},[mk('1','甲公司'),mk('2','乙公司')]);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("甲公司")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("甲公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  // 其他結果沒填內容仍擋
  await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(300);
  chk(/請至少填寫內容或下次聯絡日/.test(await pg.textContent('#toast')), '已聯絡等結果沒填內容仍會擋');

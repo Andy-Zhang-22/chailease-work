@@ -25,7 +25,7 @@ const SEED=[mk('1','迅德興業','桃園市龜山區民生北路一段38之1號
  const names=await pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent));
  chk(JSON.stringify(names)==='["真的沒地址"]', `其他只剩沒填的那筆：${names}`);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("迅德興業")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("迅德興業") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  // 服務區域那一列只剩「範圍外」會顯示（其他的使用者說用不到），所以改成驗「沒有範圍外的提醒」
  chk(!/範圍外/.test(d), '迅德興業（桃園縣龜山鄉）被認得出在服務範圍內：沒有範圍外的協銷提醒');

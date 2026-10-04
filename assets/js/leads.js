@@ -368,15 +368,14 @@
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
   const delOf = (r) => deletedOf(r['公司名稱'], r['統一編號']);
   const typed = new Map();   // 卡片 key → 使用者貼的電話（重畫不會掉）
+  // 公司名底下那排 Google／地圖／104／1111（使用者：「所有分頁的公司名底下都要有，無論有無電話；有電話的就不用輸入框」）
   function phoneBox(r, key, hasAuto) {
-    if (hasAuto) return '';
     const stop = (e) => e.stopPropagation();
     const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到電話貼這裡，加入時一起帶', autocomplete: 'off', value: typed.get(key) || '', onclick: stop });
     input.oninput = () => { const v = input.value.trim(); if (v) typed.set(key, v); else typed.delete(key); };
     return el('div', { className: 'card-actions phone-search', onclick: stop }, [
-      el('span', { className: 'muted', textContent: '找電話：' }),
       ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(r.__name, r.__addr) : []),
-      input,
+      hasAuto ? '' : input,
     ]);
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
@@ -386,7 +385,15 @@
     const v = global.customerViews().find((x) => x.source === fileName);
     if (v) global.openCustomer(v.id);
   }
+  /** 卡片：公司名那行底下接找電話那排（名單裡有的也有，只是不給輸入框） */
   function card(r, c) {
+    const art = cardBody(r, c);
+    r.__name = r['公司名稱']; r.__addr = r['公司所在地'];
+    const top = art.querySelector('.card-top');
+    if (top) top.after(phoneBox(r, keyOf(r), hasPhone(r) || !!mineOf(r, c.cm)));
+    return art;
+  }
+  function cardBody(r, c) {
     const mine = c ? mineOf(r, c.cm) : null;
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
@@ -423,7 +430,6 @@
         el('span', { textContent: `#${r['統一編號']}` }),
       ]),
       items.length ? el('p', { className: 'leads-items', textContent: `${items.slice(0, 4).join('　')}${items.length > 4 ? `　…共 ${items.length} 項` : ''}` }) : '',
-      mine ? '' : (r.__name = r['公司名稱'], r.__addr = r['公司所在地'], phoneBox(r, keyOf(r), hasPhone(r))),
       el('div', { className: 'card-actions' }, actions),
     ]);
   }

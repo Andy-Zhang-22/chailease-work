@@ -20,7 +20,7 @@ const SEED=[mk('1','微企甲','4,999'),mk('7','剛好五千庚','5,000'),mk('8'
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['剛好五十萬丙','超過五十萬丁'].sort()), `大企部：500,000 仟含、以上都算；499,999 不算：${await names()}`);
  // 卡片變短後範疇不放卡片，詳細頁的資本總額後面寫範疇
- await pg.locator('#cards .card').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(200);
+ await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(200);
  chk(/大企部範疇/.test(await pg.textContent('#drawerBody .detail-grid')), '詳細頁資本總額寫「大企部範疇」');
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.locator('#fltScale .chip').filter({hasText:/一般組範疇$/}).click(); await pg.waitForTimeout(400);
@@ -32,7 +32,7 @@ const SEED=[mk('1','微企甲','4,999'),mk('7','剛好五千庚','5,000'),mk('8'
  await pg.locator('#fltScale .chip').filter({hasText:/微企範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['微企甲']), `微企：只有 4,999，5,000 不算：${await names()}`);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("八千辛")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("八千辛") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  chk(/8,000 仟元（一般組範疇）/.test(d), '明細的資本額旁標的範疇也用新門檻');
  await pg.keyboard.press('Escape');

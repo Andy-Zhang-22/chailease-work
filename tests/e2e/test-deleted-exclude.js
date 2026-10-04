@@ -40,7 +40,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
    `九月先匯三家：${JSON.stringify(await names(pg))}`);
 
  // 刪掉乙
- await pg.locator('.card:has-text("乙精密")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("乙精密") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody button:has-text("刪除這筆")');
  await ask(pg,'刪掉');
  await pg.waitForTimeout(900);
@@ -60,7 +60,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
  chk(after.includes('甲工程有限公司')&&after.includes('丙全新有限公司'), '沒刪過的兩家照常更新進來');
 
  // 換成沒有統編的名單，靠公司名也要擋得住
- await pg.locator('.card:has-text("甲工程")').first().click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("甲工程") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody button:has-text("刪除這筆")'); await ask(pg,'刪掉'); await pg.waitForTimeout(900);
  await pg.click('#btnImport'); await pg.waitForTimeout(400);
  await load(pg,十月無統編,'十一月名單.csv'); await pg.waitForTimeout(3000);

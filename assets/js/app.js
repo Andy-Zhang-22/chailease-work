@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-270';
+  const APP_VERSION = '20261004-271';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1455,10 +1455,10 @@
       await reload(); render(); scheduleSync(); toast(`已填入 ${v}`);
       if (opts.detail) openDetail(r.id);
     };
+    // 有電話的不用輸入框（使用者：「無論有無電話都要有，有電話的話就不用後面那個輸入框，把『找電話：』刪掉」）
     return el('div', { className: 'card-actions phone-search', onclick: stop }, [
-      el('span', { className: 'muted', textContent: '找電話：' }),
       ...phoneSearchLinks(r.company, r.address),
-      input,
+      r.phones && r.phones.length ? '' : input,
     ]);
   }
 
@@ -3750,6 +3750,7 @@
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
     ].filter(Boolean));
     node.append(top);
+    node.append(phoneSearchRow(r));   // 公司名底下：Google／地圖／104／1111，沒電話的多一個貼電話的框
     const tags = [
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.regChange && r.regKinds[0] !== 'none' && r.regKinds[0] !== 'unchecked'
@@ -3768,7 +3769,6 @@
     else row.append(el('span', { className: 'card-next muted', textContent: '📅 未排定' }));
     if (r.phones.length) telLinks(r, 1).forEach((a) => row.append(a));
     node.append(row);
-    if (!r.phones.length && !r.blocked) node.append(phoneSearchRow(r));   // 沒電話的直接在卡片上找、貼
 
     /*
      * 卡片上那一句要是「最新的談話內容」，不管它是檔案帶進來的還是在網站上記的。

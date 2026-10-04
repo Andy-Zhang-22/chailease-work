@@ -47,7 +47,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  chk(names.join('|')==='禾泰精密工業有限公司', `只看 3 個月內到期：${names.join('|')}`);
  await pg.locator('#fltChattel .chip:has-text("3 個月內到期")').click(); await pg.waitForTimeout(300);
  // 詳細頁
- await pg.locator('#paneList .card:has-text("禾泰")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ await pg.locator('#paneList .card:has-text("禾泰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  await pg.click('#drawerBody details.detail-more > summary'); await pg.waitForTimeout(150);   // 動產擔保收在「更多資料」裡
  const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ');
  chk(/新鑫股份有限公司 附條件買賣 1,200 萬/.test(det) && /2023\/10\/15 → 2026\/11\/12（還有 38 天到期）/.test(det), `詳細頁第一件：${det.slice(0,120)}`);
@@ -63,7 +63,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  await tg.click(); await pg.waitForTimeout(150);
  chk((await visible()).length===2, '再按收回去');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
- await pg.locator('#paneList .card:has-text("沒動保")').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ await pg.locator('#paneList .card:has-text("沒動保") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/清冊裡沒有這家/.test(await pg.textContent('#drawerBody .detail-chattel')), '沒對到的講清楚');
  await pg.keyboard.press('Escape');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

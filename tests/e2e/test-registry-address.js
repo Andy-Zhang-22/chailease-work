@@ -65,7 +65,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  await pg.waitForTimeout(800); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(500);
 
- await pg.locator('.card:has-text("甲工程")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("甲工程") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const g1=await grid(pg);
  const ok4=(g1['登記地址']||'').includes('幸福東路79號4樓');
  const ok5=(g1['負責人']||'').trim()==='王新任';
@@ -73,7 +73,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  if(!ok5)bad++; console.log(`${ok5?'PASS':'FAIL'} 甲工程的負責人也依登記更新：${JSON.stringify(g1['負責人']||'')}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
 
- await pg.locator('.card:has-text("乙精密")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("乙精密") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const g2=await grid(pg);
  const ok6=(g2['登記地址']||'').includes('松高路11號');
  const ok7=(g2['負責人']||'').trim()==='李old';

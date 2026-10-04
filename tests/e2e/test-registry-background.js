@@ -34,7 +34,7 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
 
  // 跑的同時照常使用名單：打開一筆客戶的詳細頁
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200);
- await pg.locator('.card').first().click();
+ await pg.locator('.card .card-name').first().click();
  await pg.waitForSelector('#drawerBody h2',{timeout:5000});
  chk(true, '更新進行中仍可打開客戶詳細頁');
  await pg.click('#drawer .drawer-close');

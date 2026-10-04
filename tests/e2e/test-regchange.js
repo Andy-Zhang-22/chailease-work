@@ -44,7 +44,7 @@ const REG={'11111111':row('11111111','增資甲',{Capital_Stock_Amount:'8000000'
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  const badge=(await pg.textContent('.card:has-text("增資甲") .badge-regchange').catch(()=>'')).replace(/\s+/g,' ').trim();
  chk(/^增資 \d+\/\d+、負責人異動 \d+\/\d+$/.test(badge), `卡片標記列出異動種類，各自帶日期：${badge}`);
- await pg.locator('.card:has-text("增資甲")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("增資甲") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  chk(/變更登記\s*\d{4}\/\d{2}\/\d{2}\s*增資、負責人異動/.test(d)&&/資本總額（仟元）：5,000 → 8,000/.test(d)&&/負責人：王 → 新老闆/.test(d)&&/已依登記更新上面的欄位。/.test(d)&&/最近查核 \d{4}\/\d{2}\/\d{2}/.test(d), `詳細頁列出種類、日期、前後值：${d.match(/變更登記.{0,120}/)?.[0]}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
@@ -61,7 +61,7 @@ const REG={'11111111':row('11111111','增資甲',{Capital_Stock_Amount:'8000000'
    await window.Store.setState({ ...st, regChanges:moved, regChange:moved[0] }); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
- await pg.locator('.card:has-text("增資甲")').click(); await pg.waitForSelector('#drawerBody h2');
+ await pg.locator('.card:has-text("增資甲") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d2=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
  chk(/變更登記\s*2026\/09\/18\s*增資、負責人異動/.test(d2)&&/已依登記更新上面的欄位。/.test(d2), `異動那天就套用進名單，畫面講明：${d2.match(/變更登記.{0,40}/)?.[0]}`);
  chk(/最近查核 \d{4}\/\d{2}\/\d{2}：這天再對過一次，跟登記一樣，沒有新的變動/.test(d2), `查核日比異動日新時說清楚：${d2.match(/最近查核.{0,45}/)?.[0]}`);
