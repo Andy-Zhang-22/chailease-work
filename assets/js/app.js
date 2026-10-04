@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-264';
+  const APP_VERSION = '20261003-265';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4704,10 +4704,9 @@
        * 才知道公司到底動了什麼。用「查到」而不是直接寫在日期上，是因為那個日期
        * 是政府登記的核准日，跟網站查到差異的那天未必是同一天。
        */
-      ['最近異動日期', [
-        r.regChanged || (r.regAt ? '—' : '—　還沒查過商工登記'),
-        regChangeBrief(r),
-      ].filter(Boolean).join('　')],
+      // 只寫登記上的最近異動日期；以前後面接「查到…（網站查到的那天）」，兩個日期擺在一起會看錯
+      // （使用者：「不要顯示幾號查到他異動，這會混肴我閱讀」）。變了什麼在「更多資料」的變更登記裡
+      ['最近異動日期', r.regChanged || (r.regAt ? '—' : '—　還沒查過商工登記')],
       ['下次聯絡', r.nextDate ? dateLabel(r.nextDate) : ''],
       ['最近聯絡', r.lastDate ? dateLabel(r.lastDate) : ''],
       ['名單新增', r.addedDate ? dateLabel(r.addedDate) : ''],
@@ -4861,7 +4860,8 @@
      * 常看的直接顯示；其他的收進「更多資料 ▸」。卡片上拿掉的名單檔名、產業別也在這裡。
      */
     {
-      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）
+      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '最近異動日期', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
       const more = el('dl', { className: 'detail-grid detail-more-grid' });
       [...dl.children].forEach((node) => {
         if (node.tagName !== 'DT') return;
@@ -4875,7 +4875,7 @@
       body.append(dl);
       if (more.childElementCount) {
         const det = el('details', { className: 'detail-section detail-more' });
-        det.append(el('summary', {}, [el('h3', { textContent: '更多資料（統編、產業、最近異動、動產擔保、變更登記…）' })]), more);
+        det.append(el('summary', {}, [el('h3', { textContent: '更多資料（統編、產業、動產擔保、變更登記…）' })]), more);
         body.append(det);
       }
     }
