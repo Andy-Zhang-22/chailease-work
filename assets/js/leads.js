@@ -587,13 +587,23 @@
    * 「我的分公司」看「規則」那頁設的 my-branch，沒設就是新莊。名單裡有的、藏起來的不挑。
    */
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
-  const DAILY_PRIORITY = ['本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面的是：動產擔保上跟同業（租賃／融資，不含銀行）
+  // 借的，或本期剛增資／擴張的（成長快的時候缺的是錢，不是便宜的錢）
+  const DAILY_PRIORITY = ['利率不敏感', '本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年'];
+  const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
+  const rateFreeOf = (r, latest) => {
+    const peer = peerOf(r['統一編號']);
+    if (peer) return `跟${peer}借`;
+    if (r['期別'] !== latest) return '';
+    return r.rk === 'up' ? '剛增資' : EXPAND_RE.test(r.reason) ? '剛擴張' : '';
+  };
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r['統一編號']));
   const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r['統一編號']) : new Set(['N']));
   // 電話籤：出進口廠商登記的電話表對得到的；手機是有電話的一部分，籤是「或」的關係
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const dailyChecks = (r, latest) => [
+    !!rateFreeOf(r, latest),
     r['期別'] === latest,
     r.rk === 'up',
     EXPAND_RE.test(r.reason),   // 遷址、加營業項目、設分公司：在長大的公司才會動這些
@@ -624,11 +634,13 @@
     const need = ((index.periods[latest] || {}).files || []).map((x) => ({ ...x, period: latest })).filter((x) => x.type === 'change' && !loaded.has(x.path));
     if (need.length) { try { await Promise.all(need.map(loadFile)); } catch (err) { console.error('每日新名單載清冊失敗', err); } }
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
+    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就只看增資／擴張 */ } }
     const cm = customerMap();
     return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)) && !delOf(r))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
-        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
+        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))
+          .map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r, latest)}）` : x));
         const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
         r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;

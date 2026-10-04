@@ -427,7 +427,10 @@
    * 成立 5 年內排最前面，但不是門檻——5 年內的挑完了就往下挑 5 年以上、成立年不明的。
    * 每一項：布林值 true 在前；數字越小越好（到期等級）。
    */
-  const DAILY_PRIORITY = ['成立 5 年內', '3 個月內到期', '同業', '有電話', '我的分公司', '500 萬以上'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——跟同業（租賃／融資，不含銀行）借的排最前面，
+  // 原本第三條的「同業」併進去（銀行借的不算：會拿銀行利率來比）
+  const DAILY_PRIORITY = ['利率不敏感', '成立 5 年內', '3 個月內到期', '有電話', '我的分公司', '500 萬以上'];
+  const rateFreeOf = (r) => (isPeerCase(r) ? lenderShort(r.lender.name) : peerLenderOf(r.cust.id));
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.cust && r.cust.id));
   const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.cust && r.cust.id) : new Set(['N']));
@@ -435,9 +438,9 @@
   const PHONE_CHIPS = [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']];
   const DUE_GRADE = { m3: 0, m6: 1, m12: 2, later: 3, expired: 4, none: 4 };
   const dailyChecks = (r) => [
+    !!rateFreeOf(r),
     ageOf(r) === 'lt5',
     DUE_GRADE[r.due] == null ? 4 : DUE_GRADE[r.due],   // 數字越小越好
-    r.family !== 'chailease' && !r.custIsFin,
     hasPhone(r),
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
     r.amount >= 5000000,
@@ -462,7 +465,8 @@
     return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.cust.name, r.cust.id))
       .map((r) => {
         r._checks = dailyChecks(r);
-        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]));
+        const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))
+          .map((x) => (x === '利率不敏感' ? `利率不敏感（跟${rateFreeOf(r)}借）` : x));
         const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
         r._why = [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : ''].filter(Boolean).join('；');
         return r;
@@ -561,6 +565,15 @@
     }
     return byTax.get(id) || [];
   }
+  /**
+   * 跟同業借的：金主是租賃／融資公司（不是中租、不是銀行、不是保險），客戶自己也不是金融業。
+   * 使用者問「什麼樣的客群不在乎資金成本」——本來就接受租賃利率的，比的是額度、速度、服務。
+   */
+  const PEER_FAMILIES = new Set(['sinxin', 'hotai', 'hedi', 'jih', 'orix', 'taishin', 'first', 'yulon']);
+  const isPeerCase = (r) => !r.custIsFin && r.family !== 'chailease' && r.family !== 'bank'
+    && (PEER_FAMILIES.has(r.family) || /租賃|融資|資融/.test(r.lender.name || ''));
+  /** 統編 → 跟哪家同業借（短名，沒有就空字串）；每日新名單「利率不敏感」用 */
+  const peerLenderOf = (taxId) => { const c = casesOf(taxId).find(isPeerCase); return c ? lenderShort(c.lender.name) : ''; };
   /** 金主的短名：新鑫股份有限公司 → 新鑫 */
   const lenderShort = (name) => String(name || '').replace(/股份有限公司|有限公司|國際租賃|企業|股份/g, '').trim() || '不明';
 
@@ -620,5 +633,5 @@
     start().catch((err) => { console.error(err); toast(`動產擔保名單載入失敗：${err.message}`); });
   }
 
-  global.Chattel = { show, ensureData, casesOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

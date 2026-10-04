@@ -293,11 +293,19 @@
    * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 500～6,000 萬 → 我的分公司（遠近）→ 成立 6～10 年
    * （Rules.ageRank，成交多半 7～8 年）→ 最近 3 個月才投保；全一樣最近投保的先。
    */
-  const DAILY_PRIORITY = ['有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年', '剛投保 3 個月內'];
+  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年', '剛投保 3 個月內'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛開始請人的（擴張期缺的是錢，不是便宜的錢）
+  const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
+  const rateFreeOf = (r) => {
+    const peer = peerOf(r.taxId);
+    if (peer) return `跟${peer}借`;
+    if (r.insMonths != null && r.insMonths < 3) return '剛開始請人';
+    return '';
+  };
   const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
-  const dailyChecks = (r) => [!!r.tel, capRank(r), branchRank(r), ageRankOf(r), r.insMonths != null && r.insMonths < 3];
+  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.tel, capRank(r), branchRank(r), ageRankOf(r), r.insMonths != null && r.insMonths < 3];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -308,7 +316,7 @@
     return ymKey(b.ym).localeCompare(ymKey(a.ym)) || b.capital - a.capital;
   }
   const whyOf = (r, hitAt) => {
-    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i));
+    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i)).map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r)}）` : x));
     const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
@@ -318,6 +326,7 @@
     if (!root) return [];
     await start();
     if (!ready) return [];
+    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
     return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })

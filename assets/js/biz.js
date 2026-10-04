@@ -462,7 +462,14 @@
   // 本期只算「變更」——剛設立的才 0 年，離 7～8 年最遠。
   // 使用者：「商行那分頁可以挑資本額大於 1000 萬的優先給我」：資本額提到第二（有商業登記之後——只有稅籍的資本額是自填的，
   // 不能讓它靠自填的數字插隊），分級 1,000 萬以上 → 500 萬以上 → 100 萬以上 → 其他。
-  const DAILY_PRIORITY = ['有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  const DAILY_PRIORITY = ['利率不敏感', '有商業登記', '資本額 1,000 萬以上', '有電話', '本期變更', '我的分公司', '設立 6～10 年', '開發票'];
+  // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的
+  const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
+  const rateFreeOf = (r) => {
+    const peer = peerOf(r.taxId);
+    if (peer) return `跟${peer}借`;
+    return '';
+  };
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
   const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
@@ -479,7 +486,7 @@
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.setup ? r.years : null) : (ageOf(r) === '5to10' ? 0 : 3));
   const changedNow = (r) => !!((r.dyn && r.dyn.kind === '變更') || (r.monthly && r.kind === '變更'));
   const capRank = (r) => (r.capital >= 10000000 ? 0 : r.capital >= 5000000 ? 1 : r.capital >= 1000000 ? 2 : 3);
-  const dailyChecks = (r) => [!!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
+  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.reg, capRank(r), anyPhone(r), changedNow(r), branchRank(r), ageRankOf(r), !!r.invoice];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -491,7 +498,7 @@
   }
   /** 「符合：…」那串；分公司放寬到鄰近的也寫出來 */
   const whyOf = (r, hitAt) => {
-    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i));
+    const hit = DAILY_PRIORITY.filter((_, i) => hitAt(i)).map((x) => (x === '利率不敏感' ? `利率不敏感（${rateFreeOf(r)}）` : x));
     const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
@@ -516,6 +523,7 @@
     await start();
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
+    if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
     // 池子＝名單 ＋ 本期清冊裡資本額到門檻、名單裡沒有的（新設立的稅籍檔還沒收進去，只有清冊有）
     let extra = [];
