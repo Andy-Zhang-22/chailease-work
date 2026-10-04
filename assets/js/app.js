@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-273';
+  const APP_VERSION = '20261004-274';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4893,7 +4893,10 @@
         const c = [...r.chattel].sort((a, b) => dk(b) - dk(a))[0];
         const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天`;
         const due = c.end ? `${c.end} 到期${when ? `（${when}）` : ''}` : '沒有到期日';
-        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${due}` }));
+        // 跟同業什麼時候開始往來（使用者：「動產擔保的細節也要給我什麼時候他跟同業往來的月份」）：契約起的年月，沒有就登記核准日
+        const sm = String(c.start || c.approved || '').match(/^(\d{4})\D(\d{1,2})/);
+        const since = sm ? `${sm[1]}/${sm[2].padStart(2, '0')} 起，` : '';
+        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${since}${due}` }));
         if (r.chattel.length > 1) dd.append(el('span', { className: 'muted', textContent: `　共 ${r.chattel.length} 件` }));
       } else {
         dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));

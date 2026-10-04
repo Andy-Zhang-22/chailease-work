@@ -50,7 +50,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  await pg.locator('#paneList .card:has-text("禾泰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  // 使用者：「動產登記也顯示在詳細頁中，別收在下面，但僅顯示最新一筆，資訊越簡單越好」
  const det=(await pg.textContent('#drawerBody .detail-chattel')).replace(/\s+/g,' ').trim();
- chk(det==='新鑫 1,200 萬，2026/11/12 到期（還有 38 天） 共 3 件', `只顯示最新一筆（2023 的新鑫，不是 2019 的裕融）、一行、共幾件：${det}`);
+ chk(det==='新鑫 1,200 萬，2023/10 起，2026/11/12 到期（還有 38 天） 共 3 件', `只顯示最新一筆（2023 的新鑫，不是 2019 的裕融）、一行、哪個月開始往來、共幾件：${det}`);
  chk(await pg.locator('#drawerBody .detail-chattel .is-soon').count()===1, '3 個月內到期的標起來');
  const order=await pg.evaluate(()=>[...document.querySelectorAll('#drawerBody > dl.detail-grid > dt')].map(x=>x.textContent.trim()));
  chk(order.indexOf('最近異動日期')>=0 && order.indexOf('動產擔保')===order.indexOf('最近異動日期')+1 && order.indexOf('下次聯絡')===order.indexOf('動產擔保')+1, `直接顯示，在最近異動日期後面、下次聯絡前面：${order.join('、')}`);
