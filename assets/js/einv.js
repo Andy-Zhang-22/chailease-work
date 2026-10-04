@@ -121,7 +121,9 @@
   let limit = PAGE;
   let ready = false;
   let showHidden = false;
-  const f = { branches: new Set(), districts: new Set(), when: new Set(), ages: new Set(), org: new Set(), kind: new Set(), phone: new Set(), mine: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), branches: new Set(), districts: new Set(), when: new Set(), ages: new Set(), org: new Set(), kind: new Set(), phone: new Set(), mine: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -135,6 +137,7 @@
       && (except === 'org' || !f.org.size || f.org.has(orgOf(r)))
       && (except === 'kind' || !f.kind.size || f.kind.has(r.kind))
       && (except === 'cap' || ((c.min <= 0 && c.max === Infinity) || (r.capital >= c.min && r.capital <= c.max)))   // 沒設門檻時沒查到資本額的也列
+      && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKinds(r).has(k)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
@@ -234,6 +237,7 @@
     chips($('#einv-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#einv-fOrg'), ORG.map(([k, label]) => [k, label, facet('org', (r) => orgOf(r) === k)]), f.org);
     chips($('#einv-fKind'), KIND.map(([k, label]) => [k, label, facet('kind', (r) => r.kind === k)]), f.kind);
+    chips($('#einv-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#einv-fPhone'), [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => phoneKinds(r).has(k))]), f.phone);
     chips($('#einv-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
   }
@@ -311,6 +315,8 @@
     if (r.isNew && r.firstMonths != null && r.firstMonths < 3) return '剛開電子發票';
     return '';
   };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
+  const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
@@ -357,6 +363,7 @@
       group('公司成立', el('div', { className: 'chips', id: 'einv-fAge' })),
       group('組織', el('div', { className: 'chips', id: 'einv-fOrg' })),
       group('電子發票開給誰', el('div', { className: 'chips', id: 'einv-fKind' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'einv-fRate' })),
       group('電話（對出進口廠商登記來的）', el('div', { className: 'chips', id: 'einv-fPhone' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'einv-fMine' })),
       group('資本額（萬元；稅籍上登記的）', el('div', { className: 'leads-row' }, [
@@ -427,6 +434,7 @@
       }
       $('#einv-loading').hidden = true;
       ready = true;
+      if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
       const rerender = () => { limit = PAGE; render(); };
       $('#einv-sort').onchange = rerender;
       ['#einv-capMin', '#einv-capMax'].forEach((s) => { $(s).oninput = rerender; });
@@ -436,7 +444,7 @@
       $('#einv-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
       // 預設篩成最值得打的那批：資本額 500～6,000 萬、公司（商行多半小）、我的分公司。電話不預設篩：這份對到電話的本來就少
       const defaults = () => {
-        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
+        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         f.org.add('company'); f.branches.add(myBranch());
         $('#einv-q').value = ''; $('#einv-capMin').value = '500'; $('#einv-capMax').value = '6000'; $('#einv-sort').value = 'capital'; showHidden = false;
       };

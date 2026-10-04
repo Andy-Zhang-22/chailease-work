@@ -154,7 +154,9 @@
   let limit = PAGE;
   let ready = false;
   let showHidden = false;
-  const f = { branches: new Set(), districts: new Set(), when: new Set(), ages: new Set(), qual: new Set(), phone: new Set(), mine: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), branches: new Set(), districts: new Set(), when: new Set(), ages: new Set(), qual: new Set(), phone: new Set(), mine: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -167,6 +169,7 @@
       && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
       && (except === 'cap' || ((c.min <= 0 && c.max === Infinity) || (r.capital >= c.min && r.capital <= c.max)))   // 沒設門檻時沒查到資本額的也列
       && (except === 'qual' || !f.qual.size || f.qual.has(qualOf(r)))
+      && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKinds(r).has(k)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
@@ -272,6 +275,7 @@
     chips($('#trade-fWhen'), WHEN.map(([k, label]) => [k, label, facet('when', (r) => whenOf(r) === k)]), f.when);
     chips($('#trade-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#trade-fQual'), QUAL.map(([k, label]) => [k, label, facet('qual', (r) => qualOf(r) === k)]), f.qual);
+    chips($('#trade-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#trade-fPhone'), [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => phoneKinds(r).has(k))]), f.phone);
     chips($('#trade-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
   }
@@ -352,6 +356,8 @@
     if (r.firstMonths != null && r.firstMonths < 12) return '剛做進出口';
     return '';
   };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
+  const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);   // 使用者：「照你的建議做」——1,000 萬的案子落在一般組
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
@@ -411,6 +417,7 @@
       group('原始登記（開始做進出口）', el('div', { className: 'chips', id: 'trade-fWhen' })),
       group('成立（查商工登記來的）', el('div', { className: 'chips', id: 'trade-fAge' })),
       group('進出口資格', el('div', { className: 'chips', id: 'trade-fQual' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'trade-fRate' })),
       group('電話', el('div', { className: 'chips', id: 'trade-fPhone' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'trade-fMine' })),
       group('資本額（萬元；查商工登記來的）', el('div', { className: 'leads-row' }, [
@@ -481,6 +488,7 @@
       }
       $('#trade-loading').hidden = true;
       ready = true;
+      if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
       const rerender = () => { limit = PAGE; render(); };
       $('#trade-sort').onchange = rerender;
       ['#trade-capMin', '#trade-capMax'].forEach((s) => { $(s).oninput = rerender; });
@@ -493,7 +501,7 @@
        * 我的分公司。要看全部就把數字清掉、籤按掉；「清除篩選」回到這組預設，不是回到全部。
        */
       const defaults = () => {
-        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
+        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         f.phone.add('Y'); f.branches.add(myBranch());
         $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'capital'; showHidden = false;
       };

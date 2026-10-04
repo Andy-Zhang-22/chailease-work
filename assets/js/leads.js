@@ -53,7 +53,9 @@
   let limit = PAGE;
   let started = false;      // 第一次切到這個分頁才去抓 index.json
   let ready = false;
-  const f = { types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), phone: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), types: new Set(['change']), cities: new Set(), reasons: new Set(['up']), inds: new Set(), branches: new Set(), ages: new Set(), mine: new Set(), phone: new Set(), q: '' };
 
   /* ---------------- 跟我的名單比對 ---------------- */
 
@@ -334,6 +336,7 @@
       && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
       && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
+      && (except === 'rate' || !F.rate.size || F.rate.has(rateKey(r)))
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && (showHidden || !(hidden.has(keyOf(r)) || delOf(r)))
       && r.capital >= c.min && r.capital <= c.max
@@ -463,6 +466,7 @@
     // 成立年數：只算已經知道設立日期的；還沒查的在名單上方那一行
     chips($('#leads-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
     chips($('#leads-fMine'), MINE.map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#leads-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#leads-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     // 分公司：籤是從載進來的列長出來的（清冊裡沒有這一欄），分公司在前、共同區在後、劃分表外最後
     const counts = new Map();
@@ -597,6 +601,10 @@
     if (r['期別'] !== latest) return '';
     return r.rk === 'up' ? '剛增資' : EXPAND_RE.test(r.reason) ? '剛擴張' : '';
   };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套（本期＝最新一期）
+  let latestP = '';
+  const latestPeriod = () => latestP || (latestP = Object.keys((index && index.periods) || {}).sort().pop() || '');
+  const rateKey = (r) => (rateFreeOf(r, latestPeriod()) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r['統一編號']));
   const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r['統一編號']) : new Set(['N']));
@@ -665,6 +673,7 @@
       group('行業（依營業項目大類）', el('div', { className: 'chips', id: 'leads-fInd' })),
       group('成立年數（依核准設立日期；變更清冊的是查商工登記來的）', el('div', { className: 'chips', id: 'leads-fAge' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'leads-fMine' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'leads-fRate' })),
       group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'leads-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'leads-capMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '500' }), '～',
@@ -731,6 +740,7 @@
     $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     ready = true;
     if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
+    if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
     const rerender = async () => { limit = PAGE; await ensureLoaded(); render(); };
     $('#leads-period').onchange = async () => { await rerender(); };
     $('#leads-capMin').oninput = () => { limit = PAGE; render(); };
@@ -742,7 +752,7 @@
     $('#leads-more').onclick = () => { limit += PAGE; render(); };
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
-      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.q = ''; showHidden = false;
+      f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = ''; showHidden = false;
       $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };

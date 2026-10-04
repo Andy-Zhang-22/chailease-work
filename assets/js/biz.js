@@ -167,7 +167,9 @@
   let monthly = null;           // leads/biz/monthly/index.json
   const mrows = {};             // 期別 → { setup: [...], change: [...] }
   let listSub = '';
-  const f = { branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
   const curPeriod = () => { const sel = root && $('#biz-period'); return (sel && sel.value) || (monthly && monthly.latest) || ''; };
   /** 目前模式在看的那一池 */
   const pool = () => (mode === 'list' ? rows : ((mrows[curPeriod()] || {})[mode] || []));
@@ -192,6 +194,7 @@
       && (except === 'invoice' || !f.invoice.size || f.invoice.has(r.invoice ? 'Y' : 'N'))
       && (except === 'reasons' || mode !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
+      && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.capital >= c.min && r.capital <= c.max
       && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
@@ -318,6 +321,7 @@
     const ikeys = [...new Set([...[...ic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([k]) => k), ...f.inds])];
     chips($('#biz-fInd'), ikeys.map((k) => [k, k, ic.get(k) || 0]), f.inds);
     chips($('#biz-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
+    chips($('#biz-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#biz-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     if (mode === 'change') chips($('#biz-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => r.rk === k)]).filter(([k, , n]) => n || f.reasons.has(k)), f.reasons);
     $('#biz-gOrg').hidden = mode !== 'list'; $('#biz-gInvoice').hidden = mode !== 'list'; $('#biz-gReason').hidden = mode !== 'change';
@@ -470,6 +474,8 @@
     if (peer) return `跟${peer}借`;
     return '';
   };
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
+  const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.taxId));
   const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
@@ -559,6 +565,7 @@
       Object.assign(group('統一發票', el('div', { className: 'chips', id: 'biz-fInvoice' })), { id: 'biz-gInvoice' }),
       group('行業（最多的 24 種；其他用關鍵字）', el('div', { className: 'chips', id: 'biz-fInd' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'biz-fMine' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'biz-fRate' })),
       group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'biz-fPhone' })),
       group('資本額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'biz-capMin', type: 'number', min: '0', step: '10', placeholder: '下限' }), '～',
@@ -633,6 +640,7 @@
       await attachDyn();   // 本期清冊對名單（沒有清冊就略過）
       ready = true;
       if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
+      if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
       const rerender = () => { limit = PAGE; render(); };
       ['#biz-capMin', '#biz-capMax'].forEach((s) => { $(s).oninput = rerender; });
       $('#biz-sort').onchange = () => { switchMode.touched = true; rerender(); };
@@ -642,7 +650,7 @@
       $('#biz-more').onclick = () => { limit += PAGE; render(); };
       $('#biz-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
       $('#biz-reset').onclick = () => {
-        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = '';
+        Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         $('#biz-q').value = ''; $('#biz-capMin').value = ''; $('#biz-capMax').value = ''; $('#biz-sort').value = mode === 'list' ? 'capital' : 'newest'; showHidden = false;
         rerender();
       };

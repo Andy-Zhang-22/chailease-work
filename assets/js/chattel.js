@@ -174,7 +174,9 @@
   let started = false;
   let ready = false;
   let showHidden = false;
-  const f = { due: 'm6', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), phone: new Set(), q: '' };
+  // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
+  const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
+  const f = { rate: new Set(rateDefault()), due: 'm6', lenders: new Set(), types: new Set(), branches: new Set(), districts: new Set(), mine: new Set(), ages: new Set(), phone: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -217,6 +219,7 @@
       && (except === 'districts' || !F.districts.size || F.districts.has(r.branch.district))
       && (except === 'mine' || !F.mine.size || F.mine.has(mine ? (declined(mine) ? 'declined' : 'in') : 'out'))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
+      && (except === 'rate' || !F.rate.size || F.rate.has(rateKey(r)))
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.amount >= c.min && r.amount <= c.max
       && !(c.hideFin && r.custIsFin)
@@ -327,6 +330,7 @@
     const types = [...new Set(rows.map((r) => r.type))].sort();
     chips($('#chattel-fType'), types.map((t) => [t, typeShort(t), facet('types', (r) => r.type === t)]), f.types);
     chips($('#chattel-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
+    chips($('#chattel-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#chattel-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     chips($('#chattel-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label,
       facet('mine', (r) => { const m = mineOf(r, c.cm); return k === 'out' ? !m : k === 'in' ? (m && !declined(m)) : (m && declined(m)); })]), f.mine);
@@ -431,6 +435,8 @@
   // 原本第三條的「同業」併進去（銀行借的不算：會拿銀行利率來比）
   const DAILY_PRIORITY = ['利率不敏感', '成立 5 年內', '3 個月內到期', '有電話', '我的分公司', '500 萬以上'];
   const rateFreeOf = (r) => (isPeerCase(r) ? lenderShort(r.lender.name) : peerLenderOf(r.cust.id));
+  // 分頁篩選的「利率不敏感」：跟每日新名單同一套
+  const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
   // 有電話＝貿易署出進口廠商登記裡對得到（使用者：新增的名單撈不到電話就得自己 Google，所以有電話的先挑）
   const hasPhone = (r) => !!(global.Trade && global.Trade.hasPhone && global.Trade.hasPhone(r.cust && r.cust.id));
   const phoneKindsOf = (r) => (global.Trade && global.Trade.phoneKindsOf ? global.Trade.phoneKindsOf(r.cust && r.cust.id) : new Set(['N']));
@@ -488,6 +494,7 @@
       group('標的物所在地', el('div', { className: 'chips', id: 'chattel-fDistrict' })),
       group('成立年數（查商工登記來的，Actions 每月補）', el('div', { className: 'chips', id: 'chattel-fAge' })),
       group('跟我的名單比對', el('div', { className: 'chips', id: 'chattel-fMine' })),
+      group('利率（跟同業借、剛擴張的，比較不在乎利率）', el('div', { className: 'chips', id: 'chattel-fRate' })),
       group('電話（貿易署出進口廠商登記對得到的）', el('div', { className: 'chips', id: 'chattel-fPhone' })),
       group('擔保債權金額（萬元）', el('div', { className: 'leads-row' }, [
         el('input', { id: 'chattel-amtMin', type: 'number', min: '0', step: '100', placeholder: '下限', value: '100' }), '～',
@@ -604,7 +611,7 @@
     $('#chattel-more').onclick = () => { limit += PAGE; render(); };
     $('#chattel-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
     $('#chattel-reset').onclick = () => {
-      f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.phone.clear(); f.q = '';
+      f.due = 'm6'; f.lenders.clear(); f.types.clear(); f.branches.clear(); f.districts.clear(); f.mine.clear(); f.ages.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = '';
       $('#chattel-q').value = ''; $('#chattel-amtMin').value = '100'; $('#chattel-amtMax').value = ''; $('#chattel-hideFin').checked = true; $('#chattel-sort').value = 'amount';
       showHidden = false;
       rerender();
