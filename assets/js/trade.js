@@ -433,7 +433,8 @@
         el('button', { className: 'btn btn-tiny', id: 'trade-reset', type: 'button', textContent: '清除篩選' }),
         el('button', { className: 'btn btn-tiny', id: 'trade-hidden', type: 'button', hidden: true })]),
     ]);
-    filters.open = !matchMedia('(max-width: 760px)').matches;
+    // 使用者：「找名單的預設篩選畫面都先收起來，我每次點進來都要自己關」；leads-filters-open＝'1' 是預設打開（測試用）
+    filters.open = (() => { try { return localStorage.getItem('leads-filters-open') === '1'; } catch (e) { return false; } })();
     root.append(
       el('p', { className: 'muted leads-sub', id: 'trade-sub', textContent: '經濟部國際貿易署的出進口廠商登記（新北市、臺北市，最近兩年登記的）' }),
       filters,
