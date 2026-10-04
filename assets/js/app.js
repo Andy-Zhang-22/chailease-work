@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261003-263';
+  const APP_VERSION = '20261003-264';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3726,17 +3726,21 @@
     /*
      * 卡片變短（使用者：「你能夠幫我把系統畫面簡化嗎」→ 卡片只留重點，「能再多顯示中租往來及變更登記的事項嗎」
      * 「中租曾往來的不用標，只標有往來的就好」）。四行：
-     *   1. 公司名、狀態、自己標的有機會／無機會（禁止推廣也在這行）
+     *   1. 公司名、狀態、自己標的有機會／無機會、歸屬分公司（禁止推廣也在這行）
      *   2. 要注意的事（有才出現）：中租往來、變更登記、動保到期、回撥、固定、冷名單、已拜訪、同老闆幾家
      *   3. 下次聯絡日（逾期幾天）＋ 一支電話
      *   4. 最新一句談話（一行）；有增資、剛做進出口這類訊號的，下面再一行開場白（跟以前一樣）
-     * 產業、負責人、地區、資本額、最近聯絡、名單檔名、範疇、分公司都在詳細頁。
+     * 產業、負責人、地區、資本額、最近聯絡、名單檔名、範疇都在詳細頁。
      */
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name', textContent: r.company }),
       outcomeBadge(r),
       r.chance === 'yes' ? el('span', { className: 'badge badge-chance-yes', textContent: '有機會' }) : '',
       r.chance === 'no' ? el('span', { className: 'badge badge-chance-no', textContent: '無機會' }) : '',
+      // 歸屬分公司（使用者：「卡片也要秀上歸屬的分公司」）
+      r.branch && r.branch.kind === 'branch' ? el('span', { className: 'badge badge-branch', textContent: r.branchKey, title: r.branch.label }) : '',
+      r.branch && r.branch.kind === 'common' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: r.branchKey, title: r.branch.label }) : '',
+      r.branch && r.branch.kind === 'shared' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: '全公司共同區域' }) : '',
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
     ].filter(Boolean));
     node.append(top);
