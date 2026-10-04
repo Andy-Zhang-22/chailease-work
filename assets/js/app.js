@@ -5938,8 +5938,10 @@
       scheduleSync();
     };
     // 🤖 讓分身整理：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
+    // 貼回來的框按了「讓分身整理」才長出來：平常表單裡只有一個內容框
     const tidyBox = el('div', { className: 'tidy-box', hidden: true });
-    {
+    const buildTidy = () => {
+      if (tidyBox.firstChild) return;
       const paste = el('textarea', { className: 'tidy-paste', rows: 4, placeholder: '把分身的回覆整段貼在這裡（結果：…／結論：…／下一步：…／下次聯絡：…）' });
       const msg = el('p', { className: 'muted tidy-msg', hidden: true });
       const fill = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '填進表單' });
@@ -5957,12 +5959,13 @@
         memo.focus();
       };
       tidyBox.append(paste, el('div', { className: 'card-actions' }, [fill]), msg);
-    }
+    };
     const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓分身整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
     tidy.onclick = () => {
       if (!memo.value.trim()) { toast('先把這通聊了什麼隨手打進去，再交給分身整理'); memo.focus(); return; }
       if (!isPhone() && !twinUrl()) { openTwinSetup(() => tidy.click()); return; }
       sendToTwin(tidyPrompt(r, memo.value), '這通的筆記');
+      buildTidy();
       tidyBox.hidden = false;
     };
     form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy,
