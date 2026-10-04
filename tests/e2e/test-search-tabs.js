@@ -34,7 +34,7 @@ const SEED=[mk('1','安達投資有限公司','12345679')];
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
- const ctx=await br.newContext();
+ const ctx=await br.newContext(); await ctx.addInitScript(()=>{try{localStorage.setItem('leads-filters-open','1');}catch(e){}});
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);

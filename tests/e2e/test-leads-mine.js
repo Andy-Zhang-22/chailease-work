@@ -19,7 +19,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
- const ctx=await br.newContext(); await ctx.addInitScript(()=>{try{localStorage.setItem('rate-filter-default','0');}catch(e){}});
+ const ctx=await br.newContext(); await ctx.addInitScript(()=>{try{localStorage.setItem('leads-filters-open','1');}catch(e){}}); await ctx.addInitScript(()=>{try{localStorage.setItem('rate-filter-default','0');}catch(e){}});
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  await ctx.route('**/leads/trade/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:'{"generatedAt":"x"}'}));

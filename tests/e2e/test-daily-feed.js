@@ -62,7 +62,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
- const ctx=await br.newContext();
+ const ctx=await br.newContext(); await ctx.addInitScript(()=>{try{localStorage.setItem('leads-filters-open','1');}catch(e){}});
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
@@ -173,7 +173,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
 
  // 假日（10/10 國慶、週六）：自動不挑；按「再補」排到下一個上班日 10/12
- const ctx2=await br.newContext();
+ const ctx2=await br.newContext(); await ctx2.addInitScript(()=>{try{localStorage.setItem('leads-filters-open','1');}catch(e){}});
  await ctx2.addInitScript(`{ const real=Date; window.__now=new real('2026-10-10T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
