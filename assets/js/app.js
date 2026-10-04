@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-276';
+  const APP_VERSION = '20261004-277';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3288,6 +3288,116 @@
     if (d.missed.length) body.push(`■ 未接：${d.missed.map((c) => c.v.company).join('、')}`);
     return [...head, ...body].join('\n');
   }
+  /* ---------------- Claude 分身 ---------------- */
+
+  /*
+   * 使用者：「有辦法生成一個跟我一樣的企金業務在系統上嗎」→ 選「AI 分身（懂你的做法）」、「系統這邊也幫我做」。
+   * 不另外付費：分身是使用者在 claude.ai 自己建的「專案」，專案說明貼下面這份；系統只負責把資料整理好、
+   * 複製起來、打開那個專案。網址設一次，同步到別台（claude-twin-url 在 SYNCED_PREFS）。
+   * 電話、負責人、KEYMAN 欄位不帶過去；訪談內容裡的電話號碼遮掉（訪談裡自己寫的人名照樣會帶，說明寫清楚）。
+   */
+  const twinUrl = () => registryPref('claude-twin-url');
+  const TWIN_GUIDE = [
+    '你是我的分身：中租租賃新莊分公司的企金業務，用電話開發新北、台北的中小企業。你用我的標準判斷、用我的口吻說話。一律用繁體中文，先講結論，簡短直接，不要客套。',
+    '',
+    '## 我賣什麼',
+    '- 企業租賃與融資：營運週轉金、投資額度為主，設備租賃（動產抵押、附條件買賣）也做，但買設備的案子比較少。',
+    '- 對手是同業租賃（和潤、裕融、新鑫、合迪、日盛、台新、第一、歐力士等）和銀行。',
+    '',
+    '## 我的成交輪廓（判斷名單先後就看這個）',
+    '- 案件金額多半 1,000 萬上下，利率 8%～14%。',
+    '- 成立 7～8 年最常成交；成立 6～10 年優先，太新或太老都往後排。',
+    '- 資本額 500 萬～6,000 萬（一般組範疇）最對。',
+    '- 成長快的公司：要的是錢，不是便宜的錢。',
+    '',
+    '## 利率不敏感的客群（最優先）',
+    '1. 已經跟同業借的：動產擔保登記上金主是租賃或融資公司（不是銀行、不是中租）。他們本來就接受租賃利率，比的是額度、速度、服務；到期前 3 個月是換約時機。',
+    '2. 正在擴張的：剛增資、遷址、加營業項目、設分公司、剛開始做進出口、剛開始請人（剛投保）、剛開電子發票。',
+    '- 主要跟銀行借、財報漂亮的老公司、大企業：利率敏感，往後排。',
+    '',
+    '## 不要碰的',
+    '- 投資控股公司（找不到電話，沒用）。',
+    '- 現在跟中租有往來的（已經是客戶，不是我開發的對象）。',
+    '- 標了禁止推廣的。',
+    '',
+    '## 商行、企業社',
+    '只看資本額跟成立年，依序：500 萬以上＋成立 5 年內 → 500 萬以上＋5 年以上 → 200 萬以上＋5 年內 → 其他。',
+    '',
+    '## 我的習慣',
+    '- 地區：新莊分公司的範圍先，再往新北其他區、台北。',
+    '- 日期用西元，月份寫成 2026/10 這樣就好，不用到日。',
+    '- 不要替我下結論或替客戶貼標籤（例如「有機會」），除非我問。資料沒寫的不要猜，直接說不知道或該查什麼。',
+    '',
+    '## 你可以幫我做的事',
+    '1. 看一家客戶：我貼上公司資料和訪談紀錄，你告訴我：值不值得追、為什麼（對照上面的輪廓）、下一步做什麼、什麼時候再打。',
+    '2. 寫開場白：抓一個具體的切入點（增資、遷址、動保快到期、剛做進出口……），兩三句就好，口語。例：「貴公司最近搬到板橋區，我是中租新莊分公司的，就在附近，想過去打聲招呼。」',
+    '3. 應對拒絕：例如「我們有往來銀行了」「利率太高」「老闆不在」，給我一兩句能接下去的話，目標是約到拜訪或拿到窗口。',
+    '4. 整理訪談：把我亂打的筆記整理成「結論＋下一步：…」，抓出金額、時間點、對方態度。',
+    '5. 每日覆盤：我貼上今天的紀錄，你總結成果、列出要追的事（哪家、什麼時候、做什麼），給明天的建議。',
+    '6. 排名單：我貼一批公司，你照上面的優先順序排，每家一句理由。',
+  ].join('\n');
+  /** 訪談內容裡的電話號碼遮掉（市話、手機、帶分機的） */
+  const maskPhones = (t) => String(t || '').replace(/(?:\+?886[-\s]?)?\(?0\d{1,3}\)?[-\s]?\d{3,4}[-\s]?\d{3,4}(?:\s*(?:#|轉|分機)\s*\d+)?/g, '（電話略）');
+  /** 一家客戶給分身看的資料（不含電話、負責人、KEYMAN） */
+  function twinPrompt(r) {
+    const ym = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : ''; };
+    const years = (() => { const y = parseInt(String(r.founded || '').slice(0, 4), 10); return y ? new Date().getFullYear() - y : null; })();
+    const facts = [
+      `${r.company}${r.taxId ? `（統編 ${r.taxId}）` : ''}`,
+      [r.founded ? `成立 ${r.founded}${years != null ? `（${years} 年）` : ''}` : '成立年不明',
+        r.capital ? `資本總額 ${r.capital} 仟元${capitalScale(r) ? `（${capitalScale(r)}）` : ''}` : '',
+        r.capitalPaid ? `實收 ${r.capitalPaid} 仟元` : '', r.industry ? `產業 ${r.industry}` : ''].filter(Boolean).join('｜'),
+      [r.city || '', r.district || ''].join('') + (r.branchKey ? `（${r.branchKey}）` : ''),
+      r.dealingKind === 'active' ? '現在跟中租有往來' : r.dealingKind === 'past' ? '曾經跟中租往來' : '',
+      r.regChanged ? `最近異動 ${r.regChanged}${r.regKinds && r.regKinds.length && !['none', 'unchecked'].includes(r.regKinds[0]) ? `（${regBadgeText(r)}）` : ''}` : '',
+      r.nextDate ? `下次聯絡 ${r.nextDate.replace(/-/g, '/')}` : '', r.lastDate ? `最近聯絡 ${r.lastDate.replace(/-/g, '/')}` : '',
+    ].filter((x) => x && x.trim());
+    const chattel = (r.chattel || []).map((c) => `- ${window.Chattel.lenderShort(c.lender.name)}　${ym(c.start || c.approved) || '？'}　金額 ${chattelMoney(c.amount)}　${c.end ? `${ym(c.end)} 到期` : '沒有到期日'}`);
+    const notes = maskPhones(notesBundle(r).text).trim();
+    return ['請照專案說明，幫我看這家客戶：值不值得追、為什麼、開場白、下一步、什麼時候再打。', '',
+      '【公司】', ...facts, '',
+      '【動產擔保】', ...(chattel.length ? chattel : ['清冊裡沒有']), '',
+      '【訪談紀錄（新到舊）】', notes || '（還沒有紀錄）', '',
+      '（電話、負責人、KEYMAN 欄位沒有附上；訪談內容裡的電話號碼已遮掉）'].join('\n');
+  }
+  /** 設定分身：說明怎麼建、複製說明書、存專案網址 */
+  function openTwinSetup(after) {
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: 'Claude 分身' }));
+    host.append(el('ol', { className: 'twin-steps' }, [
+      el('li', { textContent: '到 claude.ai 左邊點「專案」（Projects），建一個新專案，名字例如「企金分身」。' }),
+      el('li', {}, ['按下面的「複製分身說明書」，貼進專案的「說明／Instructions」。']),
+      el('li', { textContent: '打開那個專案，把瀏覽器上方的網址複製下來，貼到下面存起來。' }),
+    ]));
+    const copyGuide = el('button', { className: 'btn', type: 'button', textContent: '複製分身說明書', onclick: async () => { await copyText(TWIN_GUIDE); toast('分身說明書已複製，貼進 Claude 專案的說明欄'); } });
+    const input = el('input', { type: 'url', className: 'twin-url', placeholder: 'https://claude.ai/project/…', value: twinUrl() });
+    const err = el('p', { className: 'save-err', hidden: true });
+    const save = el('button', { className: 'btn btn-primary', type: 'button', textContent: '存起來' });
+    save.onclick = () => {
+      const v = input.value.trim();
+      if (v && !/^https:\/\/claude\.ai\//.test(v)) { err.textContent = '網址要是 https://claude.ai/ 開頭的（打開分身專案後，瀏覽器上方那串）。'; err.hidden = false; return; }
+      registryPref('claude-twin-url', v);
+      scheduleSync();
+      toast(v ? '分身網址已存，詳細頁按「問分身」就會打開它' : '已清掉分身網址');
+      $('#editor').hidden = true;
+      if (v && typeof after === 'function') after();
+    };
+    host.append(el('div', { className: 'card-actions' }, [copyGuide]), el('label', { className: 'muted', textContent: '分身專案的網址' }), input, err,
+      el('div', { className: 'card-actions' }, [save]),
+      el('p', { className: 'muted', textContent: '用你現有的 Claude 訂閱，不另外收費。按「問分身」時系統把這家的資料與訪談內容複製起來、打開分身專案，你貼上送出就好。電話、負責人、KEYMAN 欄位不會帶過去，訪談內容裡的電話號碼會遮掉；訪談裡自己寫的人名會照樣帶過去。' }));
+    $('#editor').hidden = false;
+    input.focus();
+  }
+  /** 詳細頁「問分身」 */
+  async function askTwin(r) {
+    if (!twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
+    await copyText(twinPrompt(r));
+    window.open(twinUrl(), '_blank', 'noopener');
+    toast('這家的資料已複製，到分身那邊貼上送出');
+  }
+  window.twinPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? twinPrompt(v) : ''; };   // 測試用
+
   function openDailyReview(day) {
     const host = $('#editorBody');
     const draw = (iso) => {
@@ -3317,7 +3427,7 @@
       host.append(box);
       const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(reviewText(d)); toast('覆盤已複製，可以貼到 LINE 或筆記'); } });
       const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '複製給 Claude 整理', title: '把今天每家的完整訪談內容複製起來、打開 Claude 網站，貼上送出就好（不附電話）',
-        onclick: async () => { await copyText(reviewPrompt(d)); window.open('https://claude.ai/new', '_blank', 'noopener'); toast('已複製，到 Claude 那邊貼上送出'); } });
+        onclick: async () => { await copyText(reviewPrompt(d)); window.open(twinUrl() || 'https://claude.ai/new', '_blank', 'noopener'); toast(twinUrl() ? '已複製，到分身那邊貼上送出' : '已複製，到 Claude 那邊貼上送出'); } });
       host.append(el('div', { className: 'card-actions' }, [copy, d.companies.length ? ask : '']));
       host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）；要真正讀懂的摘要按「複製給 Claude 整理」，用你現有的 Claude 訂閱，不另外收費。' }));
     };
@@ -4696,6 +4806,9 @@
     // 拜訪準備：出門前一頁看完這家，見 openVisitBrief
     const briefBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '拜訪準備' });
     briefBtn.onclick = () => openVisitBrief(r.id);
+    // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
+    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '問分身', title: '把這家的資料和訪談內容複製起來、打開你的 Claude 分身（不帶電話、負責人、KEYMAN 欄位）' });
+    twinBtn.onclick = () => askTwin(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
     xlsxBtn.onclick = () => exportOneXlsx(r.id);
@@ -4746,6 +4859,7 @@
         editBtn,
         dealBtn,
         briefBtn,
+        twinBtn,
         xlsxBtn,
         deleteBtn(r),
       ].filter(Boolean)),
@@ -6296,7 +6410,9 @@ export default {
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
     'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
     // 每天自動照上限重排：開關、今天跑過了沒
-    'auto-rebalance', 'auto-rebalance-on']);
+    'auto-rebalance', 'auto-rebalance-on',
+    // Claude 分身專案的網址：電腦設好，手機也能直接開
+    'claude-twin-url']);
   /** 每天自動對商工登記：預設開，使用者關掉才存 '0'。 */
   const registryAutoOn = () => registryPref('registry-auto') !== '0';
   const registryPref = (key, value) => {
@@ -7996,6 +8112,7 @@ export default {
       if (act === 'backups') { await openBackups(); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
       if (act === 'review') { openDailyReview(); return; }
+      if (act === 'twin') { openTwinSetup(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
       if (act === 'stats' || act === 'rules') { switchTab(act); return; }
       if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
