@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-273';
+  const APP_VERSION = '20261004-274';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4890,11 +4890,28 @@
       if (r.chattel && r.chattel.length) {
         // 最新一筆＝登記核准日最新的（沒有就契約起）；都沒有的排最後
         const dk = (c) => { const m = String(c.approved || c.start || '').match(/^(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : -1; };
-        const c = [...r.chattel].sort((a, b) => dk(b) - dk(a))[0];
-        const when = c.days == null ? '' : c.days < 0 ? `已過期 ${-c.days} 天` : c.days === 0 ? '今天到期' : `還有 ${c.days} 天`;
-        const due = c.end ? `${c.end} 到期${when ? `（${when}）` : ''}` : '沒有到期日';
-        dd.append(el('span', { className: c.days != null && c.days >= 0 && c.days <= 92 ? 'is-soon' : '', textContent: `${window.Chattel.lenderShort(c.lender.name)}　${chattelMoney(c.amount)}，${due}` }));
-        if (r.chattel.length > 1) dd.append(el('span', { className: 'muted', textContent: `　共 ${r.chattel.length} 件` }));
+        const sorted = [...r.chattel].sort((a, b) => dk(b) - dk(a));
+        // 照使用者給的範例：「中國信託資融　2024/10  金額：2,406 萬，2033/06 到期」——金主、最近一次買設備的年月
+        // （契約起，沒有就登記核准日）、金額、到期年月；日期只到年月（「我只是要判斷他最近一次買設備是什麼時候而已」）
+        const ym = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : ''; };
+        const line = (c) => {
+          const since = ym(c.start || c.approved);
+          const due = c.end ? `${ym(c.end) || c.end} 到期` : '沒有到期日';
+          return el('div', { className: `chattel-line${c.days != null && c.days >= 0 && c.days <= 92 ? ' is-soon' : ''}`, textContent: `${window.Chattel.lenderShort(c.lender.name)}　${since ? `${since}  ` : ''}金額：${chattelMoney(c.amount)}，${due}` });
+        };
+        dd.append(line(sorted[0]));
+        // 共幾件也留，點開看其他幾件的金額與資訊（使用者：「共幾件也要留，並且能讓我看到那幾件的金額及資訊」）
+        if (sorted.length > 1) {
+          const rest = el('div', { className: 'chattel-rest', hidden: true }, sorted.slice(1).map(line));
+          const toggle = el('button', { className: 'link-btn chattel-more', type: 'button', 'aria-expanded': 'false', textContent: `共 ${sorted.length} 件 ▾` });
+          toggle.onclick = () => {
+            const open = rest.hidden;
+            rest.hidden = !open;
+            toggle.setAttribute('aria-expanded', String(open));
+            toggle.textContent = `共 ${sorted.length} 件 ${open ? '▴' : '▾'}`;
+          };
+          dd.append(toggle, rest);
+        }
       } else {
         dd.append(el('span', { className: 'muted', textContent: window.Chattel && window.Chattel.casesOf && r.taxId ? '清冊裡沒有' : (r.taxId ? '動保清冊還沒載好' : '沒有統編，對不到清冊') }));
       }
