@@ -39,11 +39,12 @@ const INDEX={generatedAt:'2026-10-01T02:00:00.000Z',dataThrough:'2026/09/01',tot
  const rows=async()=>card.locator('.chattel-cases tr').evaluateAll((trs)=>trs.filter((t)=>!t.hidden).map((t)=>[...t.cells].map((c)=>c.textContent).join('|')));
  chk(/這家共 6 件動保，擔保合計 10,634 萬/.test(await card.locator('.chattel-cases-head').textContent()), `標題：件數與合計：${await card.locator('.chattel-cases-head').textContent()}`);
  const r1=await rows();
- chk(JSON.stringify(r1)===JSON.stringify(['新鑫|2026/02～2036/02|688 萬','新鑫|2025/01～2035/01|3,156 萬','合迪|2023/06～2033/06|2,545 萬','合迪|2022/04～2026/12|3,180 萬']), `新的在上、先列 4 件：${JSON.stringify(r1)}`);
+ chk(JSON.stringify(r1)===JSON.stringify(['新鑫|2026/02～2036/02|688 萬','新鑫|2025/01～2035/01|3,156 萬']) && /其他 4 件/.test(await card.locator('.chattel-cases .chattel-more').textContent()), `新的在上、最多先列 2 件，其他收起：${JSON.stringify(r1)}`);
  chk(await card.locator('tr.is-self').count()===1 && /2026\/02/.test(await card.locator('tr.is-self').textContent()), '這張卡片那件粗體');
- chk(await card.locator('tr.is-soon:has-text("2026/12")').count()===1, '3 個月內到期的標橘色');
+ 
  await card.locator('.chattel-cases .chattel-more').click(); await pg.waitForTimeout(300);
- chk((await rows()).length===6 && /收起/.test(await card.locator('.chattel-cases .chattel-more').textContent()), `「其他 2 件」展開全部 6 件：${(await rows()).length}`);
+ chk((await rows()).length===6 && /收起/.test(await card.locator('.chattel-cases .chattel-more').textContent()), `「其他 4 件」展開全部 6 件：${(await rows()).length}`);
+ chk(await card.locator('tr.is-soon:has-text("2026/12")').count()===1, '3 個月內到期的標橘色');
  const single=pg.locator('#chattel-cards .card:has-text("單件有限公司")');
  chk(await single.locator('.chattel-cases').count()===0, '只有一件的不另外列');
  // 最近買設備（使用者：「幫我整理出最近有買設備的，以最近有買設備進來的公司優先提供名單給我，該分頁排序以契約最新到最舊」）
