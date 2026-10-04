@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-281';
+  const APP_VERSION = '20261004-282';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3354,7 +3354,7 @@
       r.regChanged ? `最近異動 ${r.regChanged}${r.regKinds && r.regKinds.length && !['none', 'unchecked'].includes(r.regKinds[0]) ? `（${regBadgeText(r)}）` : ''}` : '',
       r.nextDate ? `下次聯絡 ${r.nextDate.replace(/-/g, '/')}` : '', r.lastDate ? `最近聯絡 ${r.lastDate.replace(/-/g, '/')}` : '',
     ].filter((x) => x && x.trim());
-    const chattel = (r.chattel || []).map((c) => `- ${window.Chattel.lenderShort(c.lender.name)}　${ym(c.start || c.approved) || '？'}　金額 ${chattelMoney(c.amount)}　${c.end ? `${ym(c.end)} 到期` : '沒有到期日'}`);
+    const chattel = (r.chattel || []).map((c) => `- ${window.Chattel.lenderShort(c.lender.name)}　${ym(c.startUse || c.start || c.approved) || '？'}　金額 ${chattelMoney(c.amount)}　${c.days == null && c.dateOdd && c.end ? '迄日有誤' : c.end ? `${ym(c.end)} 到期` : '沒有到期日'}`);
     const notes = maskPhones(notesBundle(r).text).trim();
     return ['請照專案說明，幫我看這家客戶：值不值得追、為什麼、開場白、下一步、什麼時候再打。', '',
       '【公司】', ...facts, '',
@@ -5159,8 +5159,8 @@
         const ym = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : ''; };
         // 排成一張表，每一欄上下對齊（使用者：「排版工整一點歪來歪去」）：金主｜年月｜金額（數字靠右）｜到期
         const line = (c, extra) => {
-          const since = ym(c.start || c.approved);
-          const due = c.end ? `${ym(c.end) || c.end} 到期` : '沒有到期日';
+          const since = ym(c.startUse || c.start || c.approved);
+          const due = c.days == null && c.dateOdd && c.end ? '迄日有誤' : c.end ? `${ym(c.end) || c.end} 到期` : '沒有到期日';
           return el('tr', { className: `chattel-line${c.days != null && c.days >= 0 && c.days <= 92 ? ' is-soon' : ''}${extra ? ` ${extra}` : ''}` }, [
             el('td', { className: 'ch-lender', textContent: window.Chattel.lenderShort(c.lender.name) }),
             el('td', { className: 'ch-ym', textContent: since || '—' }),
