@@ -49,9 +49,15 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  chk(/資料截到 2026\/07/.test(sub) && /2026\/09\/26/.test(sub), `副標寫資料截到哪、何時抓的：${sub}`);
  chk(await pg.locator('#filters').isHidden(), '左側客戶篩選收起來，整個寬度給清冊');
 
- // 預設：6 個月內、同業（中租自家藏起來）、金額 100 萬起、過期的不算
  const names=async()=>pg.$$eval('#chattel-cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
+ // 預設改成：到期時間全部、照契約起最新到最舊排（使用者：「該分頁排序以契約最新到最舊排序」）；同業、金額 100 萬起照舊
  let n=await names();
+ chk(n.join('|')==='巨鎰金屬製品有限公司|禾泰精密工業有限公司|昱昌汽車貨運股份有限公司|泓宇塑膠射出有限公司|老早過期有限公司', `預設全部到期時間、照契約起最新到最舊：${n.join('|')}`);
+ chk((await pg.$eval('#chattel-sort',(x)=>x.value))==='start', '排序預設「契約起（最新到最舊）」');
+ // 底下照原本的檢查：切成 6 個月內到期、照擔保金額排
+ await pg.locator('#chattel-fDue .chip:has-text("6 個月內")').click(); await pg.waitForTimeout(200);
+ await pg.selectOption('#chattel-sort','amount'); await pg.waitForTimeout(200);
+ n=await names();
  chk(n.join('|')==='禾泰精密工業有限公司|昱昌汽車貨運股份有限公司|巨鎰金屬製品有限公司|泓宇塑膠射出有限公司', `預設 6 個月內、照擔保金額高到低排、中租自家與 50 萬的小案子藏起來：${n.join('|')}`);
  chk((await pg.textContent('#countChattel'))==='4', `分頁上的數字＝列出來的家數：${await pg.textContent('#countChattel')}`);
 
@@ -119,6 +125,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  chk(await pg.locator('#chattel-hidden').isHidden(), '放回來之後沒有藏起來的了');
 
  // 加入客戶名單：走匯入流程，已在名單的略過；動保資訊在訪談內容，沒有變成通話紀錄
+ await pg.locator('#chattel-fDue .chip:has-text("6 個月內")').click(); await pg.waitForTimeout(200);   // 預設改成全部到期時間了，這段照原本的 6 個月內
  const addBtn=await pg.textContent('#chattel-add');
  chk(/加入客戶名單（2 家）/.test(addBtn), `按鈕寫還不在名單的家數：${addBtn}`);
  await pg.click('#chattel-add'); await pg.waitForTimeout(1500);
