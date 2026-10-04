@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-272';
+  const APP_VERSION = '20261004-273';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3204,6 +3204,127 @@
     $('#editor').hidden = false;
   }
 
+  /* ---------------- 今日覆盤 ---------------- */
+
+  /*
+   * 使用者：「幫我總結我今天在系統上做了什麼事的每日覆盤，比如我聯絡了幾間客戶、對談重點」、
+   * 「訪談的內容摘要可以幫我也重點出來嗎」。不用另外付費：系統照規則從訪談內容抓重點
+   * （第一句、金額、日期、「下一步：」），真正的摘要按「複製給 Claude 整理」貼到 Claude 網站。
+   */
+  const isoOfMs = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  /** 一則訪談內容的重點：第一句（40 字內），加上第一句沒講到的金額、日期，和「下一步：」那行 */
+  function talkPoints(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n').map((x) => x.trim()).filter(Boolean);
+    if (!lines.length) return '';
+    const nextLine = lines.find((l) => /^下一步[:：]/.test(l));
+    const body = lines.filter((l) => l !== nextLine).join(' ');
+    let first = (body.split(/[。；;！!？?]/)[0] || '').trim();
+    if (first.length > 40) first = `${first.slice(0, 40)}…`;
+    const parts = first ? [first] : [];
+    const money = (body.match(/\d[\d,.]*\s*(?:億|萬)/g) || []).filter((m) => !first.includes(m));
+    const dates = (body.match(/\d{1,2}\/\d{1,2}|\d{1,2}月\d{1,2}[日號]?|下(?:週|周|禮拜)[一二三四五六日天]|明天|後天/g) || []).filter((d) => !first.includes(d));
+    if (money.length) parts.push(`💰 ${[...new Set(money)].join('、')}`);
+    if (dates.length) parts.push(`📅 ${[...new Set(dates)].join('、')}`);
+    if (nextLine) parts.push(nextLine.replace(/^下一步[:：]\s*/, '下一步：'));
+    return parts.join('｜');
+  }
+  /** 某一天的覆盤資料（預設今天）：從那天的通話紀錄與狀態算 */
+  function dailyReview(day) {
+    const t = day || todayISO();
+    const views = allViews();
+    const byId = new Map(views.map((v) => [v.id, v]));
+    const norm = (o) => window.Normalize.normalizeOutcome(o);
+    const logs = state.logs.filter((l) => l.date === t && byId.has(l.recordId)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const per = new Map();
+    logs.forEach((l) => { if (!per.has(l.recordId)) per.set(l.recordId, []); per.get(l.recordId).push(l); });
+    const companies = [...per.entries()].map(([id, ls]) => {
+      const last = ls[ls.length - 1];
+      const reached = ls.some((l) => norm(l.outcome) !== 'noanswer');
+      const texts = ls.filter((l) => norm(l.outcome) !== 'noanswer' || (l.text || '').trim()).map((l) => (l.text || '').trim()).filter(Boolean);
+      return { v: byId.get(id), logs: ls, outcome: norm(last.outcome), reached, texts, points: texts.map(talkPoints).filter(Boolean).join('；') };
+    });
+    const next = window.Holidays ? window.Holidays.nextWorkday(addDays(t, 1)).iso : addDays(t, 1);
+    return {
+      day: t, next, calls: logs.length, companies,
+      reached: companies.filter((c) => c.reached && c.outcome !== 'blocked'),
+      missed: companies.filter((c) => !c.reached),
+      blocked: companies.filter((c) => c.outcome === 'blocked'),
+      meetings: logs.filter((l) => l.meeting && l.meetingDate).map((l) => ({ v: byId.get(l.recordId), l })),
+      chance: views.filter((v) => v.chance === 'yes' && v.chanceAt && isoOfMs(v.chanceAt) === t),
+      added: views.filter((v) => v.addedDate === t),
+      left: t === todayISO() ? views.filter((v) => v.nextDate && v.nextDate <= t && !v.blocked && !per.has(v.id) && v.dueDoneOn !== t).length : null,
+      tomorrow: views.filter((v) => v.nextDate === next && !v.blocked).length,
+    };
+  }
+  window.dailyReview = (day) => { const d = dailyReview(day); return { ...d, companies: d.companies.map((c) => ({ company: c.v.company, outcome: c.outcome, reached: c.reached, points: c.points })), reached: d.reached.length, missed: d.missed.length, blocked: d.blocked.length, meetings: d.meetings.length, chance: d.chance.map((v) => v.company), added: d.added.length }; };   // 測試用
+  const meetLabel = (l) => `${dateLabel(l.meetingDate).slice(5)}${l.meetingArrive ? ` ${l.meetingArrive} 抵達` : ''}`;
+  /** 覆盤的純文字（複製用） */
+  function reviewText(d) {
+    const out = [`📋 ${dateLabel(d.day)} 覆盤`,
+      `聯絡了 ${d.companies.length} 家（打了 ${d.calls} 通）：接通 ${d.reached.length}、未接 ${d.missed.length}${d.blocked.length ? `、禁止推廣 ${d.blocked.length}` : ''}`];
+    if (d.chance.length) out.push(`⭐ 新標有機會：${d.chance.map((v) => v.company).join('、')}`);
+    if (d.meetings.length) out.push(`🚗 約到拜訪：${d.meetings.map(({ v, l }) => `${v.company}（${meetLabel(l)}）`).join('、')}`);
+    if (d.reached.length) { out.push('', '💬 對談重點'); d.reached.forEach((c) => out.push(`・${c.v.company}　${c.points || '（沒寫內容）'}`)); }
+    if (d.blocked.length) out.push('', `⛔ 禁止推廣：${d.blocked.map((c) => c.v.company).join('、')}`);
+    if (d.missed.length) out.push('', `📵 未接：${d.missed.map((c) => c.v.company).join('、')}`);
+    out.push('');
+    if (d.left != null) out.push(`今天該打的還剩 ${d.left} 家沒打`);
+    if (d.added.length) out.push(`今天加進名單 ${d.added.length} 家`);
+    out.push(`${dateLabel(d.next).slice(5)} 排了 ${d.tomorrow} 家`);
+    return out.join('\n');
+  }
+  /** 給 Claude 的那段：完整訪談內容＋要它做的事；不附電話、負責人 */
+  function reviewPrompt(d) {
+    const head = [`以下是我（租賃業務，打電話開發企業客戶）${dateLabel(d.day)} 的電話推廣紀錄。請用繁體中文幫我：`,
+      '1. 用三、四句話總結今天的成果', '2. 每家接通的客戶整理成一行重點（需求、金額、時間點、對方態度）',
+      '3. 列出接下來要追的事（哪家、什麼時候、做什麼）', '4. 給我明天的建議', '',
+      `【數字】聯絡 ${d.companies.length} 家、打了 ${d.calls} 通：接通 ${d.reached.length}、未接 ${d.missed.length}、禁止推廣 ${d.blocked.length}；新標有機會 ${d.chance.length} 家；約到拜訪 ${d.meetings.length} 家`, '', '【每家紀錄】'];
+    const OUT = { contacted: '接通', noanswer: '未接', blocked: '禁止推廣' };
+    const body = [...d.reached, ...d.blocked].map((c) => {
+      const v = c.v;
+      const info = [v.founded ? `成立 ${v.founded}` : '', v.capital ? `資本額 ${v.capital} 仟元` : '', v.industry || ''].filter(Boolean).join('、');
+      return [`■ ${v.company}（${OUT[c.outcome] || c.outcome}${info ? `；${info}` : ''}）`, ...c.texts.map((x) => `  ${x.replace(/\n/g, ' ')}`)].join('\n');
+    });
+    if (d.missed.length) body.push(`■ 未接：${d.missed.map((c) => c.v.company).join('、')}`);
+    return [...head, ...body].join('\n');
+  }
+  function openDailyReview(day) {
+    const host = $('#editorBody');
+    const draw = (iso) => {
+      const d = dailyReview(iso);
+      host.textContent = '';
+      const pick = el('input', { type: 'date', value: d.day, max: todayISO(), className: 'review-day' });
+      pick.onchange = () => { if (pick.value) draw(pick.value); };
+      host.append(el('h2', { textContent: '📋 今日覆盤' }), el('div', { className: 'card-actions' }, [pick]));
+      const box = el('div', { className: 'review' });
+      box.append(el('p', { className: 'review-sum' }, [el('strong', { textContent: `聯絡了 ${d.companies.length} 家` }),
+        `（打了 ${d.calls} 通）：接通 ${d.reached.length}、未接 ${d.missed.length}${d.blocked.length ? `、禁止推廣 ${d.blocked.length}` : ''}`]));
+      const open = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => { closeOverlays(); openDetail(v.id); } });
+      const line = (label, items) => (items.length ? box.append(el('p', {}, [`${label}：`, ...items.flatMap((x, i) => (i ? ['、', x] : [x]))])) : null);
+      line('⭐ 新標有機會', d.chance.map(open));
+      line('🚗 約到拜訪', d.meetings.map(({ v, l }) => el('span', {}, [open(v), `（${meetLabel(l)}）`])));
+      if (d.reached.length) {
+        box.append(el('h3', { textContent: `💬 對談重點（接通 ${d.reached.length} 家）` }));
+        const ul = el('ul', { className: 'review-points' });
+        d.reached.forEach((c) => ul.append(el('li', {}, [open(c.v), el('span', { className: c.points ? '' : 'muted', textContent: `　${c.points || '（沒寫內容）'}` })])));
+        box.append(ul);
+      }
+      line('⛔ 禁止推廣', d.blocked.map((c) => open(c.v)));
+      line('📵 未接', d.missed.map((c) => open(c.v)));
+      const tail = [d.left != null ? `今天該打的還剩 ${d.left} 家沒打` : '', d.added.length ? `今天加進名單 ${d.added.length} 家` : '', `${dateLabel(d.next).slice(5)} 排了 ${d.tomorrow} 家`].filter(Boolean);
+      box.append(el('p', { className: 'muted', textContent: tail.join('　·　') }));
+      if (!d.companies.length) box.append(el('p', { className: 'muted', textContent: '這天沒有通話紀錄。' }));
+      host.append(box);
+      const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(reviewText(d)); toast('覆盤已複製，可以貼到 LINE 或筆記'); } });
+      const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '複製給 Claude 整理', title: '把今天每家的完整訪談內容複製起來、打開 Claude 網站，貼上送出就好（不附電話）',
+        onclick: async () => { await copyText(reviewPrompt(d)); window.open('https://claude.ai/new', '_blank', 'noopener'); toast('已複製，到 Claude 那邊貼上送出'); } });
+      host.append(el('div', { className: 'card-actions' }, [copy, d.companies.length ? ask : '']));
+      host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）；要真正讀懂的摘要按「複製給 Claude 整理」，用你現有的 Claude 訂閱，不另外收費。' }));
+    };
+    draw(day || todayISO());
+    $('#editor').hidden = false;
+  }
+
   async function undoSpread() {
     if (!lastSpread) { toast('沒有可以復原的重排'); return; }
     let done = 0;
@@ -4843,8 +4964,8 @@
      * 常看的直接顯示；其他的收進「更多資料 ▸」。卡片上拿掉的名單檔名、產業別也在這裡。
      */
     {
-      // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）
-      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）；實收資本額也是（「實收資本額也不要收在下面」）
+      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '實收資本額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
       // 動產擔保接在最近異動日期後面、下次聯絡前面（跟成立年、資本額這些判斷用的放一起）
       const dtOf = (t) => [...dl.children].find((n) => n.tagName === 'DT' && n.textContent.trim() === t);
       const ch = dtOf('動產擔保'); const nx = dtOf('下次聯絡');
@@ -7844,6 +7965,7 @@ export default {
       if (act === 'data-status') { await openDataStatus(); return; }
       if (act === 'backups') { await openBackups(); return; }
       if (act === 'check-names') { await reviewCompanyNames(); return; }
+      if (act === 'review') { openDailyReview(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
       if (act === 'stats' || act === 'rules') { switchTab(act); return; }
       if (act === 'prune-unscheduled') { pruneUnscheduled(); return; }
