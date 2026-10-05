@@ -17,7 +17,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(await pg.locator('#subtabs').isHidden(), '在重點推廣名單時第二排收著');
  // 按找名單：第二排出現、預設登記清冊
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(400);
- chk(await pg.locator('#subtabs').isVisible() && (await pg.$$eval('#subtabs .subtab',a=>a.length))===7, '第二排七個來源');
+ chk(await pg.locator('#subtabs').isVisible() && (await pg.$$eval('#subtabs .subtab',a=>a.length))===8, '第二排八個來源（加了新設工廠）');
  chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('.subtab[data-tab="leads"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneLeads').isVisible(), '找名單亮著、預設登記清冊');
  const subs=await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(subs[0].startsWith('每月公司設立／變更登記清冊') && subs[1].startsWith('動產擔保') && subs[2].startsWith('上市櫃') && subs[6].startsWith('剛開電子發票'), `名字縮短：${subs.join(' | ')}`);

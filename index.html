@@ -99,6 +99,7 @@
   <button class="subtab" data-tab="trade">出進口廠商 <span class="pill" id="countTrade"></span></button>
   <button class="subtab" data-tab="nhi">剛開始請人 <span class="pill" id="countNhi"></span></button>
   <button class="subtab" data-tab="einv">剛開電子發票 <span class="pill" id="countEinv"></span></button>
+  <button class="subtab" data-tab="factory">新設工廠 <span class="pill" id="countFactory"></span></button>
 </nav>
 
 <main class="layout">
@@ -220,6 +221,8 @@
     <div id="paneNhi" class="leads nhi" hidden></div>
     <!-- 剛開電子發票：財政部的導入電子發票營業人清單（剛開始開電子發票），畫面由 einv.js 長出來 -->
     <div id="paneEinv" class="leads einv" hidden></div>
+    <!-- 新設工廠：經濟部生產中工廠清冊裡最近登記的工廠，畫面由 factory.js 長出來 -->
+    <div id="paneFactory" class="leads factory" hidden></div>
   </section>
 </main>
 
@@ -354,6 +357,7 @@
 <script src="assets/js/trade.js?v=20261005-289"></script>
 <script src="assets/js/nhi.js?v=20261005-289"></script>
 <script src="assets/js/einv.js?v=20261005-289"></script>
+<script src="assets/js/factory.js?v=20261005-289"></script>
 <script src="assets/js/app.js?v=20261005-289"></script>
 </body>
 </html>
