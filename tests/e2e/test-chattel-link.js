@@ -63,6 +63,7 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  const order=await pg.evaluate(()=>[...document.querySelectorAll('#drawerBody > dl.detail-grid > dt')].map(x=>x.textContent.trim()));
  chk(order.indexOf('最近異動日期')>=0 && order.indexOf('動產擔保')===order.indexOf('最近異動日期')+1 && order.indexOf('下次聯絡')===order.indexOf('動產擔保')+1, `直接顯示，在最近異動日期後面、下次聯絡前面：${order.join('、')}`);
  chk(await pg.locator('#drawerBody details.detail-more .detail-chattel').count()===0, '不收在「更多資料」裡');
+ chk(order[0]==='統一編號', `統編在最上面（使用者：「幫我把統編移到上面」）：${order.join('、')}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  await pg.locator('#paneList .card:has-text("沒動保") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk((await pg.textContent('#drawerBody .detail-chattel')).trim()==='清冊裡沒有', '沒對到的只寫「清冊裡沒有」');
