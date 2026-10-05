@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-289';
+  const APP_VERSION = '20261005-290';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1854,7 +1854,7 @@
     for (const id of ids) await saveState(id, { group: group || undefined, groupIds: group ? ids : undefined, groupAt: at });
   }
 
-  function openGroupEditor(r) {
+  function openGroupEditor(r, opts) {
     const host = $('#editorBody');
     host.textContent = '';
     host.append(el('h2', { textContent: `連結同一老闆的公司：${r.company}` }));
@@ -2158,9 +2158,36 @@
       if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center' });
       if (!res.companies.length) regList.append(el('p', { className: 'rule-note', textContent: '查不到。登記上的寫法可能不一樣，少打幾個字（例如只打「遠帆國際」）或改用統一編號再試。' }));
     };
+    /*
+     * 用負責人姓名查名下公司（使用者選「同一個老闆的其他公司」）：查到的照上面同一套列出來（已在名單的「連結這一家」、
+     * 不在的「加入並連結」）。同名同姓的人很多，所以只列候選、不自動連。
+     */
+    const ownerName = String(r.owner || '').replace(/[\s\u3000]/g, '');
+    const ownerBtn = ownerName && !window.Registry.maskedName(ownerName) ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: `🔍 查負責人「${ownerName}」名下的公司` }) : '';
+    if (ownerBtn) ownerBtn.onclick = async () => {
+      regList.textContent = '';
+      newPicks.clear();
+      ownerBtn.disabled = true;
+      regNote.className = 'rule-note';
+      regNote.textContent = `正在用負責人「${ownerName}」查商工登記…`;
+      let res;
+      try { res = await window.Registry.companiesByOwner(ownerName); } catch (err) { res = { ok: false, reason: err && err.message ? err.message : String(err) }; }
+      ownerBtn.disabled = false;
+      if (!res.ok) {
+        regNote.className = 'rule-verdict is-fail';
+        regNote.textContent = `查不到：${String(res.reason || '').split('\n')[0]}`;
+        if (res.upstream) regList.append(el('p', { className: 'rule-note' }, ['也可以自己在新分頁看：', el('a', { href: res.upstream, target: '_blank', rel: 'noopener', textContent: '打開這個查詢網址' })]));
+        return;
+      }
+      const others = res.list.filter((c) => !isSelf(c));
+      regNote.textContent = others.length
+        ? `負責人「${ownerName}」名下還有 ${others.length} 家。同名同姓的人很多，看一下地址、產業對不對再連。`
+        : `負責人「${ownerName}」名下只有這一家（或同名的都對不到）。`;
+      others.forEach((c) => regList.append(regRow({ ...c, owner: ownerName })));
+    };
     regBox.append(
       el('p', { className: 'muted', textContent: '名單外的關係企業：知道是哪一家就直接打公司名（或統編），商工登記的資料會一起帶進來。' }),
-      el('div', { className: 'row' }, [kwInput, regBtn]), regNote, regList);
+      el('div', { className: 'row' }, [kwInput, regBtn]), ownerBtn ? el('div', { className: 'card-actions' }, [ownerBtn]) : '', regNote, regList);
     // Enter 直接查，不用再去按按鈕
     kwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); regBtn.click(); } });
 
@@ -2269,6 +2296,7 @@
     paintList('');
     $('#editor').hidden = false;
     kwInput.focus();
+    if (opts && opts.owner && ownerBtn) ownerBtn.click();
   }
 
   /*
@@ -5521,6 +5549,8 @@
       const linkBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: members.length ? '修改連結' : '連結其他公司' });
       linkBtn.onclick = () => openGroupEditor(r);
       head.append(linkBtn);
+      // 同負責人的其他公司：打開連結視窗直接用負責人姓名查（同名同姓的自己確認）
+      if (r.owner && !(window.Registry && window.Registry.maskedName && window.Registry.maskedName(String(r.owner).replace(/[\s\u3000]/g, '')))) head.append(el('button', { className: 'btn btn-tiny owner-search', type: 'button', textContent: '🔍 同負責人的公司', title: `用負責人「${r.owner}」查商工登記，看他名下還有哪些公司`, onclick: () => openGroupEditor(r, { owner: true }) }));
       sec.append(head);
       if (members.length) {
         const ul = el('ul', { className: 'group-members' });

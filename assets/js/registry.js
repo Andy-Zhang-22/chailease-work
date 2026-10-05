@@ -859,8 +859,35 @@
     return { ok: true, corps: names, foreign, haven: foreign.filter((n) => HAVEN_RE.test(n)) };
   }
 
+  /*
+   * 用負責人姓名查名下公司（使用者：「還有什麼能讓我做的嗎」→ 選「同一個老闆的其他公司」、「6也做」）。
+   * 官方資料集 4B61A0F1 可以用 Responsible_Name 篩（2026/10 用 Actions 實測：林百里查得到廣達、雲達等 6 家），
+   * 但官方不送 CORS 標頭，瀏覽器直接打會被擋，要走使用者的自架代理；g0v 的搜尋不吃人名（實測查無資料）。
+   * 同名同姓的人很多：查到的只是候選，使用者自己看地址、產業確認。名字有遮字（王O明）的查不了。
+   */
+  const OWNER_BASE = 'https://data.gcis.nat.gov.tw/od/data/api/4B61A0F1-458C-43F9-93F3-9FD6DA5E1B08';
+  const maskedName = (n) => /[○◯〇Ｏ＊*?？]/.test(n) || /[\u4e00-\u9fff][OＯo][\u4e00-\u9fff]?$/.test(n);
+  async function companiesByOwner(name) {
+    const clean = String(name || '').replace(/[\s\u3000]/g, '');
+    if (clean.length < 2) return { ok: false, reason: '沒有負責人姓名' };
+    if (maskedName(clean)) return { ok: false, reason: `負責人姓名有遮字（${clean}），查不了` };
+    const url = odata(OWNER_BASE, `Responsible_Name eq ${clean}`, 100);
+    const urls = [{ key: 'official', url }, ...(getProxy() ? [{ key: 'proxy', url: viaProxy(url) }] : [])];
+    const attempts = [];
+    for (const u of urls) {
+      try {
+        const rows = await request(u.url);
+        const list = rows.map((x) => ({ taxId: String(x.Business_Accounting_NO || '').replace(/\D/g, ''), name: String(x.Company_Name || '').trim() }))
+          .filter((x) => x.name || x.taxId);
+        return { ok: true, list, source: u.key, upstream: url };
+      } catch (err) { attempts.push(`${u.key === 'proxy' ? '自架代理' : '商工登記（官方）'}：${explain(err, u.key)}`); }
+    }
+    return { ok: false, attempts, upstream: url, needProxy: !getProxy(),
+      reason: getProxy() ? attempts.join('\n') : '瀏覽器不能直接查商工登記（政府網站不給跨網域），要先設好自架代理（⋯ 選單 →「從商工登記更新公司資料」）' };
+  }
+
   global.Registry = {
-    corpHolders, isForeignCorp,
+    corpHolders, isForeignCorp, companiesByOwner, maskedName,
     lookupByTaxId, lookupByName, lookupByKeyword, companyStem, lookupCompany, lookupBusiness, mapRow, toThousands, tidyDate,
     FULL_TAXID_BASE, LEGACY_TAXID_BASE,
     SOURCES, activeSources, getProxy, setProxy, checkProxy, probeDataset, probeNameQuery, probeBaseWithTaxId, PROBE_NAME, nameVariants,
