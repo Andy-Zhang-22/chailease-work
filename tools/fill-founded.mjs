@@ -29,7 +29,9 @@
  * 同樣只讀 leads/founded.json 當種子（使用者：「出進口廠商能補上成立年嗎」）。同一次查詢順便拿資本總額（元）填進「資本額」欄，
  * 快取 leads/trade/capital.json（使用者：「幫我把出進口的分頁名單補上資本額」）——資本額的快取是分開的，成立年查過但資本額還沒有的要再查一次。
  *
- * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade|nhi] [--out leads] [--minutes 240]
+ * 新設工廠也用（--source factory）：leads/factory/factory.csv 的「統編」查公司成立日與資本額，跟剛開始請人一樣（工廠清冊只有工廠自己的日期）。
+ *
+ * 用法：node tools/fill-founded.mjs [--source leads|chattel|trade|nhi|factory] [--out leads] [--minutes 240]
  *                                   [--concurrency 6] [--limit N] [--dry]
  */
 import { createRequire } from 'node:module';
@@ -49,8 +51,9 @@ const LIMIT = Number(opt('limit', '0')) || 0;
 const DRY = args.includes('--dry');
 const CHATTEL = SOURCE === 'chattel';
 const TRADE = SOURCE === 'trade';
-const NHI = SOURCE === 'nhi';   // 剛開始請人（健保新投保單位）：成立日檔案裡多半有，主要是補資本額
-const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : NHI ? 'nhi' : '';   // 自己的資料夾（快取、index 都在那裡）
+const FACTORY = SOURCE === 'factory';   // 新設工廠：公司成立日、資本額都要查
+const NHI = SOURCE === 'nhi' || FACTORY;   // 剛開始請人（健保新投保單位）：成立日檔案裡多半有，主要是補資本額；新設工廠同一套欄位
+const SUB = CHATTEL ? 'chattel' : TRADE ? 'trade' : FACTORY ? 'factory' : NHI ? 'nhi' : '';   // 自己的資料夾（快取、index 都在那裡）
 const CACHE = SUB ? path.join(OUT, SUB, 'founded.json') : path.join(OUT, 'founded.json');
 const SEED = SUB ? path.join(OUT, 'founded.json') : '';   // 只讀、不寫回
 const CAP_CACHE = (TRADE || NHI) ? path.join(OUT, SUB, 'capital.json') : '';   // 統編 → 資本總額（元；0＝登記上沒有）
@@ -120,7 +123,7 @@ const COLS = CHATTEL
   : TRADE
     ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: '出進口廠商' }   // 檔案本來就是最新登記在前，照檔案順序查
     : NHI
-      ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: '剛開始請人' }   // 最近投保的在前
+      ? { tax: '統編', name: '名稱', fill: '成立日期', order: '', label: FACTORY ? '新設工廠' : '剛開始請人' }   // 最近投保（登記）的在前
       : { tax: '統一編號', name: '公司名稱', fill: '核准設立日期', order: '', label: '變更清冊' };
 const files = [];
 if (CHATTEL) {
@@ -128,7 +131,7 @@ if (CHATTEL) {
 } else if (TRADE) {
   files.push(path.join(OUT, 'trade', 'trade.csv'));
 } else if (NHI) {
-  files.push(path.join(OUT, 'nhi', 'nhi.csv'));
+  files.push(path.join(OUT, SUB, `${SUB}.csv`));
 } else {
   for (const period of (await fs.readdir(OUT, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort()) {
     for (const name of (await fs.readdir(path.join(OUT, period))).filter((f) => f.endsWith('-change.csv'))) {
