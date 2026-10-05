@@ -72,6 +72,13 @@ const SEED=[
  await det2.locator('.nearby-leads-toggle input').check(); await pg.waitForTimeout(1500);
  const leads=await det2.locator('.nearby-leads .nearby-row').allTextContents();
  chk(leads.length===2 && /出進口廠商.*晨光貿易.*同一條路.*02-2990-1234/.test(leads[0].replace(/\s+/g,' ')) && /商行.*協玖裝潢.*同一條路/.test(leads[1].replace(/\s+/g,' ')), `找名單裡同區的：${leads.map(t=>t.replace(/\s+/g,' ')).join(' ／ ')}`);
+ // 複製鈕（使用者：「幫我新增複製鈕」）：公司名稱、電話各一顆
+ const lr=det2.locator('.nearby-leads .nearby-row').first();
+ chk(await lr.locator('.copy-dot').count()===2, `公司名稱、電話各一顆複製鈕：${await lr.locator('.copy-dot').count()}`);
+ await lr.locator('.tel-group .copy-dot').click(); await pg.waitForTimeout(200);
+ chk(/已複製 0229901234/.test(await pg.textContent('#toast')), `複製電話（純數字）：${await pg.textContent('#toast')}`);
+ await lr.locator('b + .copy-dot').click(); await pg.waitForTimeout(200);
+ chk(/已複製：晨光貿易有限公司/.test(await pg.textContent('#toast')), `複製公司名稱：${await pg.textContent('#toast')}`);
  await det2.locator('.nearby-leads .nearby-row').first().locator('button:has-text("加入名單")').click(); await pg.waitForTimeout(1500);
  chk(await pg.evaluate(()=>window.customerViews().some(v=>v.company==='晨光貿易有限公司' && v.phoneRaw==='02-2990-1234')), '加入名單帶電話');
  chk((await pg.evaluate(()=>localStorage.getItem('nearby-leads')))==='1', '勾選記住');
