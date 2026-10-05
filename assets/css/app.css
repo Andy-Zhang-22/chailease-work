@@ -1122,3 +1122,4 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .badge-mine.is-log { cursor: pointer; }
 .badge-mine.is-log:hover { text-decoration: underline; }
 .leads-history { color: var(--muted); }
+.badge-foreign { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); }

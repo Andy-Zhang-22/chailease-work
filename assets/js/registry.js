@@ -831,7 +831,36 @@
     return res || { ok: false, reason: '沒有統編也沒有公司名稱，無法查詢', attempts: [] };
   }
 
+  /*
+   * 董監事裡的法人代表：看有沒有外國／境外法人（使用者：「境外投資的公司會有公開資料拿找嗎」→ 選「商工登記董監事看有沒有境外法人」）。
+   * 官方開放資料的基本資料沒有董監事；g0v 鏡像的 /api/show/<統編> 有「董監事名單」，每筆「所代表法人」是 [統編或 0, 名稱]。
+   * 實測（2026/10，GitHub Actions）：g0v 給瀏覽器跨網域讀（Access-Control-Allow-Origin: *）；公開清冊抽 200 家新公司，
+   * 17 家董監有法人代表、3 家是外國／境外法人（新加坡商…、百慕達商…、韓商…）——少見，所以有的話值得標出來。
+   * 境外法人當董監＝這家有境外控股，通常老闆在海外也有事業（台商常用薩摩亞、BVI 這類公司持股）。
+   */
+  const FOREIGN_PREFIX = /^(香港|澳門|新加坡|美|日|英|德|法|韓|澳|紐西蘭|加拿大|馬來西亞|泰|越南|菲律賓|印尼|荷蘭|瑞士|瑞典|義大利|比利時|盧森堡|百慕達|薩摩亞|英屬維京群島|英屬蓋曼群島|英屬|開曼群島|開曼|蓋曼群島|安圭拉|塞席爾|模里西斯|貝里斯|馬紹爾群島|巴拿馬|中國大陸|大陸)商/;
+  const HAVEN_RE = /薩摩亞|英屬|維京|開曼|蓋曼|安圭拉|塞席爾|模里西斯|貝里斯|馬紹爾|巴拿馬|百慕達|SAMOA|VIRGIN|\bBVI\b|CAYMAN|ANGUILLA|SEYCHELLES|MAURITIUS|BELIZE|MARSHALL|PANAMA|BERMUDA/i;
+  const isForeignCorp = (n) => { const t = String(n || '').trim(); return FOREIGN_PREFIX.test(t) || HAVEN_RE.test(t) || (/[A-Za-z]{3,}/.test(t) && !/有限公司|股份/.test(t)); };
+  async function corpHolders(taxId) {
+    const id = String(taxId || '').replace(/\D/g, '');
+    if (!/^\d{8}$/.test(id)) return { ok: false, reason: '沒有統編' };
+    let res;
+    try { res = await fetch(`https://company.g0v.ronny.tw/api/show/${id}`, typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(20000) } : {}); }
+    catch (err) { return { ok: false, reason: `連不上：${err && err.message ? err.message : err}` }; }
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    let json = null;
+    try { json = await res.json(); } catch (e) { return { ok: false, reason: '回應不是 JSON' }; }
+    const d = (json && json.data) || {};
+    if (!d['公司名稱'] && !Array.isArray(d['董監事名單'])) return { ok: false, reason: '查不到這家' };
+    const list = Array.isArray(d['董監事名單']) ? d['董監事名單'] : [];
+    const names = [...new Set(list.map((x) => x && x['所代表法人']).filter(Boolean)
+      .map((x) => (Array.isArray(x) ? String(x[1] || '') : typeof x === 'object' ? String(x.name || '') : String(x)).trim()).filter(Boolean))];
+    const foreign = names.filter(isForeignCorp);
+    return { ok: true, corps: names, foreign, haven: foreign.filter((n) => HAVEN_RE.test(n)) };
+  }
+
   global.Registry = {
+    corpHolders, isForeignCorp,
     lookupByTaxId, lookupByName, lookupByKeyword, companyStem, lookupCompany, lookupBusiness, mapRow, toThousands, tidyDate,
     FULL_TAXID_BASE, LEGACY_TAXID_BASE,
     SOURCES, activeSources, getProxy, setProxy, checkProxy, probeDataset, probeNameQuery, probeBaseWithTaxId, PROBE_NAME, nameVariants,
