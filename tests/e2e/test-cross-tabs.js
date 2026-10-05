@@ -60,7 +60,7 @@ const IDX=(f)=>JSON.stringify({generatedAt:'2026-10-02T20:00:00.000Z',cities:['�
  chk(await nameCard('#factory-cards','名祿').count()===1 && await nameCard('#factory-cards','名祿').evaluate(e=>!e.classList.contains('is-hidden')), '一頁放回來，另一頁也回來');
  await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForTimeout(1500);
  chk((await pg.$$eval('#mix-cards .mix-card .card-name',a=>a.map(x=>x.textContent.trim()))).includes('名祿實業有限公司'), '合併頁也回來');
- // 商行只跟健保（剛開始請人）、出進口廠商互通（使用者：「健保跟進出口」）
+ // 商行也併進新名單，跟其他份一樣互通（使用者：「把商行也合併在其他分頁裡」）
  await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForSelector('#biz-cards .card'); await pg.waitForTimeout(1500);
  if (await nameCard('#biz-cards','宇駿').count()===0) { await pg.click('#biz-reset').catch(()=>{}); await pg.waitForTimeout(400); }
  const bl=await nameCard('#biz-cards','宇駿').locator('.cross-line').textContent().catch(()=>'');
@@ -68,8 +68,12 @@ const IDX=(f)=>JSON.stringify({generatedAt:'2026-10-02T20:00:00.000Z',cities:['�
  await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForTimeout(500);
  const nl=await nameCard('#nhi-cards','宇駿').locator('.cross-line').textContent().catch(()=>'');
  chk(/也在：商行／企業社（獨資，服裝批發，2015\/08 設立/.test(nl), `剛開始請人卡片寫「也在商行」：${nl}`);
- await pg.evaluate(()=>window.switchTab('factory')); await pg.waitForTimeout(500);
- chk(!/商行/.test(await nameCard('#factory-cards','名祿').locator('.cross-line').textContent().catch(()=>'')), '新設工廠不跟商行互通');
+ // 合併頁：商行跟剛開始請人的同一家合成一張
+ await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForTimeout(1500);
+ const yu=await pg.locator('#mix-cards .mix-card:has(.card-name:has-text("宇駿")) .mix-srcs li').allTextContents();
+ chk(yu.length===2 && yu.some(l=>/^剛開始請人：/.test(l)) && yu.some(l=>/^商行／企業社：獨資/.test(l)), `合併頁商行跟剛開始請人合成一張：${yu.join(' ／ ')}`);
+ const one=await pg.$$eval('#mix-cards .mix-card .card-name',a=>a.map(x=>x.textContent.trim()));
+ chk(one.includes('一塊工作室'), `只在商行的也在合併頁：${one.join('|')}`);
  // 在商行藏：剛開始請人也藏
  await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForTimeout(400);
  await nameCard('#biz-cards','宇駿').locator('.biz-hide').click(); await pg.waitForTimeout(300);

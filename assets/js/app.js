@@ -2980,6 +2980,8 @@
     { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
     { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
     { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
+    // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
+    { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
   ];
   window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
   window.mixCandidates = async () => {
@@ -2993,7 +2995,7 @@
   };
   /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
   window.mixSourceStatus = async () => {
-    const want = { leads: '登記清冊', chattel: '動產擔保', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
+    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
     return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
       try {
         const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
@@ -3018,13 +3020,11 @@
   const srcHiddenSave = () => { try { localStorage.setItem(SRC_HIDDEN_KEY, JSON.stringify([...srcHiddenLoad()])); } catch (e) { /* 無痕 */ } window.srcHiddenVersion += 1; };
   window.srcHide = (tax) => { const k = srcTaxKey(tax); if (k.length !== 8) return; srcHiddenLoad().add(k); srcHiddenSave(); };
   window.srcUnhide = (tax) => { const k = srcTaxKey(tax); if (!srcHiddenLoad().delete(k)) return; srcHiddenSave(); };
-  const BIZ_PEERS = ['nhi', 'trade'];
-  const BIZ_SOURCE = { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz };
   let sourcesLoading = null;
   window.ensureSourcesLoaded = () => {
     if (!sourcesLoading) {
-      sourcesLoading = Promise.all([...MIX_SOURCES, BIZ_SOURCE].map((x) => (x.mod() && x.mod().dailyCandidates ? x.mod().dailyCandidates().catch(() => []) : [])))
-        .then(() => { if (MIX_SOURCES.some((x) => x.tab === state.tab) || state.tab === 'mix' || state.tab === 'biz') render(); });
+      sourcesLoading = Promise.all(MIX_SOURCES.map((x) => (x.mod() && x.mod().dailyCandidates ? x.mod().dailyCandidates().catch(() => []) : [])))
+        .then(() => { if (MIX_SOURCES.some((x) => x.tab === state.tab) || state.tab === 'mix') render(); });
     }
     return sourcesLoading;
   };
@@ -3032,10 +3032,8 @@
   window.crossLine = (tax, selfTab) => {
     const k = srcTaxKey(tax);
     if (k.length !== 8) return '';
-    // 商行只跟健保（剛開始請人）、出進口廠商互通（使用者：「商行的資料跟其他的資料有互通嗎」→「健保跟進出口」）
-    const pool = selfTab === 'biz' ? MIX_SOURCES.filter((x) => BIZ_PEERS.includes(x.tab))
-      : [...MIX_SOURCES, ...(BIZ_PEERS.includes(selfTab) ? [BIZ_SOURCE] : [])];
-    const hits = pool.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
+    // 商行原本只跟健保、出進口互通；併進新名單之後跟其他六份一樣全部互通（使用者：「把商行也合併在其他分頁裡」）
+    const hits = MIX_SOURCES.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
     if (!hits.length) return '';
     const box = el('p', { className: 'cross-line' }, [document.createTextNode('🔗 也在：')]);
     hits.forEach(({ x, f }, i) => box.append(i ? '・' : '', el('button', { className: 'link-btn cross-src', type: 'button', textContent: x.label, onclick: (e) => { e.stopPropagation(); switchTab(x.tab); } }), document.createTextNode(f.info ? `（${f.info}）` : '')));
@@ -9052,7 +9050,7 @@ export default {
    */
   const SOURCE_TABS = ['mix', 'leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory'];
   // 「新名單」底下的第三排：合併頁＋六份名單（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）
-  const MIX_TABS = ['mix', 'leads', 'chattel', 'trade', 'nhi', 'einv', 'factory'];
+  const MIX_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'einv', 'factory'];
   function switchTab(tab) {
     if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
@@ -9067,7 +9065,7 @@ export default {
     $('#mixtabs').hidden = !inMix;
     [...$('#mixtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
     if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
-    if ((inMix || tab === 'biz') && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
+    if (inMix && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
     render();
     syncSearchBox();
   }

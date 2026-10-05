@@ -552,6 +552,17 @@
       .sort((a, b) => Number(!!b.tel) - Number(!!a.tel))
       .slice(0, limit || 50);
   }
+  /*
+   * 「新名單」合併頁用（使用者：「把商行也合併在其他分頁裡，獨立分頁僅上市櫃而已」）：跟其他六頁同一種格式。
+   * 訊號：本期清冊剛設立（剛設立商行）、本期增資；每日新名單挑商行還是照自己的規則（資本額＋成立年），這裡只給合併頁排序用。
+   */
+  function dailyFacts(r) {
+    const d = r.monthly ? r : r.dyn || null;
+    const sig = !d ? [] : d.kind === '設立' ? ['剛設立商行'] : reasonKind(d.reason || '') === 'up' ? ['本期增資'] : [];
+    return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: sig,
+      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 3, capOk: r.capital >= 5000000 && r.capital <= 60000000,
+      phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r) };
+  }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneBiz');
     if (!root) return [];
@@ -725,5 +736,5 @@
     start().catch((err) => { console.error(err); toast(`商行／企業社載入失敗：${err.message}`); });
   }
 
-  global.Biz = { show, cardFacts, factsOf, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, nearby, dailyCandidates, DAILY_PRIORITY };
+  global.Biz = { show, dailyFacts, cardFacts, factsOf, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);

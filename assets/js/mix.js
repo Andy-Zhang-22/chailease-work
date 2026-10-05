@@ -142,7 +142,7 @@
     $('#mix-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${multi ? `　／ 其中 ${multi} 家出現在兩份以上的名單` : ''}</span>`;
     $('#mix-more').hidden = current.length <= limit;
     $('#mix-empty').hidden = !!current.length;
-    $('#mix-empty').textContent = items.length ? '沒有符合條件的，把篩選放寬試試。' : '六份名單都還沒載好或都已經在名單裡了。';
+    $('#mix-empty').textContent = items.length ? '沒有符合條件的，把篩選放寬試試。' : '七份名單都還沒載好或都已經在名單裡了。';
     const hid = items.filter(isHid).length;
     $('#mix-hidden').hidden = !hid;
     $('#mix-hidden').textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家`;
@@ -161,7 +161,7 @@
   async function reload() {
     seenVersion = global.srcHiddenVersion || 0;
     $('#mix-loading').hidden = false;
-    $('#mix-loading').textContent = '六份名單合併中…（第一次要下載各份資料，會久一點）';
+    $('#mix-loading').textContent = '七份名單合併中…（第一次要下載各份資料，會久一點）';
     try {
       const got = typeof global.mixCandidates === 'function' ? await global.mixCandidates() : [];
       items = got.map((it) => { const d = digest(it); return { ...it, d, blob: [it.name, d.taxId, d.address, d.tel, ...it.signals, ...it.facts.map((x) => `${x.label} ${x.info || ''}`)].join(' ').toLowerCase() }; });
@@ -186,7 +186,7 @@
     ]);
     filters.open = (() => { try { return localStorage.getItem('leads-filters-open') === '1'; } catch (e) { return false; } })();
     root.append(
-      el('p', { className: 'muted leads-sub', textContent: '六份新名單合在一起：同一家只列一次，排序跟每日新名單一樣（訊號多的在前）。名單裡已經有的不列；各份名單自己的篩選與細節在上面那排。' }),
+      el('p', { className: 'muted leads-sub', textContent: '七份新名單合在一起：同一家只列一次，訊號多的在前（商行／企業社沒有訊號的多半排在後面）。名單裡已經有的不列；各份名單自己的篩選與細節在上面那排。' }),
       filters,
       el('div', { className: 'leads-head' }, [el('div', { className: 'leads-count', id: 'mix-count', textContent: '—' })]),
       el('div', { className: 'leads-loading', id: 'mix-loading', hidden: true }),
