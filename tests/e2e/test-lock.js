@@ -2,10 +2,17 @@
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
+/*
+ * 測試用自己的假密碼：倉庫是公開的，真正的密碼不能寫在這裡（以前寫過，等於公開了密碼）。
+ * 伺服器送 lock.js 時把鹽與雜湊換成這組假密碼的，其餘程式照原樣測。
+ */
+const PW='test-only-passcode';
+const crypto=require('crypto'), TSALT=crypto.randomBytes(16);
+const THASH=crypto.pbkdf2Sync(PW,TSALT,250000,32,'sha256').toString('hex');
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
- fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9279);
-
-const PW='83uxyvihhm';
+ fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}
+  if(/lock\.js$/.test(f)) b=String(b).replace(/SALT_HEX = '[0-9a-f]+'/,`SALT_HEX = '${TSALT.toString('hex')}'`).replace(/HASH_HEX = '[0-9a-f]+'/,`HASH_HEX = '${THASH}'`);
+  rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9279);
 
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };

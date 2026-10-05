@@ -16,8 +16,8 @@
 (function (global) {
   'use strict';
 
-  const SALT_HEX = '51e9b1a472e8c5ec09b0aa5b6b1f0b5d';
-  const HASH_HEX = 'a025246b267006367ce98f0d622f27177777915f8e2c94083fe6dc04820b435a';
+  const SALT_HEX = '07da3174c1b87484e99b2a5edb71dc13';
+  const HASH_HEX = '3479d981597bf43bb7551e4d8b85ec168e5ca2c432e576e973b4700596cdb33c';
   const ITERATIONS = 250000;
   const OK_KEY = 'unlocked-2026';
 
