@@ -34,7 +34,7 @@
     ['other', '其他（更正、負責人改名…）', null],
   ];
   const reasonKind = (reason) => { for (const [k, , re] of REASONS) { if (re && re.test(String(reason || ''))) return k; } return 'other'; };
-  const MODES = [['list', '名單（稅籍）'], ['setup', '本月新設立'], ['change', '本月變更']];
+  const MODES = [['list', '名單（稅籍）'], ['setup', '新設立（各期）'], ['change', '變更（各期）']];
   const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
   const AGE = [['lt5', '未滿 5 年'], ['5to10', '5～10 年'], ['ge10', '10 年以上'], ['unknown', '不明']];
   const ORG = ['獨資', '合夥'];
@@ -172,9 +172,24 @@
   // 「利率不敏感」預設勾（使用者：「在各來源的分頁裡也預設篩選利率不敏感的」）；rate-filter-default＝'0' 是預設不勾（測試用）
   const rateDefault = () => { try { return localStorage.getItem('rate-filter-default') === '0' ? [] : ['Y']; } catch (e) { return ['Y']; } };
   const f = { rate: new Set(rateDefault()), branches: new Set(), districts: new Set(), orgs: new Set(), ages: new Set(), inds: new Set(), mine: new Set(), invoice: new Set(), reasons: new Set(), phone: new Set(), q: '' };
-  const curPeriod = () => { const sel = root && $('#biz-period'); return (sel && sel.value) || (monthly && monthly.latest) || ''; };
+  /*
+   * 本月新設立／本月變更：各期合在一起（使用者：「我要找某一特定公司，但我要每期去找，這樣太累」）。
+   * 同一家出現在好幾期就合成一張，以最新那一期為主，history 留每一期（新到舊）。
+   */
+  const allPeriods = () => Object.keys((monthly && monthly.periods) || {}).sort().reverse();
+  const mergedCache = {};
+  function mergedMonthly(kind) {
+    const ps = allPeriods().filter((p) => mrows[p]);
+    const sig = `${ps.join(',')}`;
+    if (mergedCache[kind] && mergedCache[kind].sig === sig) return mergedCache[kind].list;
+    const by = new Map();
+    ps.forEach((p) => (mrows[p][kind] || []).forEach((r) => { const k = r.taxId || r.name; if (!by.has(k)) by.set(k, []); by.get(k).push(r); }));
+    const list = [...by.values()].map((g) => (g.length === 1 ? g[0] : { ...g[0], history: g }));
+    mergedCache[kind] = { sig, list };
+    return list;
+  }
   /** 目前模式在看的那一池 */
-  const pool = () => (mode === 'list' ? rows : ((mrows[curPeriod()] || {})[mode] || []));
+  const pool = () => (mode === 'list' ? rows : mergedMonthly(mode));
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -194,7 +209,7 @@
       && (except === 'ages' || !f.ages.size || f.ages.has(ageOf(r)))
       && (except === 'inds' || !f.inds.size || r.inds.some((i) => f.inds.has(i)))
       && (except === 'invoice' || !f.invoice.size || f.invoice.has(r.invoice ? 'Y' : 'N'))
-      && (except === 'reasons' || mode !== 'change' || !f.reasons.size || f.reasons.has(r.rk))
+      && (except === 'reasons' || mode !== 'change' || !f.reasons.size || (r.history || [r]).some((x) => f.reasons.has(x.rk)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
       && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
@@ -279,7 +294,9 @@
       fp ? el('span', {}, ['📞 ', el('a', { href: `tel:${fp.tel.replace(/[^\d+#]/g, '')}`, textContent: fp.tel }), el('small', { className: 'muted', textContent: fp.level === 'sure' ? '（Google 地圖找到，名稱地址都對）' : '（Google 地圖找到，疑似，打前核對）' }), fp.maps ? el('a', { href: fp.maps, target: '_blank', rel: 'noopener', textContent: ' 地圖', title: 'Google 地圖上的這家' }) : '']) : '',
       el('span', { textContent: `💰 資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}` }),
       r.setup ? el('span', { textContent: `🎂 ${r.monthly && r.kind === '設立' ? '核准設立' : '設立'} ${r.setup.y}/${String(r.setup.m).padStart(2, '0')}${r.monthly && r.kind === '設立' ? `/${String(r.setup.d).padStart(2, '0')}` : `（${r.years} 年）`}` }) : (r.monthly ? '' : el('span', { className: 'muted', textContent: '🎂 設立不明' })),
-      r.changed ? el('span', { textContent: `🔁 核准變更 ${ymd(r.changed)}` }) : '',
+      r.changed ? el('span', { textContent: `🔁 核准變更 ${ymd(r.changed)}${r.monthly ? `（${periodLabel(r.period)} 清冊）` : ''}` }) : '',
+      // 好幾期都有：列出每一期是什麼（新到舊）
+      r.history ? el('span', { className: 'leads-history', textContent: `🗂 ${r.history.length} 期都有：${r.history.map((x) => `${periodLabel(x.period)} ${x.kind === '設立' ? '設立' : (x.reason || '變更').slice(0, 12)}`).join('、')}` }) : '',
       r.dyn ? el('span', { className: 'biz-dyn', title: '本期商業登記清冊裡有這家', textContent: `🔔 ${periodLabel(r.dyn.period)} ${r.dyn.kind === '設立' ? '新設立' : `變更：${r.dyn.reason || ''}`}` }) : '',
       r.owner ? el('span', { textContent: `👤 負責人 ${r.owner}` }) : '',
       r.inds.length ? el('span', { textContent: `🏭 ${r.inds.slice(0, 3).join('、')}${r.inds.length > 3 ? `…共 ${r.inds.length} 項` : ''}` }) : '',
@@ -324,29 +341,27 @@
     chips($('#biz-fMine'), [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']].map(([k, label]) => [k, label, facet('mine', (r) => mineKey(r, c.cm) === k)]), f.mine);
     chips($('#biz-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#biz-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
-    if (mode === 'change') chips($('#biz-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => r.rk === k)]).filter(([k, , n]) => n || f.reasons.has(k)), f.reasons);
+    if (mode === 'change') chips($('#biz-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => (r.history || [r]).some((x) => x.rk === k))]).filter(([k, , n]) => n || f.reasons.has(k)), f.reasons);
     $('#biz-gOrg').hidden = mode !== 'list'; $('#biz-gInvoice').hidden = mode !== 'list'; $('#biz-gReason').hidden = mode !== 'change';
     drawModes();
   }
   function drawModes() {
     const host = $('#biz-mode');
     host.textContent = '';
-    const p = curPeriod();
+    const ready = allPeriods().length && allPeriods().every((p) => mrows[p]);
     MODES.forEach(([k, label]) => {
-      const n = k === 'list' ? rows.length : ((mrows[p] || {})[k] || []).length;
-      const b = el('button', { className: 'chip', type: 'button' }, [document.createTextNode(label), (k === 'list' || mrows[p]) ? el('small', { textContent: n.toLocaleString() }) : '']);
+      const n = k === 'list' ? rows.length : mergedMonthly(k).length;
+      const b = el('button', { className: 'chip', type: 'button' }, [document.createTextNode(label), (k === 'list' || ready) ? el('small', { textContent: n.toLocaleString() }) : '']);
       b.setAttribute('aria-pressed', String(mode === k));
       b.onclick = () => { switchMode(k).catch((err) => toast(err.message)); };
       host.append(b);
     });
-    const sel = $('#biz-period');
-    sel.hidden = mode === 'list' || !monthly;
   }
   /** 切模式：組織別、發票、案由的篩選跟著清掉（清冊沒那些欄位） */
   async function switchMode(k) {
     if (k !== 'list') {
       $('#biz-loading').hidden = false; $('#biz-loading').textContent = '下載清冊…';
-      try { await ensureMonthly(curPeriod()); }
+      try { await ensureMonthly(''); await Promise.all(allPeriods().map((p) => ensureMonthly(p))); }
       catch (err) { $('#biz-loading').hidden = true; throw new Error(`商業每月清冊：${err.message}`); }
       $('#biz-loading').hidden = true;
     }
@@ -360,9 +375,6 @@
       const res = await fetch(`${MONTHLY_BASE}index.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('還沒有抓好的清冊（Actions「每月商行／企業社」跑過就有）');
       monthly = await res.json();
-      const sel = $('#biz-period');
-      sel.textContent = '';
-      Object.keys(monthly.periods || {}).sort().reverse().forEach((p) => sel.append(el('option', { value: p, textContent: periodLabel(p) })));
     }
     const p = period || monthly.latest;
     if (!p || !monthly.periods || !monthly.periods[p]) throw new Error('這一期沒有清冊');
@@ -409,9 +421,11 @@
     $('#biz-empty').textContent = pool().length ? '沒有符合條件的，把篩選放寬試試。' : '';
     if (mode === 'list') $('#biz-sub').textContent = listSub;
     else {
-      const p = curPeriod(); const gen = monthly && monthly.periods && monthly.periods[p] ? String(monthly.periods[p].generatedAt || '').slice(0, 10).replace(/-/g, '/') : '';
-      const up = mode === 'change' ? pool().filter((r) => r.rk === 'up').length : 0;
-      $('#biz-sub').textContent = `${periodLabel(p)} 新北市商業${mode === 'setup' ? '設立' : '變更'}登記清冊 ${pool().length.toLocaleString()} 家${up ? `（增資 ${up} 家）` : ''}　·　經濟部商業每月登記資料清冊，上次抓取 ${gen}`;
+      const ps = allPeriods(); const p = ps[0] || '';
+      const gen = monthly && monthly.periods && monthly.periods[p] ? String(monthly.periods[p].generatedAt || '').slice(0, 10).replace(/-/g, '/') : '';
+      const up = mode === 'change' ? pool().filter((r) => (r.history || [r]).some((x) => x.rk === 'up')).length : 0;
+      const span = ps.length > 1 ? `${periodLabel(ps[ps.length - 1])}～${periodLabel(ps[0])} 共 ${ps.length} 期合在一起` : periodLabel(p);
+      $('#biz-sub').textContent = `新北市商業${mode === 'setup' ? '設立' : '變更'}登記清冊（${span}）${pool().length.toLocaleString()} 家${up ? `（增資 ${up} 家）` : ''}　·　經濟部商業每月登記資料清冊，上次抓取 ${gen}`;
     }
     $('#biz-add').disabled = !fresh;
     $('#biz-add').textContent = `把篩出來的加入客戶名單${fresh ? `（${Math.min(fresh, 200)} 家）` : ''}`;
@@ -544,7 +558,6 @@
       forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
     const modes = el('div', { className: 'leads-row biz-modes' }, [
       el('div', { className: 'chips', id: 'biz-mode' }),
-      el('select', { id: 'biz-period', hidden: true, title: '清冊期別' }),
     ]);
     const filters = el('details', { className: 'leads-filters', id: 'biz-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
@@ -637,7 +650,6 @@
       const rerender = () => { limit = PAGE; render(); };
       ['#biz-capMin', '#biz-capMax'].forEach((s) => { $(s).oninput = rerender; });
       $('#biz-sort').onchange = () => { switchMode.touched = true; rerender(); };
-      $('#biz-period').onchange = () => { switchMode(mode).catch((err) => toast(err.message)); };
       let qt = null;
       $('#biz-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; rerender(); }, 120); };
       $('#biz-more').onclick = () => { limit += PAGE; render(); };
@@ -676,7 +688,7 @@
       };
       $('#biz-export').onclick = () => {
         const blob = new Blob([toStandardCsv(current)], { type: 'text/csv;charset=utf-8' });
-        const a = el('a', { href: URL.createObjectURL(blob), download: `商行企業社${mode === 'list' ? '' : `-${periodLabel(curPeriod()).replace('/', '')}${mode === 'setup' ? '設立' : '變更'}`}-${todayIso()}-${current.length}家.csv` });
+        const a = el('a', { href: URL.createObjectURL(blob), download: `商行企業社${mode === 'list' ? '' : `-全部期別${mode === 'setup' ? '設立' : '變更'}`}-${todayIso()}-${current.length}家.csv` });
         document.body.append(a); a.click(); a.remove();
       };
       render();
