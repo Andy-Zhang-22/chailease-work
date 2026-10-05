@@ -27,7 +27,9 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
 
  // 沒設網址：按「問分身」先跳設定
  await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
- await pg.click('#drawerBody button:has-text("問分身")'); await pg.waitForTimeout(200);
+ const tb=await pg.evaluate(()=>{const b=document.querySelector('#drawerBody button.twin-btn'); return b?[b.textContent,b.title,b.getAttribute('aria-label')].join('|'):'';});
+ chk(tb==='🤖|問 Claude|問 Claude', `問分身按鈕只放 🤖、滑過提示「問 Claude」：${tb}`);
+ await pg.click('#drawerBody button.twin-btn'); await pg.waitForTimeout(200);
  chk(/Claude 分身/.test(await pg.textContent('#editorBody')) && (await pg.evaluate(()=>window.__opened.length))===0, '沒設網址時先跳出設定，不亂開');
  await pg.click('#editorBody button:has-text("複製分身說明書")'); await pg.waitForTimeout(150);
  chk(/你是我的分身：中租租賃新莊分公司的企金業務/.test(await last()) && /利率不敏感的客群/.test(await last()), '複製分身說明書');
@@ -63,7 +65,7 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await mp.evaluate(async(r)=>{ await window.Store.saveRecords([r]); },REC);
  await mp.reload(); await mp.waitForSelector('#btnImport'); await mp.waitForTimeout(800);
  await mp.locator('#cards .card .card-name').first().click(); await mp.waitForSelector('#drawerBody h2');
- await mp.click('#drawerBody button:has-text("問分身")'); await mp.waitForTimeout(300);
+ await mp.click('#drawerBody button.twin-btn'); await mp.waitForTimeout(300);
  const ml=await mp.evaluate(()=>({links:window.__links,opened:window.__opened,copied:window.__copied[window.__copied.length-1]||'',setup:/Claude 分身/.test((document.querySelector('#editor:not([hidden]) #editorBody')||{}).textContent||'')}));
  chk(JSON.stringify(ml.links)==='["https://claude.ai/new|_blank"]' && !ml.opened.length && !ml.setup, `手機開 claude.ai/new（App 接得到），沒設網址也不跳設定：${JSON.stringify(ml.links)} ${JSON.stringify(ml.opened)}`);
  chk(/^你是我的分身：中租租賃新莊分公司的企金業務/.test(ml.copied) && /以下是這次要你看的/.test(ml.copied) && /星辰精密有限公司（統編 20000001）/.test(ml.copied), `手機複製的內容前面附上分身說明書，後面是這家：${ml.copied.slice(0,60)}…`);

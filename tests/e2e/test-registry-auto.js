@@ -33,7 +33,7 @@ const REG={ '11111111':{Business_Accounting_NO:'11111111',Company_Name:'甲公�
  const c1=calls; await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1500);
  chk(calls===c1, `同一天再開不會重跑（查詢次數 ${calls} 不變）`);
  // 設定視窗顯示上次結果，且「全部更新」也用同一套（登記一致 → 沒有要更新）
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  chk(await pg.isChecked('#autoRegistry'), '設定視窗的「每天自動更新」勾著');
  chk(/上次自動更新：\d{4}\/\d{2}\/\d{2}，查 3 筆，更新 2 筆/.test(await pg.textContent('#editorBody')), '設定視窗顯示上次自動更新摘要');
  // 來源全掛時：當天記失敗、不套用、明天再試

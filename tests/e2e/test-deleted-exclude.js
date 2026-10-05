@@ -72,7 +72,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
 
  // 收回：管理已排除的公司
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('[data-act="excluded"]'); await pg.waitForSelector('.ask-overlay');
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('.ask-overlay');
  const box=(await pg.textContent('.ask-overlay')).replace(/\s+/g,' ');
  chk(/甲工程有限公司/.test(box)&&/乙精密股份有限公司/.test(box), `排除清單列出兩家：${box.slice(0,200)}`);
  await pg.click('.ask-overlay .ask-list .btn:has-text("乙精密股份有限公司")'); await pg.waitForTimeout(600);

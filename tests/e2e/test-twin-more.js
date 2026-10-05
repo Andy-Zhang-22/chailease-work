@@ -32,7 +32,8 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123', '打開分身');
  chk(await pg.locator('#editor').isHidden(), '送出後關掉情境選單，詳細頁還在');
  await pg.click('#drawerBody button:has-text("拜訪準備")'); await pg.waitForSelector('#editorBody .brief');
- await pg.click('#editorBody button:has-text("問分身怎麼談")'); await pg.waitForTimeout(200);
+ chk((await pg.getAttribute('#editorBody button.twin-btn','title'))==='問 Claude' && (await pg.textContent('#editorBody button.twin-btn'))==='🤖', '拜訪準備的問分身也是 🤖、提示「問 Claude」');
+ await pg.click('#editorBody button.twin-btn'); await pg.waitForTimeout(200);
  p=await last();
  chk(/我要去拜訪這家，幫我準備/.test(p) && /要問老闆的問題/.test(p) && /CNC 約 800 萬/.test(p) && !/0912|王O明|陳經理/.test(p), `拜訪準備問分身：${p.slice(0,80)}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-292';
+  const APP_VERSION = '20261005-294';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -625,8 +625,9 @@
 
   /** 詳細頁的「回撥提醒」區塊 */
   function reminderSection(r) {
-    const sec = el('div', { className: 'detail-section remind-section' });
-    sec.append(el('h3', { textContent: '回撥提醒' }));
+    // 預設收起來，點標題才展開；已經設了提醒、或備註打到一半的就直接打開（畫面瘦身）
+    const sec = el('details', { className: 'detail-section remind-section remind-fold' });
+    sec.append(el('summary', {}, [el('h3', { textContent: '回撥提醒' })]));
     const now = Date.now();
     // 備註存進去之後，上面那行要立刻跟著變，不然看起來像沒生效
     let noteEcho = null;
@@ -783,6 +784,7 @@
     };
     sec.append(el('div', { className: 'remind-note-row' }, [note, noteOk]), noteHint,
       quick, el('div', { className: 'card-actions' }, [custom, customBtn]));
+    if (r.remindAt || readNoteDraft()) sec.open = true;
     return sec;
   }
 
@@ -3721,13 +3723,13 @@
       if (v && !/^https:\/\/claude\.ai\//.test(v)) { err.textContent = '網址要是 https://claude.ai/ 開頭的（打開分身專案後，瀏覽器上方那串）。'; err.hidden = false; return; }
       registryPref('claude-twin-url', v);
       scheduleSync();
-      toast(v ? '分身網址已存，詳細頁按「問分身」就會打開它' : '已清掉分身網址');
+      toast(v ? '分身網址已存，詳細頁按 🤖 就會打開它' : '已清掉分身網址');
       $('#editor').hidden = true;
       if (v && typeof after === 'function') after();
     };
     host.append(el('div', { className: 'card-actions' }, [copyGuide]), el('label', { className: 'muted', textContent: '分身專案的網址' }), input, err,
       el('div', { className: 'card-actions' }, [save]),
-      el('p', { className: 'muted', textContent: '用你現有的 Claude 訂閱，不另外收費。按「問分身」時系統把這家的資料與訪談內容複製起來、打開分身專案，你貼上送出就好。電話、負責人、KEYMAN 欄位不會帶過去，訪談內容裡的電話號碼會遮掉；訪談裡自己寫的人名會照樣帶過去。' }));
+      el('p', { className: 'muted', textContent: '用你現有的 Claude 訂閱，不另外收費。按 🤖（問 Claude）時系統把這家的資料與訪談內容複製起來、打開分身專案，你貼上送出就好。電話、負責人、KEYMAN 欄位不會帶過去，訪談內容裡的電話號碼會遮掉；訪談裡自己寫的人名會照樣帶過去。' }));
     $('#editor').hidden = false;
     input.focus();
   }
@@ -4553,7 +4555,8 @@
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
     ].filter(Boolean));
     node.append(top);
-    node.append(phoneSearchRow(r));   // 公司名底下：Google／地圖／104／1111，沒電話的多一個貼電話的框
+    // 公司名底下：Google／地圖／104／1111＋貼電話的框，只給還沒電話的；有電話的這排搬進詳細頁（畫面瘦身）
+    if (!r.phones.length) node.append(phoneSearchRow(r));
     const tags = [
       r.dealingKind === 'active' ? el('span', { className: 'badge badge-dealing', textContent: '中租往來' }) : '',
       r.regChange && r.regKinds[0] !== 'none' && r.regKinds[0] !== 'unchecked'
@@ -5515,11 +5518,17 @@
     const briefBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '拜訪準備' });
     briefBtn.onclick = () => openVisitBrief(r.id);
     // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
-    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '問分身', title: '把這家的資料和訪談內容複製起來、打開你的 Claude 分身（不帶電話、負責人、KEYMAN 欄位）' });
+    // 只放 🤖（使用者：「問分身的按鈕都改成🤖圖案，滑鼠滑到時出現提示字問claude」）
+    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
     twinBtn.onclick = () => askTwin(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
     xlsxBtn.onclick = () => exportOneXlsx(r.id);
+    // 編輯資料、承作檢核、匯出 Excel 不常用，收在「⋯」後面，點了才冒出來（畫面瘦身；刪除這筆使用者要留在外面）
+    const moreActs = [editBtn, dealBtn, xlsxBtn];
+    moreActs.forEach((b) => { b.hidden = true; });
+    const moreBtn = el('button', { className: 'btn btn-tiny detail-acts-more', type: 'button', textContent: '⋯', title: '更多：編輯資料、承作檢核、匯出 Excel', 'aria-label': '更多' });
+    moreBtn.onclick = () => { moreBtn.hidden = true; moreActs.forEach((b) => { b.hidden = false; }); };
     // 公司名稱旁一顆複製：查商工登記、找 104、貼進系統都要打公司名，打字容易錯
     const copyName = copyDot(r.company, `複製公司名稱 ${r.company}`, `已複製：${r.company}`,
       '這個瀏覽器不讓網頁複製，請長按公司名稱手動複製');
@@ -5564,12 +5573,11 @@
         r.edited ? el('span', { className: 'badge badge-edited', textContent: '已修改' }) : '',
         chanceBtn('yes'),
         chanceBtn('no'),
-        editBtn,
-        dealBtn,
         briefBtn,
         twinBtn,
-        xlsxBtn,
         deleteBtn(r),
+        moreBtn,
+        ...moreActs,
       ].filter(Boolean)),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
       openerNode(r, 'detail-opener'),
@@ -5614,6 +5622,7 @@
       ].filter(Boolean)));
     }
     if (!r.phones.length && !r.blocked) body.append(phoneFinder(r));
+    else body.append(phoneSearchRow(r, { detail: true }));   // 卡片上拿掉的 Google／地圖／104／1111 在這裡
 
     // 同一老闆的公司
     const members = groupMembers(r);
@@ -6085,8 +6094,8 @@
       openDetail(r.id);
       scheduleSync();
     };
-    // 🤖 讓分身整理：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
-    // 貼回來的框按了「讓分身整理」才長出來：平常表單裡只有一個內容框
+    // 🤖 讓 AI 整理（使用者：「讓分身整理改成讓ai整理」）：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
+    // 貼回來的框按了「讓 AI 整理」才長出來：平常表單裡只有一個內容框
     const tidyBox = el('div', { className: 'tidy-box', hidden: true });
     const buildTidy = () => {
       if (tidyBox.firstChild) return;
@@ -6108,7 +6117,7 @@
       };
       tidyBox.append(paste, el('div', { className: 'card-actions' }, [fill]), msg);
     };
-    const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓分身整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
+    const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓 AI 整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
     tidy.onclick = () => {
       if (!memo.value.trim()) { toast('先把這通聊了什麼隨手打進去，再交給分身整理'); memo.focus(); return; }
       if (!isPhone() && !twinUrl()) { openTwinSetup(() => tidy.click()); return; }
@@ -6390,7 +6399,7 @@
       const ok = await copyText(lines.join('\n'));
       toast(ok ? '已複製整頁文字，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
     };
-    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 問分身怎麼談', title: '把這家的資料交給分身，準備談話重點、方案、要問的問題、拒絕應對（不帶電話、負責人、KEYMAN 欄位）' });
+    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
     twinBtn.onclick = () => {
       if (!isPhone() && !twinUrl()) { openTwinSetup(() => openVisitBrief(recordId)); return; }
       sendToTwin(visitPrompt(r), '這家的資料');
@@ -8890,10 +8899,18 @@ export default {
       if (e.target.closest('[data-close]')) closeOverlays();
       if (!e.target.closest('#menu') && !e.target.closest('#btnMenu')) $('#menu').hidden = true;
     });
-    $('#btnMenu').onclick = () => { $('#menu').hidden = !$('#menu').hidden; };
+    // 「進階」每次打開選單都是收著的：外面只看到每天會用的那幾項
+    const menuMore = (open) => {
+      $('#menuMore').hidden = !open;
+      const t = $('#menu [data-act="menu-more"]');
+      t.textContent = open ? '進階 ▾' : '進階 ▸';
+      t.setAttribute('aria-expanded', String(open));
+    };
+    $('#btnMenu').onclick = () => { menuMore(false); $('#menu').hidden = !$('#menu').hidden; };
     $('#menu').onclick = async (e) => {
       const act = e.target.dataset && e.target.dataset.act;
       if (!act) return;
+      if (act === 'menu-more') { menuMore($('#menuMore').hidden); return; }
       $('#menu').hidden = true;
       if (act === 'export-xlsx') exportXlsx();
       if (act === 'export-json') {

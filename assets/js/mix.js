@@ -186,14 +186,16 @@
     ]);
     filters.open = (() => { try { return localStorage.getItem('leads-filters-open') === '1'; } catch (e) { return false; } })();
     root.append(
-      el('p', { className: 'muted leads-sub', textContent: '七份新名單合在一起：同一家只列一次，訊號多的在前（商行／企業社沒有訊號的多半排在後面）。名單裡已經有的不列；各份名單自己的篩選與細節在上面那排。' }),
       filters,
       el('div', { className: 'leads-head' }, [el('div', { className: 'leads-count', id: 'mix-count', textContent: '—' })]),
       el('div', { className: 'leads-loading', id: 'mix-loading', hidden: true }),
       el('div', { className: 'cards', id: 'mix-cards' }),
       el('div', { className: 'empty', id: 'mix-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'mix-more', type: 'button', textContent: '載入更多', hidden: true })]),
-      el('p', { className: 'muted leads-foot mix-status', id: 'mix-status' }),
+      // 各份名單的更新收成一行，點了才展開（畫面瘦身；上面那段說明也拿掉了）
+      el('details', { className: 'leads-foot mix-status-box' }, [
+        el('summary', { className: 'muted', textContent: '資料更新狀態' }),
+        el('p', { className: 'muted mix-status', id: 'mix-status' })]),
     );
     let qt = null;
     $('#mix-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; limit = PAGE; render(); }, 120); };

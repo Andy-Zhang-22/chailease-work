@@ -38,7 +38,7 @@ const mk=(i)=>({id:`r${String(i).padStart(2,'0')}`,source:'A.csv',company:`主�
  d=await day();
  chk(d.today.length===18, `同一天重開不再自動挪：${d.today.length}`);
  // 關掉：明天也不跑
- await pg.click('#btnMenu'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .auto-rebalance');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .auto-rebalance');
  chk(await pg.isChecked('#editorBody .auto-rebalance'), '每天打得完幾家有開關、預設開');
  await pg.uncheck('#editorBody .auto-rebalance'); await pg.waitForTimeout(200);
  chk((await pg.evaluate(()=>localStorage.getItem('auto-rebalance')))==='0', '關掉存起來');

@@ -29,7 +29,7 @@ const SEED=[{id:'P1',source:'名單.pdf',company:'甲工程有限公司',aliases
      {'統一編號':'20232017','公司名稱':'甲工程有限公司','公司所在地':'新北市新莊區幸福東路79號4樓','怪欄位XYZ':'1'}])});
  });
 
- const open=async()=>{ await pg.click('#btnMenu'); await pg.click('[data-act="registry"]');
+ const open=async()=>{ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]');
    await pg.waitForSelector('#editorBody h2');
    await pg.fill('#proxyUrl','https://my-worker.test/'); await pg.dispatchEvent('#proxyUrl','change'); };
 

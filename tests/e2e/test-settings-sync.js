@@ -11,7 +11,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await installAsk(pg);   // 自己畫的確認框，不是原生 dialog
  await pg.goto('http://localhost:9074/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  // 這台設定代理與每天自動更新
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#proxyUrl');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#proxyUrl');
  await pg.fill('#proxyUrl','https://mine.workers.dev/'); await pg.dispatchEvent('#proxyUrl','change');
  // 預設就是勾的，直接 check 不會觸發 change，設定也就不會被寫進去
  await pg.uncheck('#autoRegistry'); await pg.waitForTimeout(200);
@@ -28,7 +28,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(merged.tax==='https://data.gcis.nat.gov.tw/od/data/api/NEWID', `資料集網址也同步：${merged.tax}`);
  chk(merged.auto==='1', `另一台較舊的「關閉自動更新」不會蓋掉這台較新的設定：${merged.auto}`);
  // 重新開設定視窗要看到同步過來的值
- await pg.keyboard.press('Escape'); await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#proxyUrl');
+ await pg.keyboard.press('Escape'); await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#proxyUrl');
  chk((await pg.inputValue('#proxyUrl'))==='https://other.workers.dev/', '設定視窗顯示同步過來的代理網址');
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
