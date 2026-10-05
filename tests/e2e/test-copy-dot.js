@@ -51,8 +51,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  await pg.click('#drawerBody .detail-title .copy-dot'); await pg.waitForTimeout(200);
  chk(/已複製：甲公司/.test(await pg.textContent('#toast')), `複製公司名稱：${await pg.textContent('#toast')}`);
 
- // 統一編號那一列也有一顆（統編收在「更多資料」裡，先打開）
- await pg.click('#drawerBody details.detail-more > summary'); await pg.waitForTimeout(150);
+ // 統一編號那一列也有一顆（統編在最上面，不用打開「更多資料」）
  const taxDot=pg.locator('#drawerBody .detail-grid dd').filter({hasText:'11111111'}).locator('.copy-dot');
  chk(await taxDot.count()===1, `統編那列一顆點：${await taxDot.count()}`);
 

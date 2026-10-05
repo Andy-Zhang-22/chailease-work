@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261004-284';
+  const APP_VERSION = '20261005-285';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5684,11 +5684,14 @@
      */
     {
       // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）；實收資本額也是（「實收資本額也不要收在下面」）
-      const KEEP = new Set(['負責人', 'KEYMAN', '成立年', '資本總額', '實收資本額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      const KEEP = new Set(['統一編號', '負責人', 'KEYMAN', '成立年', '資本總額', '實收資本額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
       // 動產擔保接在最近異動日期後面、下次聯絡前面（跟成立年、資本額這些判斷用的放一起）
       const dtOf = (t) => [...dl.children].find((n) => n.tagName === 'DT' && n.textContent.trim() === t);
       const ch = dtOf('動產擔保'); const nx = dtOf('下次聯絡');
       if (ch && nx) { const chDd = ch.nextElementSibling; nx.before(ch); if (chDd && chDd.tagName === 'DD') nx.before(chDd); }
+      // 統編放最上面（使用者：「幫我把統編移到上面」）
+      const tax = dtOf('統一編號');
+      if (tax) { const taxDds = []; for (let n = tax.nextElementSibling; n && n.tagName === 'DD'; n = n.nextElementSibling) taxDds.push(n); dl.prepend(tax, ...taxDds); }
       const more = el('dl', { className: 'detail-grid detail-more-grid' });
       [...dl.children].forEach((node) => {
         if (node.tagName !== 'DT') return;
