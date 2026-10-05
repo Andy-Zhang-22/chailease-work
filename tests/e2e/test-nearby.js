@@ -34,6 +34,7 @@ const SEED=[
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const ctx=await br.newContext();
+ await ctx.addInitScript(()=>{ window.__copied=[]; try{ Object.defineProperty(navigator,'clipboard',{value:{writeText:async(t)=>{window.__copied.push(t);}},configurable:true}); }catch(e){} });   // CI 的瀏覽器不給剪貼簿
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
@@ -76,9 +77,9 @@ const SEED=[
  const lr=det2.locator('.nearby-leads .nearby-row').first();
  chk(await lr.locator('.copy-dot').count()===2, `公司名稱、電話各一顆複製鈕：${await lr.locator('.copy-dot').count()}`);
  await lr.locator('.tel-group .copy-dot').click(); await pg.waitForTimeout(200);
- chk(/已複製 0229901234/.test(await pg.textContent('#toast')), `複製電話（純數字）：${await pg.textContent('#toast')}`);
+ chk(/已複製 0229901234/.test(await pg.textContent('#toast')) && (await pg.evaluate(()=>window.__copied.pop()))==='0229901234', `複製電話（純數字）：${await pg.textContent('#toast')}`);
  await lr.locator('b + .copy-dot').click(); await pg.waitForTimeout(200);
- chk(/已複製：晨光貿易有限公司/.test(await pg.textContent('#toast')), `複製公司名稱：${await pg.textContent('#toast')}`);
+ chk(/已複製：晨光貿易有限公司/.test(await pg.textContent('#toast')) && (await pg.evaluate(()=>window.__copied.pop()))==='晨光貿易有限公司', `複製公司名稱：${await pg.textContent('#toast')}`);
  await det2.locator('.nearby-leads .nearby-row').first().locator('button:has-text("加入名單")').click(); await pg.waitForTimeout(1500);
  chk(await pg.evaluate(()=>window.customerViews().some(v=>v.company==='晨光貿易有限公司' && v.phoneRaw==='02-2990-1234')), '加入名單帶電話');
  chk((await pg.evaluate(()=>localStorage.getItem('nearby-leads')))==='1', '勾選記住');
