@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-292';
+  const APP_VERSION = '20261005-293';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3721,13 +3721,13 @@
       if (v && !/^https:\/\/claude\.ai\//.test(v)) { err.textContent = '網址要是 https://claude.ai/ 開頭的（打開分身專案後，瀏覽器上方那串）。'; err.hidden = false; return; }
       registryPref('claude-twin-url', v);
       scheduleSync();
-      toast(v ? '分身網址已存，詳細頁按「問分身」就會打開它' : '已清掉分身網址');
+      toast(v ? '分身網址已存，詳細頁按 🤖 就會打開它' : '已清掉分身網址');
       $('#editor').hidden = true;
       if (v && typeof after === 'function') after();
     };
     host.append(el('div', { className: 'card-actions' }, [copyGuide]), el('label', { className: 'muted', textContent: '分身專案的網址' }), input, err,
       el('div', { className: 'card-actions' }, [save]),
-      el('p', { className: 'muted', textContent: '用你現有的 Claude 訂閱，不另外收費。按「問分身」時系統把這家的資料與訪談內容複製起來、打開分身專案，你貼上送出就好。電話、負責人、KEYMAN 欄位不會帶過去，訪談內容裡的電話號碼會遮掉；訪談裡自己寫的人名會照樣帶過去。' }));
+      el('p', { className: 'muted', textContent: '用你現有的 Claude 訂閱，不另外收費。按 🤖（問 Claude）時系統把這家的資料與訪談內容複製起來、打開分身專案，你貼上送出就好。電話、負責人、KEYMAN 欄位不會帶過去，訪談內容裡的電話號碼會遮掉；訪談裡自己寫的人名會照樣帶過去。' }));
     $('#editor').hidden = false;
     input.focus();
   }
@@ -5515,7 +5515,8 @@
     const briefBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '拜訪準備' });
     briefBtn.onclick = () => openVisitBrief(r.id);
     // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
-    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '問分身', title: '把這家的資料和訪談內容複製起來、打開你的 Claude 分身（不帶電話、負責人、KEYMAN 欄位）' });
+    // 只放 🤖（使用者：「問分身的按鈕都改成🤖圖案，滑鼠滑到時出現提示字問claude」）
+    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
     twinBtn.onclick = () => askTwin(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
@@ -6390,7 +6391,7 @@
       const ok = await copyText(lines.join('\n'));
       toast(ok ? '已複製整頁文字，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
     };
-    const twinBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 問分身怎麼談', title: '把這家的資料交給分身，準備談話重點、方案、要問的問題、拒絕應對（不帶電話、負責人、KEYMAN 欄位）' });
+    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
     twinBtn.onclick = () => {
       if (!isPhone() && !twinUrl()) { openTwinSetup(() => openVisitBrief(recordId)); return; }
       sendToTwin(visitPrompt(r), '這家的資料');
