@@ -40,7 +40,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  // 統計、規則從右上選單
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="stats"]'); await pg.waitForTimeout(400);
  chk(await pg.locator('#paneStats').isVisible() && await pg.locator('#subtabs').isHidden() && (await pg.$$eval('#tabs .tab.is-active',a=>a.length))===0, '選單進統計：分頁列不亮、第二排收起來');
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="rules"]'); await pg.waitForTimeout(400);
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('#menu [data-act="rules"]'); await pg.waitForTimeout(400);
  chk(await pg.locator('#paneRules').isVisible(), '選單進規則');
  // ?tab= 網址照舊
  await pg.goto('http://localhost:9511/index.html?tab=nhi'); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);

@@ -47,7 +47,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  // 六個來源的配額比例
  const sp=await pg.evaluate(()=>[window.splitByShares([99,99,99,99,99,99],25,[10,5,5,0,2,3]), window.splitByShares([2,9,9,9,9,9],25,[10,5,5,0,2,3]), window.splitByShares([9,9,9,9,9,9],25,null), window.splitByShares([1,1,1,1,1,1],25,[10,0,0,0,0,0])]);
  chk(JSON.stringify(sp)==='[[10,5,5,0,2,3],[2,7,7,0,4,5],[5,4,4,4,4,4],[1,1,1,1,1,1]]', `照比例分、不夠的讓給有比例的、比例 0 最後補位：${JSON.stringify(sp)}`);
- await pg.click('#btnMenu'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .share-input'); await pg.waitForTimeout(200);
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .share-input'); await pg.waitForTimeout(200);
  const shares=pg.locator('#editorBody .share-input');
  chk((await shares.count())===7 && /空白＝平分（4、4、4、4、3、3、3）/.test(await pg.textContent('#editorBody .share-hint')), `七格比例、預設平分：${await pg.textContent('#editorBody .share-hint')}`);
  for (const [i,val] of [[0,'10'],[1,'5'],[2,'5'],[3,'0'],[4,'2'],[5,'3'],[6,'0']]) { await shares.nth(i).fill(val); await shares.nth(i).dispatchEvent('change'); }

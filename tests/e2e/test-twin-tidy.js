@@ -24,10 +24,10 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
  const memo=pg.locator('#drawerBody .logform textarea').first();
- await pg.click('#drawerBody button:has-text("讓分身整理")'); await pg.waitForTimeout(150);
+ await pg.click('#drawerBody button:has-text("讓 AI 整理")'); await pg.waitForTimeout(150);
  chk((await pg.evaluate(()=>window.__opened.length))===0, '沒寫筆記不送');
  await memo.fill('老闆接了 想要週轉金大概800萬 下週三再打給他 手機0912345678 他說銀行利率比較低但額度不夠');
- await pg.click('#drawerBody button:has-text("讓分身整理")'); await pg.waitForTimeout(200);
+ await pg.click('#drawerBody button:has-text("讓 AI 整理")'); await pg.waitForTimeout(200);
  const p=await pg.evaluate(()=>window.__copied[window.__copied.length-1]||'');
  chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123', '打開分身專案');
  chk(/今天是 2026\/10\/05（週一）/.test(p) && /結果：接通／未接／禁止推廣/.test(p) && /下次聯絡：YYYY\/MM\/DD/.test(p), `附今天日期與固定格式：${p.slice(0,160)}`);

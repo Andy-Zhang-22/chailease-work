@@ -28,7 +28,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
  pg.on('dialog',d=>d.accept());
 
  const delSource=async(file,choice)=>{
-   await pg.click('#btnMenu'); await pg.click('[data-act="manage"]');
+   await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="manage"]');
    await pg.waitForSelector('.ask-overlay');
    await pg.click(`.ask-overlay button:has-text("${file}")`);
    await pg.waitForSelector('.ask-overlay .ask-list .btn');

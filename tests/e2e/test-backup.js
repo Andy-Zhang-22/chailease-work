@@ -67,7 +67,7 @@ const mk=(id,company)=>({id,source:'A.csv',company,aliases:[],taxId:'',grade:'',
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
  chk(!(await pg.evaluate(()=>window.customerViews().some(v=>v.id==='r1'))), '刪掉了');
  // 選單 → 雲端備份 → 找回最舊那一份（刪之前）
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="backups"]'); await pg.waitForTimeout(800);
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('#menu [data-act="backups"]'); await pg.waitForTimeout(800);
  const rows=pg.locator('#editorBody .backup-list tbody tr');
  chk(await rows.count()===2, `列出兩份備份：${await rows.count()}`);
  await rows.last().locator('button').click(); await pg.waitForSelector('.ask-overlay'); await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(1500);

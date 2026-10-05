@@ -110,6 +110,11 @@ button, input, select { font: inherit; color: inherit; }
 .menu button:hover { background: var(--surface-2); }
 .menu .danger { color: var(--danger); }
 .menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px 4px; }
+/* 「進階 ▸」：橫跨兩欄，點開才有其餘功能 */
+.menu .menu-more-toggle { grid-column: 1 / -1; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); border-radius: 0; margin-top: 4px; padding-top: 9px; }
+.menu-more { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.menu-more[hidden] { display: none; }
+.menu .menu-version { grid-column: 1 / -1; }
 
 /* ---------- 分頁 ---------- */
 .tabs {
@@ -283,6 +288,11 @@ details.nearby > summary { cursor: pointer; list-style: none; }
 details.nearby > summary h3 { display: inline; }
 details.nearby > summary::before { content: '▸ '; color: var(--muted); }
 details.nearby[open] > summary::before { content: '▾ '; }
+details.remind-fold > summary { cursor: pointer; list-style: none; }
+details.remind-fold > summary::-webkit-details-marker { display: none; }
+details.remind-fold > summary h3 { display: inline; }
+details.remind-fold > summary::before { content: '▸ '; color: var(--muted); }
+details.remind-fold[open] > summary::before { content: '▾ '; }
 .nearby-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .nearby-row .link-btn { background: none; border: 0; padding: 0; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 14px; }
 .nearby-leads-toggle { display: block; margin: 10px 0 4px; font-size: 14px; }
@@ -948,6 +958,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .badge-new { border-color: var(--primary); color: var(--primary); }
 .badge-ind { color: var(--muted); }
 .leads-foot { font-size: 12.5px; line-height: 1.7; margin: 8px 0 24px; }
+.mix-status-box > summary { cursor: pointer; }
+.mix-status-box .mix-status { margin: 6px 0 0; }
 
 /* ---------- 快到期（動保清冊） ---------- */
 .chattel-card.is-mine, .leads-card.is-mine { border-left-color: var(--ok); }

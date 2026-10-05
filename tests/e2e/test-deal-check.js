@@ -24,7 +24,7 @@ const SEED=[
  chk(JSON.stringify(pb)==='[3000,12000,5000,8000,3500,null]', `本餘解析成仟元：${JSON.stringify(pb)}`);
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(400);
- const open=async(name)=>{ await pg.locator(`.card:has-text("${name}") .card-name`).click(); await pg.waitForSelector('#drawerBody h2'); await pg.click('#drawerBody button:has-text("承作檢核")'); await pg.waitForSelector('#editorBody .deal-result'); };
+ const open=async(name)=>{ await pg.locator(`.card:has-text("${name}") .card-name`).click(); await pg.waitForSelector('#drawerBody h2'); await pg.click('#drawerBody .detail-acts-more'); await pg.click('#drawerBody button:has-text("承作檢核")'); await pg.waitForSelector('#editorBody .deal-result'); };
  const txt=async()=>(await pg.textContent('#editorBody')).replace(/\s+/g,' ');
  const fill=async(sel,v)=>{ await pg.fill(sel,v); await pg.waitForTimeout(150); };
  const fieldInput=(label)=>`#editorBody label.rule-field:has(span:text-is("${label}")) input, #editorBody label.rule-field:has(span:text-is("${label}")) textarea`;

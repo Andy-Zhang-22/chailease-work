@@ -36,7 +36,7 @@ const SEED=[{id:'D1',source:'名單.pdf',company:'甲工程有限公司',aliases
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900);
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
 
  const urls=pg.locator('#editorBody input[type="url"]');
  chk(await urls.count()===3, `有三個網址欄位（名稱資料集、統編資料集、代理），得到 ${await urls.count()}`);

@@ -20,7 +20,7 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-proxy-url','https://x.workers.dev/'); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
 
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  await pg.selectOption('#editorBody select', 'all');
  // 照實際流程：先試一筆通了，「全部更新」才會開啟
  await pg.click('#editorBody button:has-text("先試一筆")');
@@ -55,7 +55,7 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
  chk(calls<N, `沒有跑完全部 ${N} 筆就停了（送出 ${calls} 次）`);
 
  // 重新打開設定視窗會看到上次結果
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  chk(/上次更新（中途停止）/.test(await pg.textContent('#editorBody')), '設定視窗顯示上次更新結果');
  await pg.click('#editor .drawer-close');
 
@@ -64,7 +64,7 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
  chk(await pg.$eval('#registryBar', e=>e.hidden), '可以把完成後的進度條關掉');
 
  // 再跑一次：剩下的補完
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  await pg.selectOption('#editorBody select', 'all');
  await pg.click('#editorBody button:has-text("先試一筆")');
  await pg.waitForSelector('#editorBody button:has-text("全部更新"):not([disabled])',{timeout:15000});

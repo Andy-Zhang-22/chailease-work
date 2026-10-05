@@ -27,7 +27,7 @@ const APP=JSON.parse(fs.readFileSync(path.join(ROOT,'version.json'),'utf8')).ver
  if(!ok1)bad++; console.log(`${ok1?'PASS':'FAIL'} 選單顯示版本號：「${shown}」（程式是 ${APP}）`);
 
  // 2. 已是最新版時，主動檢查會明說
- await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
  const t1=(await pg.textContent('#toast')).trim();
  const ok2=/已經是最新版/.test(t1)&&t1.includes(APP);
  if(!ok2)bad++; console.log(`${ok2?'PASS':'FAIL'} 已是最新版會回報：「${t1}」`);
@@ -35,7 +35,7 @@ const APP=JSON.parse(fs.readFileSync(path.join(ROOT,'version.json'),'utf8')).ver
  // 3. 伺服器有新版時，主動檢查會跳提示條
  serverVersion='99999999-9';
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
  const barVisible=await pg.evaluate(()=>{const b=document.querySelector('#updateBar');
    const r=b.getBoundingClientRect(); return !b.hidden && r.height>0;});
  const t2=(await pg.textContent('#toast')).trim();
@@ -46,7 +46,7 @@ const APP=JSON.parse(fs.readFileSync(path.join(ROOT,'version.json'),'utf8')).ver
  await pg.click('#btnUpdateLater'); await pg.waitForTimeout(300);
  const afterLater=await pg.evaluate(()=>document.querySelector('#updateBar').hidden);
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="check-update"]'); await pg.waitForTimeout(1200);
  const backAgain=await pg.evaluate(()=>!document.querySelector('#updateBar').hidden);
  const ok4=afterLater&&backAgain;
  if(!ok4)bad++; console.log(`${ok4?'PASS':'FAIL'} 按過「稍後」後，再檢查一次還是叫得出來`);

@@ -34,7 +34,7 @@ const SEED=[{id:'V1',source:'名單.pdf',company:'甲工程有限公司',aliases
  await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},SEED);
  await pg.reload(); await pg.waitForTimeout(900);
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
  await pg.fill('#proxyUrl','https://my-worker.test/'); await pg.dispatchEvent('#proxyUrl','change');
 
  // 1. 第一種寫法失敗，第二種（加引號）要接上
@@ -48,7 +48,7 @@ const SEED=[{id:'V1',source:'名單.pdf',company:'甲工程有限公司',aliases
  // 2. 全部寫法都回空白時，要講出「空白回應」而不是只說不是 JSON
  mode='empty';
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
  await pg.click('button:has-text("先試一筆")'); await pg.waitForTimeout(2500);
  res=(await pg.textContent('#editorBody .rule-result:not(.proxy-diag)')).replace(/\s+/g,' ');
  const ok3=/空白回應/.test(res);

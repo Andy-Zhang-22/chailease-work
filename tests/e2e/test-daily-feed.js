@@ -142,7 +142,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
 
  // 每天打得完幾家：上限 30、新名單 10、今天那一列寫（新 8）
  await pg.click('#btnMenu, .menu-btn, [aria-label="更多"]').catch(async()=>{ await pg.click('header button:has-text("…"), header button:has-text("⋯")').catch(()=>{}); });
- await pg.click('[data-act="day-load"]', {force:true}).catch(()=>{});
+ await pg.click('#menu [data-act="menu-more"]').catch(()=>{}); await pg.click('[data-act="day-load"]', {force:true}).catch(()=>{});
  await pg.waitForSelector('#editorBody .day-load',{timeout:5000}).catch(()=>{});
  const caps=await pg.$$eval('#editorBody .cap-input',a=>a.map(x=>x.value));
  chk(caps[0]==='15' && caps[1]==='5', `主力上限預設 15、新名單額度（測試設 5）：${caps.join('|')}`);

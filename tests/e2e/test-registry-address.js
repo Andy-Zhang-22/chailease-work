@@ -41,7 +41,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};const dl=document.querySelector('#d
  await pg.evaluate(async(r)=>{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);},SEED);   // 自動更新關掉：它一跑起來「全部更新」就會先灰掉，跟這裡手動按的搶
  await pg.reload(); await pg.waitForTimeout(900);
 
- await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
  await pg.fill('#proxyUrl','https://my-worker.test/'); await pg.dispatchEvent('#proxyUrl','change');
 
  // 預設就是「只補未填地址」，摘要要說出筆數

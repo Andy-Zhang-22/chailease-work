@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261005-293">
+<link rel="stylesheet" href="assets/css/app.css?v=20261005-294">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261005-293"></script>
+<script src="assets/js/lock.js?v=20261005-294"></script>
 </head>
 <body data-theme="auto">
 
@@ -39,46 +39,58 @@
     <button id="btnSync" class="btn btn-ghost" title="與雲端硬碟同步" hidden>⟳</button>
     <button id="btnImport" class="btn btn-primary">新增客戶</button>
     <button id="btnMenu" class="btn btn-ghost" aria-haspopup="true" title="更多">⋯</button>
-    <!-- 選單分四組、名字縮短、靠左；手機上是從底下滑出來的兩欄面板（使用者：這個畫面裡有點太多功能） -->
+    <!--
+      選單外面只留每天會用的八項，其餘收在「進階 ▸」（使用者：「一個原則，畫面別太複雜 簡單明瞭」→「畫面瘦身」）。
+      每次打開選單「進階」都是收著的；手機上是從底下滑出來的兩欄面板。
+    -->
     <div id="menu" class="menu" hidden>
       <div class="menu-group">
         <div class="menu-cap">每天</div>
-        <button data-act="twin-plan">今日撥打戰略</button>
         <button data-act="review">今日覆盤</button>
         <button data-act="weekly">每週覆盤</button>
-        <button data-act="day-load">每天打得完幾家</button>
+        <button data-act="stats">統計</button>
         <button data-act="feed-more">再補一批新名單</button>
         <button data-act="spread-undo" hidden>復原剛才的重排</button>
-        <button data-act="stats">統計</button>
-        <button data-act="rules">規則</button>
       </div>
       <div class="menu-group">
-        <div class="menu-cap">整理名單</div>
-        <button data-act="registry">商工登記更新</button>
-        <button data-act="trade-phones">補電話：出進口登記</button>
-        <button data-act="phone-hunt">找電話：Google 地圖</button>
-        <button data-act="check-names">檢查公司名稱</button>
-        <button data-act="prune-unscheduled">整理未排定的名單</button>
-        <button data-act="manage">管理已匯入名單</button>
-        <button data-act="excluded">管理已排除的公司</button>
-      </div>
-      <div class="menu-group">
-        <div class="menu-cap">備份與同步</div>
-        <button data-act="export-xlsx">匯出 Excel</button>
-        <button data-act="export-json">下載備份 JSON</button>
-        <button data-act="import-json">還原備份 JSON</button>
+        <div class="menu-cap">常用</div>
         <button data-act="sync-now">立即同步雲端硬碟</button>
-        <button data-act="sync-setup">雲端同步設定</button>
-        <button data-act="backups">雲端備份（找回某天）</button>
-      </div>
-      <div class="menu-group">
-        <div class="menu-cap">其他</div>
+        <button data-act="export-xlsx">匯出 Excel</button>
         <button data-act="twin">Claude 分身</button>
         <button data-act="data-status">資料狀態</button>
-        <button data-act="check-update">檢查更新</button>
-        <button data-act="wipe" class="danger">清除所有資料</button>
-        <div class="menu-version" id="menuVersion"></div>
       </div>
+      <button data-act="menu-more" class="menu-more-toggle" aria-expanded="false">進階 ▸</button>
+      <div class="menu-more" id="menuMore" hidden>
+        <div class="menu-group">
+          <div class="menu-cap">每天</div>
+          <button data-act="twin-plan">今日撥打戰略</button>
+          <button data-act="day-load">每天打得完幾家</button>
+          <button data-act="rules">規則</button>
+        </div>
+        <div class="menu-group">
+          <div class="menu-cap">整理名單</div>
+          <button data-act="registry">商工登記更新</button>
+          <button data-act="trade-phones">補電話：出進口登記</button>
+          <button data-act="phone-hunt">找電話：Google 地圖</button>
+          <button data-act="check-names">檢查公司名稱</button>
+          <button data-act="prune-unscheduled">整理未排定的名單</button>
+          <button data-act="manage">管理已匯入名單</button>
+          <button data-act="excluded">管理已排除的公司</button>
+        </div>
+        <div class="menu-group">
+          <div class="menu-cap">備份與同步</div>
+          <button data-act="export-json">下載備份 JSON</button>
+          <button data-act="import-json">還原備份 JSON</button>
+          <button data-act="sync-setup">雲端同步設定</button>
+          <button data-act="backups">雲端備份（找回某天）</button>
+        </div>
+        <div class="menu-group">
+          <div class="menu-cap">其他</div>
+          <button data-act="check-update">檢查更新</button>
+          <button data-act="wipe" class="danger">清除所有資料</button>
+        </div>
+      </div>
+      <div class="menu-version" id="menuVersion"></div>
     </div>
   </div>
 </header>
@@ -136,6 +148,8 @@
     <div class="filter-group" data-group="outcome">
       <label>洽談狀態</label>
       <div class="chips" id="fltOutcome"></div>
+      <!-- 「隱藏禁止推廣」從名單上面搬進來（畫面瘦身）；「隱藏中租往來」使用者要留在外面 -->
+      <label class="only-open"><input type="checkbox" id="hideBlocked" checked> 隱藏「禁止推廣」</label>
     </div>
     <div class="filter-group" data-group="chance">
       <label>有沒有機會（自己標的，關係企業算一家）</label>
@@ -200,7 +214,6 @@
       <div id="oppBar" class="opp-bar" hidden></div>
       <div class="list-head">
         <span id="listSummary">—</span>
-        <label class="only-open"><input type="checkbox" id="hideBlocked" checked> 隱藏「禁止推廣」</label>
         <label class="only-open"><input type="checkbox" id="hideDealing" checked> 隱藏「中租往來」</label>
       </div>
       <div id="cards" class="cards"></div>
@@ -346,26 +359,26 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261005-293"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261005-293"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261005-294"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261005-294"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261005-293"></script>
-<script src="assets/js/normalize.js?v=20261005-293"></script>
-<script src="assets/js/holidays.js?v=20261005-293"></script>
-<script src="assets/js/registry.js?v=20261005-293"></script>
-<script src="assets/js/ocr.js?v=20261005-293"></script>
-<script src="assets/js/rules.js?v=20261005-293"></script>
-<script src="assets/js/store.js?v=20261005-293"></script>
-<script src="assets/js/sync.js?v=20261005-293"></script>
-<script src="assets/js/leads.js?v=20261005-293"></script>
-<script src="assets/js/chattel.js?v=20261005-293"></script>
-<script src="assets/js/listed.js?v=20261005-293"></script>
-<script src="assets/js/biz.js?v=20261005-293"></script>
-<script src="assets/js/trade.js?v=20261005-293"></script>
-<script src="assets/js/nhi.js?v=20261005-293"></script>
-<script src="assets/js/einv.js?v=20261005-293"></script>
-<script src="assets/js/factory.js?v=20261005-293"></script>
-<script src="assets/js/mix.js?v=20261005-293"></script>
-<script src="assets/js/app.js?v=20261005-293"></script>
+<script src="assets/js/pdf-table.js?v=20261005-294"></script>
+<script src="assets/js/normalize.js?v=20261005-294"></script>
+<script src="assets/js/holidays.js?v=20261005-294"></script>
+<script src="assets/js/registry.js?v=20261005-294"></script>
+<script src="assets/js/ocr.js?v=20261005-294"></script>
+<script src="assets/js/rules.js?v=20261005-294"></script>
+<script src="assets/js/store.js?v=20261005-294"></script>
+<script src="assets/js/sync.js?v=20261005-294"></script>
+<script src="assets/js/leads.js?v=20261005-294"></script>
+<script src="assets/js/chattel.js?v=20261005-294"></script>
+<script src="assets/js/listed.js?v=20261005-294"></script>
+<script src="assets/js/biz.js?v=20261005-294"></script>
+<script src="assets/js/trade.js?v=20261005-294"></script>
+<script src="assets/js/nhi.js?v=20261005-294"></script>
+<script src="assets/js/einv.js?v=20261005-294"></script>
+<script src="assets/js/factory.js?v=20261005-294"></script>
+<script src="assets/js/mix.js?v=20261005-294"></script>
+<script src="assets/js/app.js?v=20261005-294"></script>
 </body>
 </html>

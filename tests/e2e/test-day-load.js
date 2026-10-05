@@ -30,7 +30,7 @@ SEED.push(mk(++n,'2026-12-20'));                                // 視野之外
    Date=D; }`);
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}});
  const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
- const openLoad=async()=>{ await pg.click('#btnMenu'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('.day-load'); };
+ const openLoad=async()=>{ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('.day-load'); };
  const rows=()=>pg.evaluate(()=>[...document.querySelectorAll('.day-row')].map(r=>({
    when:r.querySelector('.day-when').textContent, n:r.querySelector('.day-n').textContent, over:r.classList.contains('is-over')})));
  const byDate=()=>pg.evaluate(async()=>{

@@ -71,7 +71,7 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk((await pg.inputValue('#drawerBody input[type="date"]'))==='2026-02-23', `挑到春節跳到收假後：${await pg.inputValue('#drawerBody input[type="date"]')}`);
 
  // 回撥提醒的自訂時間：撞到連假就順延，時間點留著
- await pg.fill('#drawerBody .remind-custom','2026-10-10T14:30');
+ await pg.click('#drawerBody .remind-section > summary'); await pg.fill('#drawerBody .remind-custom','2026-10-10T14:30');
  await pg.click('#drawerBody button:has-text("自訂時間")'); await pg.waitForTimeout(700);
  const at=await pg.evaluate(async()=>{const s=await window.Store.allStates(); return (s.find(x=>x.recordId==='1')||{}).remindAt;});
  const d=new Date(at);

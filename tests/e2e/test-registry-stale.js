@@ -21,7 +21,7 @@ const grid=(pg)=>pg.evaluate(()=>{const o={};document.querySelectorAll('#drawerB
  await pg.evaluate(async(r)=>{ localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); await window.Store.saveRecords(r);
    await window.Store.setState({recordId:'A1',edits:{regChanged:'2026/09/17'},editsAt:Date.now(),updatedAt:Date.now()}); },SEED);
  await pg.reload(); await pg.waitForTimeout(900);
- const run=async(api)=>{ API=api; await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
+ const run=async(api)=>{ API=api; await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2');
    await pg.fill('#proxyUrl','https://my-worker.test/'); await pg.dispatchEvent('#proxyUrl','change');
    await pg.selectOption('#editorBody select','all').catch(()=>{});
    await pg.click('button:has-text("先試一筆")'); await pg.waitForTimeout(1500);

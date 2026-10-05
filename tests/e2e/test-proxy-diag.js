@@ -30,7 +30,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
    nextDate:'',lastDate:'',addedDate:''}]);});
  await pg.reload(); await pg.waitForTimeout(900);
 
- const openDlg=async()=>{ await pg.click('#btnMenu'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2'); };
+ const openDlg=async()=>{ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#editorBody h2'); };
  const setProxy=async(v)=>{ await pg.fill('#proxyUrl',v); await pg.dispatchEvent('#proxyUrl','change'); };
  const diagText=async()=>(await pg.textContent('#editorBody .proxy-diag')).replace(/\s+/g,' ');
 
