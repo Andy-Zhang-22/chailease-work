@@ -953,6 +953,10 @@
     // 冷名單：連續未接太多次自動移出每日名單（哪天移的）；打通一次就清掉
     out.cold = (mine && mine.cold) || '';
     out.remindNote = (mine && mine.remindNote) || '';
+    // 董監事裡的外國／境外法人（g0v 董監事名單；見 Registry.corpHolders、refreshCorps）
+    out.foreignCorps = (mine && mine.corps && mine.corps.foreign) || [];
+    out.havenCorps = (mine && mine.corps && mine.corps.haven) || [];
+    out.corpsAt = (mine && mine.corps && mine.corps.at) || 0;
     // 電話是從 Google 地圖找來的話，詳細頁要標明來源
     out.phoneSource = (mine && mine.phoneSource) || null;
     /*
@@ -2320,7 +2324,7 @@
       v.bucket = dueBucket(v.nextDate);
       v.addedBucket = addedBucket(v.addedDate);
       v.blob = [v.company, v.aliases.join(' '), v.taxId, v.owner, v.keyman, v.industry,
-        v.phoneRaw, v.address, v.addressActual, v.notesRaw, v.source].join(' ').toLowerCase();
+        v.phoneRaw, v.address, v.addressActual, v.notesRaw, v.source, v.foreignCorps.length ? `境外法人 ${v.foreignCorps.join(' ')}` : ''].join(' ').toLowerCase();
       return v;
     });
     linkGroupDates(viewsCache);
@@ -4442,6 +4446,7 @@
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       (r.opp || []).includes('renew') ? el('span', { className: 'badge badge-opp', textContent: '🔁 換約時機', title: `跟同業的動保 ${oppText(r, 'renew')}，30 天內沒聯絡過` }) : '',
       (r.opp || []).includes('fresh') ? el('span', { className: 'badge badge-opp', textContent: `📈 ${oppText(r, 'fresh')}`, title: r.chance === 'no' ? '標了無機會之後，商工登記又有變更' : '很久沒聯絡，這段時間商工登記有變更' }) : '',
+      r.foreignCorps.length ? el('span', { className: 'badge badge-foreign', textContent: r.havenCorps.length ? '🌏 境外控股' : '🌏 外國法人股東', title: `董監事裡的法人：${r.foreignCorps.join('、')}（商工登記）` }) : '',
       r.remindAt ? el('span', { className: `badge badge-remind ${r.remindAt <= Date.now() ? 'is-due' : ''}`, textContent: `⏰ ${whenLabel(r.remindAt)} 回撥` }) : '',
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
@@ -5514,6 +5519,7 @@
     // 第三個值＝要複製的內容：統編查登記、貼進公司系統都用得到，手打八碼很容易錯
     const rows = [
       ['統一編號', r.taxId, r.taxId], ['負責人', r.owner],
+      ['境外法人股東', r.foreignCorps.length ? `🌏 ${r.foreignCorps.join('、')}` : ''],
       ['KEYMAN', r.keyman ? `${r.keyman}${r.keymanFrom === 'notes' ? `　（${r.keymanInfo.reason}：「${r.keymanInfo.snippet}」）` : r.keymanFrom === 'owner' ? '　（訪談看不出 KEYMAN，先填負責人）' : ''}` : ''],
       ['產業別', r.industry], ['成立年', r.founded],
       ['資本總額', r.capital ? `${r.capital} 仟元${capitalScale(r) ? `（${capitalScale(r)}）` : ''}` : ''],
@@ -5541,6 +5547,16 @@
       if (k === '下次聯絡' && r.nextDate) dd.append(' ', el('button', { className: 'link-btn cal-jump', type: 'button', textContent: '看行事曆', onclick: () => openCalendar(r.nextDate) }));
       dl.append(el('dt', { textContent: k }), dd);
     });
+    // 董監事的境外法人：90 天沒查過就背景查一次，查到有的話直接補在負責人下面（不重畫詳細頁）
+    if (corpsAuto() && corpsStale(r)) {
+      refreshCorps([r], 1, { quiet: true }).then((got) => {
+        const f = got.get(r.id);
+        if (!f || !f.length || !dl.isConnected) return;
+        const owner = [...dl.children].find((n) => n.tagName === 'DT' && n.textContent.trim() === '負責人');
+        const pair = [el('dt', { textContent: '境外法人股東' }), el('dd', { textContent: `🌏 ${f.join('、')}` })];
+        if (owner && owner.nextElementSibling) owner.nextElementSibling.after(...pair); else dl.prepend(...pair);
+      }).catch(() => {});
+    }
     // 行銷區域：依規範用「公司登記地址」判，跟服務區域（看實際地址）分開
     {
       const reg = window.Normalize.parseAddress(r.addressRegistered);
@@ -5687,7 +5703,7 @@
      */
     {
       // 最近異動日期也直接顯示（使用者：「最近異動日也顯示在詳細頁裡，不要收在下面」）；實收資本額也是（「實收資本額也不要收在下面」）
-      const KEEP = new Set(['統一編號', '負責人', 'KEYMAN', '成立年', '資本總額', '實收資本額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
+      const KEEP = new Set(['統一編號', '負責人', '境外法人股東', 'KEYMAN', '成立年', '資本總額', '實收資本額', '最近異動日期', '動產擔保', '下次聯絡', '最近聯絡', '登記地址', '實際地址']);
       // 動產擔保接在最近異動日期後面、下次聯絡前面（跟成立年、資本額這些判斷用的放一起）
       const dtOf = (t) => [...dl.children].find((n) => n.tagName === 'DT' && n.textContent.trim() === t);
       const ch = dtOf('動產擔保'); const nx = dtOf('下次聯絡');
@@ -7296,6 +7312,36 @@ export default {
    * 跑一次商工登記更新。手動「全部更新」與每天自動更新都走這裡。
    * 同一時間只跑一個；查到的結果一筆一筆寫入，最後才重繪名單（中途重繪會打斷正在看的畫面）。
    */
+  /*
+   * 董監事裡的外國／境外法人：每家 90 天查一次 g0v 的董監事名單（Registry.corpHolders），存在追蹤狀態 corps（會同步）。
+   * 詳細頁打開時查那一家；每天的商工登記更新跑完後，順便補還沒查過的（一次最多 60 家，慢慢補，不擠爆 g0v）。
+   */
+  const CORPS_TTL = 90 * 864e5;
+  const corpsStale = (v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && Date.now() - (v.corpsAt || 0) > CORPS_TTL;
+  let corpsBusy = false;
+  // 跟「商工登記自動更新」同一個開關：關掉就不自動查（測試也靠這個不去打外面的網站）
+  const corpsAuto = () => registryPref('registry-auto') !== '0';
+  async function refreshCorps(list, cap = 60, { quiet = false } = {}) {
+    const got = new Map();
+    if (!window.Registry || !window.Registry.corpHolders) return got;
+    const todo = list.filter(corpsStale).slice(0, cap);
+    let saved = 0;
+    for (const v of todo) {
+      const res = await window.Registry.corpHolders(v.taxId);
+      // 連不上的不記，下次再查；查得到（或確定查不到這家）的記下時間，90 天內不重查
+      if (res.ok || res.reason === '查不到這家' || /^HTTP 404/.test(res.reason || '')) {
+        const corps = { at: Date.now(), foreign: res.foreign || [], haven: res.haven || [], n: (res.corps || []).length };
+        try { await saveState(v.id, { corps }); saved += 1; got.set(v.id, corps.foreign); } catch (e) { /* 存不進去下次再查 */ }
+      }
+      if (todo.length > 1) await new Promise((r) => setTimeout(r, 250));
+    }
+    // saveState 已經更新記憶體；只有真的查到外國／境外法人才重畫一次名單（多半沒有，不打擾）。
+    // quiet：詳細頁那一家，結果直接補在畫面上，不整頁重畫（打字打到一半不會被打斷）
+    if (!quiet && [...got.values()].some((f) => f.length)) render();
+    if (saved) scheduleSync();
+    return got;
+  }
+  window.refreshCorps = async (ids) => { const vs = allViews().filter((v) => !ids || ids.includes(v.id)); const m = await refreshCorps(vs); return Object.fromEntries(m); };   // 測試用
   async function runRegistryJob({ targets, useMirror, auto }) {
     if (registryJob.running) { toast('商工登記更新正在進行中'); return null; }
     Object.assign(registryJob, { running: true, cancelled: false, done: 0, total: targets.length, company: '', updated: 0, result: null, auto: !!auto });
@@ -7329,6 +7375,8 @@ export default {
     registryPref('registry-auto-summary', sourceDown
       ? `全部失敗（${String(failures[0].reason || '').split('\n')[0]}）`
       : `查 ${targets.length} 筆，更新 ${diffs.length} 筆，${failures.length} 筆查不到`);
+    // 順便補董監事的境外法人（背景，不擋結果）
+    if (corpsAuto() && !corpsBusy) { corpsBusy = true; const ids = new Set(targets.map((t) => (t.rec || t).id)); refreshCorps(allViews().filter((v) => ids.has(v.id))).catch(() => {}).finally(() => { corpsBusy = false; }); }
     if (sourceDown) toast('商工登記更新失敗：來源連不上。細節在選單「從商工登記更新公司資料」。');
     else if (!auto || diffs.length) toast(diffs.length ? `商工登記更新：已更新 ${diffs.length} 筆` : '商工登記更新：資料都是最新的');
     return registryJob.result;

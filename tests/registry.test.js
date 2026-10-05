@@ -203,3 +203,12 @@ test('lookupCompany：名稱是公司的照舊走公司資料集，查不到才�
   assert.equal(res.data.regChanged, '2025/06/01');
   assert.ok(!calls.some((c) => /426D5542/.test(c.url)), '公司查到了就不碰商業登記');
 });
+
+test('isForeignCorp：董監事的法人代表是不是外國／境外法人', () => {
+  const { isForeignCorp } = Registry;
+  ['百慕達商 Asia Pacific Wire & Cable Corporation Limited', '新加坡商 MULTICO INFRACORE HOLDINGS PTE. LTD.', '韓商株式會社SAET BYEOL MNT',
+    '薩摩亞商宏遠投資有限公司', '英屬維京群島商大華控股有限公司', 'SAMOA GOLDEN STAR CO., LTD.', '香港商友達國際有限公司']
+    .forEach((n) => assert.equal(isForeignCorp(n), true, n));
+  ['行政院國家發展基金管理會', '大華投資股份有限公司', '中租迪和股份有限公司', '台灣ABC科技股份有限公司', '']
+    .forEach((n) => assert.equal(isForeignCorp(n), false, n));
+});
