@@ -1,0 +1,36 @@
+# 一次性探測（用完就刪）：用負責人姓名查公司——官方 4B61A0F1、g0v 搜尋；以公開人物（廣達董事長林百里）測。
+name: 探測負責人查公司
+on:
+  push:
+    branches: [claude/telemarketing-website-hf2uwj]
+    paths: [.github/workflows/probe-owner.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          cat > p.mjs <<'JS'
+          const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+          const name = '林百里';
+          const show = async (label, url) => {
+            try {
+              const r = await fetch(url, { headers: { 'User-Agent': UA, Origin: 'https://andy-zhang-22.github.io' }, signal: AbortSignal.timeout(45000) });
+              const t = await r.text();
+              console.log(`${label} → HTTP ${r.status} ${r.headers.get('content-type')} ACAO=${r.headers.get('access-control-allow-origin')}`);
+              let j = null; try { j = JSON.parse(t); } catch (e) { console.log('  前 200 字：', t.slice(0, 200).replace(/\s+/g, ' ')); return; }
+              const list = Array.isArray(j) ? j : (j.data || j.records || []);
+              console.log('  筆數：', Array.isArray(list) ? list.length : typeof list, '｜頂層：', Array.isArray(j) ? 'array' : Object.keys(j).join('、'));
+              (Array.isArray(list) ? list : []).slice(0, 6).forEach((x) => console.log('  ', JSON.stringify(x).slice(0, 260)));
+            } catch (e) { console.log(`${label} → ${e.message}`); }
+          };
+          await show('官方 4B61A0F1 負責人', `https://data.gcis.nat.gov.tw/od/data/api/4B61A0F1-458C-43F9-93F3-9FD6DA5E1B08?$format=json&$filter=Responsible_Name%20eq%20${encodeURIComponent(name)}&$skip=0&$top=50`);
+          await show('g0v search q=', `https://company.g0v.ronny.tw/api/search?q=${encodeURIComponent(name)}`);
+          await show('g0v search path', `https://company.g0v.ronny.tw/api/search/${encodeURIComponent(name)}`);
+          await show('g0v name', `https://company.g0v.ronny.tw/api/name/${encodeURIComponent(name)}`);
+          JS
+          node p.mjs
