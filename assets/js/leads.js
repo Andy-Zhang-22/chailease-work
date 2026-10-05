@@ -34,6 +34,8 @@
 
   let root = null;
   const $ = (sel) => root.querySelector(sel);
+  // 「已在名單　📝 記錄」：打開名單上那一筆、直接捲到「記錄這通電話」（使用者：在新名單打完電話不用再回重點名單搜尋）
+  const openLog = (id) => { if (typeof global.openCustomerLog === 'function') global.openCustomerLog(id); else if (typeof global.openCustomer === 'function') global.openCustomer(id); };
   const el = (tag, props, children) => {
     const n = document.createElement(tag);
     Object.entries(props || {}).forEach(([k, v]) => { if (k.includes('-')) n.setAttribute(k, v); else n[k] = v; });
@@ -397,7 +399,7 @@
     const mine = c ? mineOf(r, c.cm) : null;
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
-      : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）；點一下打開名單上這一筆', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })
+      : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })
     const reasonBadge = r.type === 'setup' ? el('span', { className: 'badge badge-new', textContent: '新設立' })
       : r.rk === 'up' ? el('span', { className: 'badge badge-up', textContent: r.reason })
         : r.rk === 'down' ? el('span', { className: 'badge badge-down', textContent: r.reason })
