@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-291';
+  const APP_VERSION = '20261005-292';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2980,6 +2980,8 @@
     { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
     { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
     { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
+    // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
+    { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
   ];
   window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
   window.mixCandidates = async () => {
@@ -2993,7 +2995,7 @@
   };
   /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
   window.mixSourceStatus = async () => {
-    const want = { leads: '登記清冊', chattel: '動產擔保', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
+    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
     return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
       try {
         const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
@@ -3030,6 +3032,7 @@
   window.crossLine = (tax, selfTab) => {
     const k = srcTaxKey(tax);
     if (k.length !== 8) return '';
+    // 商行原本只跟健保、出進口互通；併進新名單之後跟其他六份一樣全部互通（使用者：「把商行也合併在其他分頁裡」）
     const hits = MIX_SOURCES.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
     if (!hits.length) return '';
     const box = el('p', { className: 'cross-line' }, [document.createTextNode('🔗 也在：')]);
@@ -9047,7 +9050,7 @@ export default {
    */
   const SOURCE_TABS = ['mix', 'leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory'];
   // 「新名單」底下的第三排：合併頁＋六份名單（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）
-  const MIX_TABS = ['mix', 'leads', 'chattel', 'trade', 'nhi', 'einv', 'factory'];
+  const MIX_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'einv', 'factory'];
   function switchTab(tab) {
     if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;

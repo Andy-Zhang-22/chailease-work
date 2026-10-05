@@ -193,6 +193,14 @@
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  /*
+   * 「這家不用了」跟其他分頁共用（使用者：「商行的資料跟其他的資料有互通嗎」→「健保跟進出口」）：有統編就記在共用那份
+   * （app.js 的 srcHide），在任何一頁藏，這裡也藏；沒統編才記在這一頁自己的。
+   */
+  const taxOfRec = (r) => String(r.taxId || '').replace(/\D/g, '');
+  const isHid = (r) => hidden.has(r.key) || (typeof global.srcHidden === 'function' && global.srcHidden(taxOfRec(r)));
+  const hide = (r) => { if (taxOfRec(r).length === 8 && typeof global.srcHide === 'function') global.srcHide(taxOfRec(r)); else hidden.add(r.key); };
+  const unhide = (r) => { hidden.delete(r.key); if (typeof global.srcUnhide === 'function') global.srcUnhide(taxOfRec(r)); };
 
   function criteria() {
     return {
@@ -214,7 +222,7 @@
       && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.capital >= c.min && r.capital <= c.max
-      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
+      && (showHidden || !(isHid(r) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   function visible(c) {
@@ -276,7 +284,7 @@
 
   function card(r, c) {
     const mine = mineOf(r, c.cm);
-    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId);
+    const isHidden = isHid(r) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [r.reg ? findbiz(r.taxId, r.name) : el('span', { textContent: r.name, title: '只有稅籍登記，商工登記查不到' }), copyName(r.name)]),
       r.org ? el('span', { className: 'badge badge-new', textContent: r.org }) : '',
@@ -306,11 +314,11 @@
     const actions = el('div', { className: 'card-actions' }, [
       mine ? '' : el('button', { className: 'btn btn-tiny btn-primary biz-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
       deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
-        ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
-        : el('button', { className: 'btn btn-tiny biz-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
+        ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(r); saveHidden(); render(); } })
+        : el('button', { className: 'btn btn-tiny biz-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(r); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
     r.__name = r.name; r.__addr = r.address;
-    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneBox(r, r.key, hasPhone(r) || !!mine), meta, actions]);
+    return el('article', { className: `card leads-card biz-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneBox(r, r.key, hasPhone(r) || !!mine), meta, typeof global.crossLine === 'function' ? global.crossLine(r.taxId, 'biz') : '', actions]);
   }
 
   function chips(host, options, set) {
@@ -412,7 +420,7 @@
     const fresh = current.filter((r) => !mineOf(r, c.cm)).length;
     $('#biz-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${current.length - fresh ? `　／ 其中 ${current.length - fresh} 家已在名單` : ''}</span>`;
     const del = pool().filter((r) => deletedOf(r.name, r.taxId)).length;
-    const hid = pool().filter((r) => hidden.has(r.key)).length + del;
+    const hid = pool().filter((r) => isHid(r)).length + del;
     const hb = $('#biz-hidden');
     hb.hidden = !hid;
     hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
@@ -451,6 +459,20 @@
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const fromDate = () => { const v = $('#biz-from') && $('#biz-from').value; return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : ''; };
+  /*
+   * 給其他分頁卡片「🔗 也在：商行／企業社（…）」用（剛開始請人、出進口廠商）：統編 → 這一頁看到的那一句。看稅籍名單那一池。
+   */
+  function cardFacts(r) {
+    const tel = global.Trade && global.Trade.telOf ? global.Trade.telOf(r.taxId) : '';
+    return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel, branchKey: r.branch.key,
+      info: [r.org, r.inds[0] || '', r.setup ? `${r.setup.y}/${String(r.setup.m).padStart(2, '0')} 設立` : '', r.capital ? `資本額 ${money(r.capital)}` : ''].filter(Boolean).join('，'), add: () => addToList([r]) };
+  }
+  let factIdx = null; let factIdxN = -1;
+  function factsOf(taxId) {
+    if (factIdxN !== rows.length) { const idx = new Map(); rows.forEach((r) => { const t = taxOfRec(r); if (t.length === 8 && !idx.has(t)) idx.set(t, r); }); factIdx = idx; factIdxN = rows.length; }
+    const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
+    return r ? cardFacts(r) : null;
+  }
   async function addToList(list) {
     if (typeof global.importLeadsFile !== 'function') { toast('主站還沒準備好匯入，請重新整理再試'); return; }
     const cm = customerMap();
@@ -525,10 +547,21 @@
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
     const tel = (r) => (foundOf(r) ? foundOf(r).tel : '') || typed.get(r.key) || (global.Trade && global.Trade.telOf ? global.Trade.telOf(r.taxId) : '') || '';
-    return rows.filter((r) => r.district === district && !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
+    return rows.filter((r) => r.district === district && !mineOf(r, cm) && !isHid(r) && !deletedOf(r.name, r.taxId))
       .map((r) => ({ kind: '商行', name: r.name, taxId: r.taxId, address: r.address, tel: tel(r), note: [r.inds[0] || '', r.owner ? `負責人 ${r.owner}` : ''].filter(Boolean).join('・'), add: () => addToList([r]) }))
       .sort((a, b) => Number(!!b.tel) - Number(!!a.tel))
       .slice(0, limit || 50);
+  }
+  /*
+   * 「新名單」合併頁用（使用者：「把商行也合併在其他分頁裡，獨立分頁僅上市櫃而已」）：跟其他六頁同一種格式。
+   * 訊號：本期清冊剛設立（剛設立商行）、本期增資；每日新名單挑商行還是照自己的規則（資本額＋成立年），這裡只給合併頁排序用。
+   */
+  function dailyFacts(r) {
+    const d = r.monthly ? r : r.dyn || null;
+    const sig = !d ? [] : d.kind === '設立' ? ['剛設立商行'] : reasonKind(d.reason || '') === 'up' ? ['本期增資'] : [];
+    return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: sig,
+      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 3, capOk: r.capital >= 5000000 && r.capital <= 60000000,
+      phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r) };
   }
   async function dailyCandidates() {
     if (!root) root = document.getElementById('paneBiz');
@@ -545,7 +578,7 @@
       const minCap = (index && index.minCapital) || 500000;
       extra = [...mrows[p].setup, ...mrows[p].change].filter((r) => { if (!r.taxId || seen.has(r.taxId) || r.capital < minCap) return false; seen.add(r.taxId); return true; });
     } catch (e) { extra = []; }
-    return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
+    return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r); return r; })
       .sort(dailyCompare);
   }
@@ -703,5 +736,5 @@
     start().catch((err) => { console.error(err); toast(`商行／企業社載入失敗：${err.message}`); });
   }
 
-  global.Biz = { show, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, nearby, dailyCandidates, DAILY_PRIORITY };
+  global.Biz = { show, dailyFacts, cardFacts, factsOf, toRecord, toMonthlyRecord, reasonKind, REASONS, parseAnyDate, periodLabel, toStandardCsv, noteFor, money, parseYmd, yearsSince, ageOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);
