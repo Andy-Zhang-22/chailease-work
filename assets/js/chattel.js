@@ -37,6 +37,8 @@
 
   let root = null;
   const $ = (sel) => root.querySelector(sel);
+  // 「已在名單　📝 記錄」：打開名單上那一筆、直接捲到「記錄這通電話」（使用者：在新名單打完電話不用再回重點名單搜尋）
+  const openLog = (id) => { if (typeof global.openCustomerLog === 'function') global.openCustomerLog(id); else if (typeof global.openCustomer === 'function') global.openCustomer(id); };
   const el = (tag, props, children) => {
     const n = document.createElement(tag);
     Object.entries(props || {}).forEach(([k, v]) => { if (k.includes('-')) n.setAttribute(k, v); else n[k] = v; });
@@ -311,7 +313,7 @@
     const phoneBadge = hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '';
     const mineBadge = !mine ? '' : declined(mine)
       ? el('span', { className: 'badge badge-own', textContent: `名單上是禁止推廣${mine.lastDate ? `・${mmdd(mine.lastDate)}` : ''}` })
-      : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}`, title: '哪天加進名單的（名單新增日期）' });
+      : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}${mine.nextDate ? `・下次 ${mmdd(mine.nextDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) });
     const name = el('span', { className: 'card-name' }, [r.cust.id
       ? el('a', { href: global.Normalize.findbizUrl(r.cust.id, r.cust.name), target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料（開新分頁）' })   // 債務人是商行時走用統編查的結果頁
       : document.createTextNode(r.cust.name || '（沒有名稱）'), copyName(r.cust.name || '')]);

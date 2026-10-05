@@ -25,6 +25,8 @@
 
   let root = null;
   const $ = (sel) => root.querySelector(sel);
+  // 「已在名單　📝 記錄」：打開名單上那一筆、直接捲到「記錄這通電話」（使用者：在新名單打完電話不用再回重點名單搜尋）
+  const openLog = (id) => { if (typeof global.openCustomerLog === 'function') global.openCustomerLog(id); else if (typeof global.openCustomer === 'function') global.openCustomer(id); };
   const el = (tag, props, children) => {
     const n = document.createElement(tag);
     Object.entries(props || {}).forEach(([k, v]) => { if (k.includes('-')) n.setAttribute(k, v); else n[k] = v; });
@@ -237,7 +239,7 @@
       x.listed ? el('span', { className: 'badge', textContent: '也是上市櫃公司' }) : '',
       mine ? (declined(mine)
         ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' })
-        : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
+        : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
     ];
     const meta = el('span', { className: 'owner-meta', textContent: [
       x.capital ? `資本 ${money(thousandsToYuan(x.capital))}` : '',
@@ -262,7 +264,7 @@
       r.industry ? el('span', { className: 'badge badge-ind', textContent: r.industry }) : '',
       r.invest.length ? el('span', { className: 'badge badge-peer', textContent: `名下投資公司 ${r.invest.length} 家${r.sameSpot.length ? `（同址 ${r.sameSpot.length}）` : ''}` }) : '',
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
-      mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}` })) : '',
+      mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
       r.recentNews ? el('span', { className: 'badge badge-dyn', textContent: `近 ${NEWS_DAYS} 天 ${r.recentNews} 則重大訊息` }) : '',
       r.dynKeys && r.dynKeys.has('basic') ? el('span', { className: 'badge badge-dyn', textContent: '基本資料有異動' }) : '',
     ]);
