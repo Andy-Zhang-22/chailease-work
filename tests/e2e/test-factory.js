@@ -30,7 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9589/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('新設工廠')), '找名單底下有「新設工廠」');
+ chk((await pg.$$eval('#subtabs .subtab, #mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('新設工廠')), '找名單底下有「新設工廠」');
  await pg.evaluate(()=>window.switchTab('factory')); await pg.waitForSelector('#factory-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#factory-sub')).replace(/\s+/g,' ');
  chk(/新北市最近 12 個月登記的工廠 4 家（對到電話 2）/.test(sub) && /資料到 2026\/09/.test(sub), `標題：${sub}`);

@@ -129,6 +129,15 @@
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  /*
+   * 「這家不用了」各頁互通（使用者：「分頁各自的資訊都能互通」）：除了這一頁自己的清單，也記在共用的那份（依統編，app.js 的 srcHide），
+   * 在任何一頁藏，六頁與合併頁都藏；放回來也一起。
+   */
+  const taxOfRec = (r) => String(r.taxId || '').replace(/\D/g, '');
+  const isHid = (r) => hidden.has(r.key) || (typeof global.srcHidden === 'function' && global.srcHidden(taxOfRec(r)));
+  // 有統編就只記共用那份（不然別頁「放回來」收不回這一頁自己的）；沒統編才記在這一頁
+  const hide = (r) => { if (taxOfRec(r).length === 8 && typeof global.srcHide === 'function') global.srcHide(taxOfRec(r)); else hidden.add(r.key); };
+  const unhide = (r) => { hidden.delete(r.key); if (typeof global.srcUnhide === 'function') global.srcUnhide(taxOfRec(r)); };
 
   const criteria = () => ({ min: (Number($('#einv-capMin').value) || 0) * 1e4, max: (Number($('#einv-capMax').value) || 0) * 1e4 || Infinity, terms: f.q.trim().toLowerCase().split(/\s+/).filter(Boolean), cm: customerMap() });
   function passes(r, c, except) {
@@ -142,7 +151,7 @@
       && (except === 'rate' || !f.rate.size || f.rate.has(rateKey(r)))
       && (except === 'phone' || !f.phone.size || [...f.phone].some((k) => phoneKinds(r).has(k)))
       && (except === 'mine' || !f.mine.size || f.mine.has(mineKey(r, c.cm)))
-      && (showHidden || !(hidden.has(r.key) || deletedOf(r.name, r.taxId)))
+      && (showHidden || !(isHid(r) || deletedOf(r.name, r.taxId)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   const ymKey = (ym) => (ym ? `${ym.y}${String(ym.m).padStart(2, '0')}` : '0');
@@ -188,7 +197,7 @@
 
   function card(r, c) {
     const mine = mineOf(r, c.cm);
-    const isHidden = hidden.has(r.key) || deletedOf(r.name, r.taxId);
+    const isHidden = isHid(r) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name), copyName(r.name)]),
       r.isNew && r.firstMonths != null && r.firstMonths < 3 ? el('span', { className: 'badge badge-up', textContent: '剛開電子發票', title: '最近 3 個月才出現在財政部的導入電子發票營業人清單' }) : '',
@@ -209,10 +218,10 @@
     const actions = el('div', { className: 'card-actions' }, [
       mine ? '' : el('button', { className: 'btn btn-tiny btn-primary einv-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
       deletedOf(r.name, r.taxId) ? restoreBtn(r.name, r.taxId) : isHidden
-        ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
-        : el('button', { className: 'btn btn-tiny einv-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了'); } }),
+        ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(r); saveHidden(); render(); } })
+        : el('button', { className: 'btn btn-tiny einv-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(r); saveHidden(); render(); toast('藏起來了'); } }),
     ]);
-    return el('article', { className: `card leads-card einv-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneBox(r, r.key, !!r.tel || !!mine), meta, actions]);
+    return el('article', { className: `card leads-card einv-card${r.branch.key === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [top, phoneBox(r, r.key, !!r.tel || !!mine), meta, typeof global.crossLine === 'function' ? global.crossLine(r.taxId, 'einv') : '', actions]);
   }
 
   function chips(host, options, set) {
@@ -255,7 +264,7 @@
     const fresh = current.filter((r) => !mineOf(r, c.cm)).length;
     $('#einv-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${current.length - fresh ? `　／ 其中 ${current.length - fresh} 家已在名單` : ''}</span>`;
     const del = rows.filter((r) => deletedOf(r.name, r.taxId)).length;
-    const hid = rows.filter((r) => hidden.has(r.key)).length + del;
+    const hid = rows.filter((r) => isHid(r)).length + del;
     const hb = $('#einv-hidden');
     hb.hidden = !hid;
     hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
@@ -344,7 +353,7 @@
     if (!ready) return [];
     if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.name, r.taxId))
+    return rows.filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
       .sort(dailyCompare);
   }
@@ -478,5 +487,24 @@
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: (!!(r.isNew && r.firstMonths != null && r.firstMonths < 3)) ? ['剛開電子發票'] : [],
       ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r) };
   }
-  global.Einv = { show, dailyFacts, toRecord, parseYm, monthsSinceYm, whenOf, ageOf, orgOf, toStandardCsv, noteFor, dailyCandidates, DAILY_PRIORITY };
+  /*
+   * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，
+   * 六頁同一種格式（地址、資本額〔元〕、成立幾年、電話、歸屬分公司、這一頁看到的那一句），加入名單走這一頁自己的流程。
+   */
+  function cardFacts(r) {
+    return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
+      info: `${r.ym ? `${ymLabel(r.ym)} ` : ''}出現在電子發票導入名單`, add: () => addToList([r]) };
+  }
+  /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
+  let factIdx = null; let factIdxN = -1;
+  function factsOf(taxId) {
+    if (factIdxN !== rows.length) {
+      const idx = new Map();
+      rows.forEach((r) => { const t = taxOfRec(r); if (t.length !== 8) return; const have = idx.get(t); if (!have) idx.set(t, r); });
+      factIdx = idx; factIdxN = rows.length;
+    }
+    const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
+    return r ? cardFacts(r) : null;
+  }
+  global.Einv = { show, dailyFacts, cardFacts, factsOf, toRecord, parseYm, monthsSinceYm, whenOf, ageOf, orgOf, toStandardCsv, noteFor, dailyCandidates, DAILY_PRIORITY };
 })(window);

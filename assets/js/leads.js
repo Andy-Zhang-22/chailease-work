@@ -87,6 +87,15 @@
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  /*
+   * 「這家不用了」各頁互通（使用者：「分頁各自的資訊都能互通」）：除了這一頁自己的清單，也記在共用的那份（依統編，app.js 的 srcHide），
+   * 在任何一頁藏，六頁與合併頁都藏；放回來也一起。
+   */
+  const taxOfRec = (r) => String(r['統一編號'] || '').replace(/\D/g, '');
+  const isHid = (r) => hidden.has(keyOf(r)) || (typeof global.srcHidden === 'function' && global.srcHidden(taxOfRec(r)));
+  // 有統編就只記共用那份（不然別頁「放回來」收不回這一頁自己的）；沒統編才記在這一頁
+  const hide = (r) => { if (taxOfRec(r).length === 8 && typeof global.srcHide === 'function') global.srcHide(taxOfRec(r)); else hidden.add(keyOf(r)); };
+  const unhide = (r) => { hidden.delete(keyOf(r)); if (typeof global.srcUnhide === 'function') global.srcUnhide(taxOfRec(r)); };
   let showHidden = false;
   const keyOf = (r) => (r['統一編號'] || r['公司名稱'] || '');
   const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
@@ -337,7 +346,7 @@
       && (except === 'mine' || !F.mine.size || F.mine.has(mineKey(r, c.cm)))
       && (except === 'rate' || !F.rate.size || F.rate.has(rateKey(r)))
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
-      && (showHidden || !(hidden.has(keyOf(r)) || delOf(r)))
+      && (showHidden || !(isHid(r) || delOf(r)))
       && r.capital >= c.min && r.capital <= c.max
       && !(c.skipHolding && r.holding)
       && c.terms.every((t) => r.blob.includes(t));
@@ -411,6 +420,9 @@
     r.__name = r['公司名稱']; r.__addr = r['公司所在地'];
     const top = art.querySelector('.card-top');
     if (top) top.after(phoneBox(r, keyOf(r), hasPhone(r) || !!mineOf(r, c.cm)));
+    // 這家在其他名單看到的（🔗 也在：…），放在按鈕上面
+    const cross = typeof global.crossLine === 'function' ? global.crossLine(r['統一編號'], 'leads') : '';
+    if (cross) { const acts = [...art.children].filter((n) => n.classList && n.classList.contains('card-actions')).pop(); art.insertBefore(cross, acts || null); }
     return art;
   }
   function cardBody(r, c) {
@@ -429,13 +441,13 @@
     const items = (r['營業項目'] || '').split('；').filter(Boolean);
     const all = true;
     const pLabel = (x) => `${x['期別'].slice(0, 3)}/${+x['期別'].slice(3)}`;
-    const isHidden = hidden.has(keyOf(r)) || delOf(r);
+    const isHidden = isHid(r) || delOf(r);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
       : [el('button', { className: 'btn btn-tiny btn-primary leads-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
         delOf(r) ? restoreBtn(r['公司名稱'], r['統一編號']) : isHidden
-          ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(keyOf(r)); saveHidden(); render(); } })
-          : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(keyOf(r)); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
+          ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(r); saveHidden(); render(); } })
+          : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(r); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card${mine ? ' is-mine' : rksOf(r).has('up') ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
@@ -522,7 +534,7 @@
     const inList = current.filter((r) => mineOf(r, c.cm)).length;
     $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}${inList ? `、已在名單 ${inList} 家` : ''}<span class="muted">　／ ${Object.keys(index.periods || {}).length} 期合在一起，已載入 ${merged().length.toLocaleString()} 家</span>`;
     const del = merged().filter(delOf).length;
-    const hid = merged().filter((r) => hidden.has(keyOf(r))).length + del;
+    const hid = merged().filter((r) => isHid(r)).length + del;
     const hb = $('#leads-hidden');
     hb.hidden = !hid;
     hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
@@ -672,7 +684,7 @@
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就只看增資／擴張 */ } }
     const cm = customerMap();
-    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !hidden.has(keyOf(r)) && !delOf(r))
+    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !isHid(r) && !delOf(r))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))
@@ -824,5 +836,27 @@
     return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
       ageRank: ageRankOf(r), capOk: r.capital >= 5000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r) };
   }
-  global.Leads = { show, dailyFacts, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  /*
+   * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，
+   * 六頁同一種格式（地址、資本額〔元〕、成立幾年、電話、歸屬分公司、這一頁看到的那一句），加入名單走這一頁自己的流程。
+   */
+  function cardFacts(r) {
+    const tel = global.Trade && global.Trade.telOf ? global.Trade.telOf(r['統一編號']) : '';
+    const p = String(r['期別'] || ''); const pl = p ? `${p.slice(0, 3)}/${+p.slice(3)}` : '';
+    return { name: r['公司名稱'], taxId: String(r['統一編號'] || '').replace(/\D/g, ''), address: r['公司所在地'] || '', capital: r.capital || 0,
+      years: r.foundedDate ? yearsSince(r.foundedDate) : null, tel, branchKey: r.branch.key,
+      info: `${pl} ${r.type === 'setup' ? '新設立' : (r.reason || '變更')}`.trim(), add: () => addToList([r]) };
+  }
+  /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
+  let factIdx = null; let factIdxN = -1;
+  function factsOf(taxId) {
+    if (factIdxN !== rows.length) {
+      const idx = new Map();
+      rows.forEach((r) => { const t = taxOfRec(r); if (t.length !== 8) return; const have = idx.get(t); if (!have || ((a, b) => String(a['期別'] || '') >= String(b['期別'] || ''))(r, have)) idx.set(t, r); });
+      factIdx = idx; factIdxN = rows.length;
+    }
+    const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
+    return r ? cardFacts(r) : null;
+  }
+  global.Leads = { show, dailyFacts, cardFacts, factsOf, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);

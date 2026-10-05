@@ -30,7 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9509/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開電子發票')), '找名單底下有「剛開電子發票」');
+ chk((await pg.$$eval('#subtabs .subtab, #mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開電子發票')), '找名單底下有「剛開電子發票」');
  await pg.evaluate(()=>window.switchTab('einv')); await pg.waitForSelector('#einv-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#einv-sub')).replace(/\s+/g,' ');
  chk(/新北市剛導入電子發票 1 家（這個月新出現 1）、成立 3 年內已導入的 3 家（對到電話 2）/.test(sub) && /清單 2026\/11，起算 2026\/10/.test(sub), `標題：${sub}`);

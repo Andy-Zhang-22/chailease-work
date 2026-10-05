@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-290';
+  const APP_VERSION = '20261005-291';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2968,6 +2968,74 @@
     }
     return out;
   }
+  /*
+   * 「新名單」合併頁（mix.js）用：六頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠）的候選
+   * 依統編合成一家、照每日新名單同一套排（mergeFeed），每家附上各頁的卡片資料（cardFacts）。
+   * 名單裡有的、藏起來的、刪過的不列（各頁的 dailyCandidates 已經濾掉）。
+   */
+  const MIX_SOURCES = [
+    { key: 'ch', tab: 'chattel', label: '動產擔保', mod: () => window.Chattel },
+    { key: 'le', tab: 'leads', label: '登記清冊', mod: () => window.Leads },
+    { key: 'tr', tab: 'trade', label: '出進口廠商', mod: () => window.Trade },
+    { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
+    { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
+    { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
+  ];
+  window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
+  window.mixCandidates = async () => {
+    const srcs = MIX_SOURCES.filter((x) => x.mod() && x.mod().dailyCandidates);
+    const lists = await Promise.all(srcs.map((x) => x.mod().dailyCandidates().catch((e) => { console.error(e); return []; })));
+    const merged = mergeFeed(srcs.map((x, i) => ({ key: x.key, mod: x.mod(), list: lists[i] })));
+    return merged.map((c) => ({
+      key: c.key, name: c.name, signals: [...c.signals], buy: c.buy,
+      facts: srcs.filter((x) => c.recs[x.key]).map((x) => ({ key: x.key, tab: x.tab, label: x.label, ...(x.mod().cardFacts ? x.mod().cardFacts(c.recs[x.key]) : { name: c.name }) })),
+    }));
+  };
+  /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
+  window.mixSourceStatus = async () => {
+    const want = { leads: '登記清冊', chattel: '動產擔保', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
+    return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
+      try {
+        const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        return { key: src.key, label: want[src.key], every: src.every, at: String(src.at(j) || '').slice(0, 10), extra: src.extra(j) };
+      } catch (err) { return { key: src.key, label: want[src.key], every: src.every, at: '', extra: '', err: err.message }; }
+    }));
+  };
+  /*
+   * 分頁之間互通（使用者：「分頁各自的資訊都能互通」）：
+   *   1. 「這家不用了」共用一份（依統編）：在任何一頁（含合併頁）藏，六頁都藏；放回來也一起。各頁自己原本的藏起來清單照留。
+   *   2. 每張卡片多一行「🔗 也在：新設工廠（2026/09 登記工廠）…」：這家在其他名單看到的那一句，點名稱跳到那一頁。
+   *      各頁的資料沒載的話，打開任何一頁時在背景一起載（ensureSourcesLoaded），載好重畫。
+   */
+  const SRC_HIDDEN_KEY = 'src-hidden-tax';
+  let srcHiddenSet = null;
+  const srcHiddenLoad = () => { if (!srcHiddenSet) { try { srcHiddenSet = new Set(JSON.parse(localStorage.getItem(SRC_HIDDEN_KEY) || '[]')); } catch (e) { srcHiddenSet = new Set(); } } return srcHiddenSet; };
+  const srcTaxKey = (t) => String(t || '').replace(/\D/g, '');
+  window.srcHiddenVersion = 0;
+  window.srcHidden = (tax) => { const k = srcTaxKey(tax); return k.length === 8 && srcHiddenLoad().has(k); };
+  const srcHiddenSave = () => { try { localStorage.setItem(SRC_HIDDEN_KEY, JSON.stringify([...srcHiddenLoad()])); } catch (e) { /* 無痕 */ } window.srcHiddenVersion += 1; };
+  window.srcHide = (tax) => { const k = srcTaxKey(tax); if (k.length !== 8) return; srcHiddenLoad().add(k); srcHiddenSave(); };
+  window.srcUnhide = (tax) => { const k = srcTaxKey(tax); if (!srcHiddenLoad().delete(k)) return; srcHiddenSave(); };
+  let sourcesLoading = null;
+  window.ensureSourcesLoaded = () => {
+    if (!sourcesLoading) {
+      sourcesLoading = Promise.all(MIX_SOURCES.map((x) => (x.mod() && x.mod().dailyCandidates ? x.mod().dailyCandidates().catch(() => []) : [])))
+        .then(() => { if (MIX_SOURCES.some((x) => x.tab === state.tab) || state.tab === 'mix') render(); });
+    }
+    return sourcesLoading;
+  };
+  /** 這家在其他名單看到的那一句；selfTab 那一頁自己不列。沒有就回空字串 */
+  window.crossLine = (tax, selfTab) => {
+    const k = srcTaxKey(tax);
+    if (k.length !== 8) return '';
+    const hits = MIX_SOURCES.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
+    if (!hits.length) return '';
+    const box = el('p', { className: 'cross-line' }, [document.createTextNode('🔗 也在：')]);
+    hits.forEach(({ x, f }, i) => box.append(i ? '・' : '', el('button', { className: 'link-btn cross-src', type: 'button', textContent: x.label, onclick: (e) => { e.stopPropagation(); switchTab(x.tab); } }), document.createTextNode(f.info ? `（${f.info}）` : '')));
+    return box;
+  };
   window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
     const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
@@ -4864,8 +4932,9 @@
     $('#paneNhi').hidden = tab !== 'nhi';
     $('#paneEinv').hidden = tab !== 'einv';
     $('#paneFactory').hidden = tab !== 'factory';
+    $('#paneMix').hidden = tab !== 'mix';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'cal' || tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv' || tab === 'factory';
+    const wide = tab === 'cal' || tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv' || tab === 'factory' || tab === 'mix';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
@@ -4897,6 +4966,8 @@
       if (window.Einv) window.Einv.show();
     } else if (tab === 'factory') {
       if (window.Factory) window.Factory.show();
+    } else if (tab === 'mix') {
+      if (window.Mix) window.Mix.show();
     } else { renderList(); renderRemindBar(); }
   }
 
@@ -8666,6 +8737,7 @@ export default {
     nhi: { input: '#nhi-q', placeholder: '搜尋剛開始請人：名稱、統編、地址、行業、電話' },
     einv: { input: '#einv-q', placeholder: '搜尋剛開電子發票：名稱、統編、地址、行業、電話' },
     factory: { input: '#factory-q', placeholder: '搜尋新設工廠：名稱、統編、地址、行業、主要產品、電話' },
+    mix: { input: '#mix-q', placeholder: '搜尋新名單（六份合併）：名稱、統編、地址、電話、訊號' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {
@@ -8737,6 +8809,7 @@ export default {
       switchTab(btn.dataset.tab);
     };
     $('#subtabs').onclick = (e) => { const btn = e.target.closest('.subtab'); if (btn) switchTab(btn.dataset.tab); };
+    $('#mixtabs').onclick = (e) => { const btn = e.target.closest('.subtab'); if (btn) switchTab(btn.dataset.tab); };
 
     $('#btnImport').onclick = () => { $('#importer').hidden = false; };
     $('#btnSync').onclick = () => runSync({ interactive: true });
@@ -8972,9 +9045,11 @@ export default {
    * 分頁列只有「重點推廣名單」「找名單」（使用者：分頁在版面上有點多）：七個名單來源是「找名單」底下的第二排（#subtabs），
    * state.tab 還是那七個 key，各分頁、搜尋欄、?tab= 都不用改；按「找名單」就回到上次看的那個來源。統計、規則從右上選單進，分頁列不亮。
    */
-  const SOURCE_TABS = ['leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory'];
+  const SOURCE_TABS = ['mix', 'leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory'];
+  // 「新名單」底下的第三排：合併頁＋六份名單（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）
+  const MIX_TABS = ['mix', 'leads', 'chattel', 'trade', 'nhi', 'einv', 'factory'];
   function switchTab(tab) {
-    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'leads'; }
+    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
     state.tab = tab;
     state.limit = PAGE_SIZE;
@@ -8982,8 +9057,12 @@ export default {
     const top = tab === 'all' ? 'all' : tab === 'cal' ? 'cal' : isSource ? 'sources' : '';
     [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', !!top && b.dataset.tab === top));
     $('#subtabs').hidden = !isSource;
-    [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
+    const inMix = MIX_TABS.includes(tab);
+    [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.group === 'mix' ? inMix : b.dataset.tab === tab));
+    $('#mixtabs').hidden = !inMix;
+    [...$('#mixtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
     if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
+    if (inMix && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
     render();
     syncSearchBox();
   }
@@ -9105,7 +9184,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'cal' || want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv' || want === 'factory') {
+    if (want === 'cal' || want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv' || want === 'factory' || want === 'mix') {
       $('#importer').hidden = true;
       switchTab(want);
     }
