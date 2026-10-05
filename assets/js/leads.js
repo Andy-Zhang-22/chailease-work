@@ -824,5 +824,16 @@
     return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
       ageRank: ageRankOf(r), capOk: r.capital >= 5000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r) };
   }
-  global.Leads = { show, dailyFacts, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  /*
+   * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，
+   * 六頁同一種格式（地址、資本額〔元〕、成立幾年、電話、歸屬分公司、這一頁看到的那一句），加入名單走這一頁自己的流程。
+   */
+  function cardFacts(r) {
+    const tel = global.Trade && global.Trade.telOf ? global.Trade.telOf(r['統一編號']) : '';
+    const p = String(r['期別'] || ''); const pl = p ? `${p.slice(0, 3)}/${+p.slice(3)}` : '';
+    return { name: r['公司名稱'], taxId: String(r['統一編號'] || '').replace(/\D/g, ''), address: r['公司所在地'] || '', capital: r.capital || 0,
+      years: r.foundedDate ? yearsSince(r.foundedDate) : null, tel, branchKey: r.branch.key,
+      info: `${pl} ${r.type === 'setup' ? '新設立' : (r.reason || '變更')}`.trim(), add: () => addToList([r]) };
+  }
+  global.Leads = { show, dailyFacts, cardFacts, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);

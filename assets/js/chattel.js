@@ -739,5 +739,14 @@
     });
     return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name) } : { grade: 3, ym: '', lender: '' };
   }
-  global.Chattel = { show, dailyFacts, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  /*
+   * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，
+   * 六頁同一種格式（地址、資本額〔元〕、成立幾年、電話、歸屬分公司、這一頁看到的那一句），加入名單走這一頁自己的流程。
+   */
+  function cardFacts(r) {
+    const tel = global.Trade && global.Trade.telOf ? global.Trade.telOf(r.cust.id) : '';
+    return { name: r.cust.name, taxId: String(r.cust.id || '').replace(/\D/g, ''), address: r.addr || '', capital: 0, years: r.years, tel, branchKey: r.branch.key,
+      info: `${lenderShort(r.lender.name)} ${ymOf(r.startUse)} 擔保 ${wan(r.amount)}${r.end && r.days != null ? `，${ymOf(r.end)} 到期` : ''}`, add: () => addToList([r]) };
+  }
+  global.Chattel = { show, dailyFacts, cardFacts, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

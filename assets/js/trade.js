@@ -536,5 +536,13 @@
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: (r.firstMonths != null && r.firstMonths < 12) ? ['剛做進出口'] : [],
       ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r) };
   }
-  global.Trade = { show, dailyFacts, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, telOf, nearby, dailyCandidates, DAILY_PRIORITY };
+  /*
+   * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，
+   * 六頁同一種格式（地址、資本額〔元〕、成立幾年、電話、歸屬分公司、這一頁看到的那一句），加入名單走這一頁自己的流程。
+   */
+  function cardFacts(r) {
+    return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
+      info: `${r.first ? `${r.first.y}/${String(r.first.m).padStart(2, '0')} ` : ''}登記出進口${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).length ? `（${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).join('、')}）` : ''}`, add: () => addToList([r]) };
+  }
+  global.Trade = { show, dailyFacts, cardFacts, toRecord, monthsSince, whenOf, qualOf, ageOf, isMobile, phoneKinds, toStandardCsv, noteFor, phoneOf, ensurePhones, hasPhone, phoneKindsOf, telOf, nearby, dailyCandidates, DAILY_PRIORITY };
 })(window);

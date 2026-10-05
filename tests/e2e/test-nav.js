@@ -1,4 +1,4 @@
-// 分頁列只剩「重點推廣名單｜行事曆｜找名單｜篩選」：七個來源在找名單底下的第二排，統計、規則從右上選單進；?tab= 網址照舊
+// 分頁列只剩「重點推廣名單｜行事曆｜找名單｜篩選」：找名單底下第二排新名單／上市櫃／商行，新名單底下第三排全部＋六份，統計、規則從右上選單進；?tab= 網址照舊
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -15,15 +15,21 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  const tabs=await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(tabs.length===4 && tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('行事曆') && tabs[2]==='找名單' && /篩選/.test(tabs[3]), `分頁列四個：${tabs.join(' | ')}`);
  chk(await pg.locator('#subtabs').isHidden(), '在重點推廣名單時第二排收著');
- // 按找名單：第二排出現、預設登記清冊
+ // 按找名單：第二排三顆（新名單、上市櫃、商行），預設新名單的「全部（合併）」；第三排是全部＋六份名單
+ // （使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(400);
- chk(await pg.locator('#subtabs').isVisible() && (await pg.$$eval('#subtabs .subtab',a=>a.length))===8, '第二排八個來源（加了新設工廠）');
- chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('.subtab[data-tab="leads"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneLeads').isVisible(), '找名單亮著、預設登記清冊');
  const subs=await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(subs[0].startsWith('每月公司設立／變更登記清冊') && subs[1].startsWith('動產擔保') && subs[2].startsWith('上市櫃') && subs[6].startsWith('剛開電子發票'), `名字縮短：${subs.join(' | ')}`);
+ chk(await pg.locator('#subtabs').isVisible() && subs.length===3 && subs[0].startsWith('新名單') && subs[1].startsWith('上市櫃') && subs[2].startsWith('商行／企業社'), `第二排三顆：${subs.join(' | ')}`);
+ const mix=await pg.$$eval('#mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
+ chk(await pg.locator('#mixtabs').isVisible() && mix.length===7 && mix[0]==='全部（合併）' && mix[1].startsWith('登記清冊') && mix[6].startsWith('新設工廠'), `第三排全部＋六份：${mix.join(' | ')}`);
+ chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#subtabs .subtab[data-group="mix"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneMix').isVisible(), '找名單預設開新名單的合併頁');
+ // 上市櫃、商行：第三排收起來
+ await pg.click('#subtabs .subtab[data-tab="biz"]'); await pg.waitForTimeout(300);
+ chk(await pg.locator('#paneBiz').isVisible() && await pg.locator('#mixtabs').isHidden(), '商行是獨立一頁，第三排收起來');
+ await pg.click('#subtabs .subtab[data-group="mix"]'); await pg.waitForTimeout(300);
  // 切到出進口廠商：pane 換、搜尋欄提示換、記住
- await pg.click('.subtab[data-tab="trade"]'); await pg.waitForTimeout(400);
- chk(await pg.locator('#paneTrade').isVisible() && await pg.locator('#paneLeads').isHidden() && /出進口廠商/.test(await pg.getAttribute('#search','placeholder')), '切到出進口廠商');
+ await pg.click('#mixtabs .subtab[data-tab="trade"]'); await pg.waitForTimeout(400);
+ chk(await pg.locator('#paneTrade').isVisible() && await pg.locator('#paneMix').isHidden() && /出進口廠商/.test(await pg.getAttribute('#search','placeholder')) && await pg.locator('#subtabs .subtab[data-group="mix"]').evaluate(e=>e.classList.contains('is-active')), '切到出進口廠商（第二排「新名單」照樣亮）');
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  chk(await pg.locator('#subtabs').isHidden() && await pg.locator('#paneList').isVisible(), '回重點推廣名單：第二排收起來');
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(300);
@@ -35,7 +41,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(await pg.locator('#paneRules').isVisible(), '選單進規則');
  // ?tab= 網址照舊
  await pg.goto('http://localhost:9511/index.html?tab=nhi'); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
- chk(await pg.locator('#paneNhi').isVisible() && await pg.locator('.subtab[data-tab="nhi"]').evaluate(e=>e.classList.contains('is-active')), '?tab=nhi 直接開到剛開始請人');
+ chk(await pg.locator('#paneNhi').isVisible() && await pg.locator('#mixtabs .subtab[data-tab="nhi"]').evaluate(e=>e.classList.contains('is-active')), '?tab=nhi 直接開到剛開始請人');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
