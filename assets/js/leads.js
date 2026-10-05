@@ -300,9 +300,8 @@
 
   /** 目前勾的縣市與清冊需要哪些檔；沒載的就去載。 */
   const periodFiles = () => {
-    const period = $('#leads-period').value;
-    if (period === 'all') return Object.keys(index.periods).sort().flatMap((k) => (index.periods[k].files || []).map((x) => ({ ...x, period: k })));
-    return ((index.periods[period] || {}).files || []).map((x) => ({ ...x, period }));
+    // 期別合在一起（使用者：「我要找某一特定公司，但我要每期去找，這樣太累」）：一律載全部期別
+    return Object.keys(index.periods).sort().flatMap((k) => (index.periods[k].files || []).map((x) => ({ ...x, period: k })));
   };
   async function ensureLoaded() {
     const files = periodFiles().filter((x) => f.types.has(x.type) && (!f.cities.size || f.cities.has(x.city)));
@@ -321,7 +320,6 @@
    */
   function criteria() {
     return {
-      period: $('#leads-period').value,
       min: (Number($('#leads-capMin').value) || 0) * 10000,
       max: (Number($('#leads-capMax').value) || 0) * 10000 || Infinity,
       skipHolding: $('#leads-skipHolding').checked,
@@ -330,10 +328,9 @@
     };
   }
   function passes(r, c, except, F = f) {
-    return (c.period === 'all' || r['期別'] === c.period)
-      && (except === 'types' || F.types.has(r.type))
+    return (except === 'types' || [...typesOf(r)].some((t) => F.types.has(t)))
       && (except === 'cities' || !F.cities.size || F.cities.has(r.city))
-      && (except === 'reasons' || r.type !== 'change' || !F.reasons.size || F.reasons.has(r.rk))
+      && (except === 'reasons' || !hasChange(r) || !F.reasons.size || [...rksOf(r)].some((k) => F.reasons.has(k)))
       && (except === 'inds' || !F.inds.size || r.classes.some((k) => F.inds.has(k)))
       && (except === 'branches' || !F.branches.size || F.branches.has(r.branch.key))
       && (except === 'ages' || !F.ages.size || F.ages.has(ageOf(r)))
@@ -345,9 +342,30 @@
       && !(c.skipHolding && r.holding)
       && c.terms.every((t) => r.blob.includes(t));
   }
+  /*
+   * 同一家出現在好幾期：合成一張卡片（使用者：「我要找某一特定公司，但我要每期去找，這樣太累」）。
+   * 以最新那一期為主，history 留每一期（新到舊）；清冊、案由篩選看任何一期（7 月增資、8 月遷址，篩增資也撈得到）。
+   * 每日新名單還是看原始的 rows（本期的訊號），不受影響。
+   */
+  const typesOf = (r) => r.types || new Set([r.type]);
+  const rksOf = (r) => r.rks || new Set(r.type === 'change' ? [r.rk] : []);
+  const hasChange = (r) => typesOf(r).has('change');
+  let mergedCache = { n: -1, list: [] };
+  function merged() {
+    if (mergedCache.n === rows.length) return mergedCache.list;
+    const by = new Map();
+    rows.forEach((r) => { const k = keyOf(r); if (!by.has(k)) by.set(k, []); by.get(k).push(r); });
+    const list = [...by.values()].map((g) => {
+      if (g.length === 1) return g[0];
+      g.sort((a, b) => (b['期別'] || '').localeCompare(a['期別'] || '') || (b.date || '').localeCompare(a.date || ''));
+      return { ...g[0], history: g, types: new Set(g.map((x) => x.type)), rks: new Set(g.filter((x) => x.type === 'change').map((x) => x.rk)) };
+    });
+    mergedCache = { n: rows.length, list };
+    return list;
+  }
   function visible() {
     const c = criteria();
-    const list = rows.filter((r) => passes(r, c, null));
+    const list = merged().filter((r) => passes(r, c, null));
     const sort = $('#leads-sort').value;
     list.sort((a, b) => (sort === 'capital' ? b.capital - a.capital
       : sort === 'date' ? (b.date || '').localeCompare(a.date || '')
@@ -409,7 +427,8 @@
       : document.createTextNode(r['公司名稱']), copyName(r['公司名稱'] || '')]);
     const inds = r.classes.filter((c) => IND[c]).slice(0, 2).map((c) => el('span', { className: 'badge badge-ind', textContent: IND[c] }));
     const items = (r['營業項目'] || '').split('；').filter(Boolean);
-    const all = $('#leads-period').value === 'all';
+    const all = true;
+    const pLabel = (x) => `${x['期別'].slice(0, 3)}/${+x['期別'].slice(3)}`;
     const isHidden = hidden.has(keyOf(r)) || delOf(r);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
@@ -417,7 +436,7 @@
         delOf(r) ? restoreBtn(r['公司名稱'], r['統一編號']) : isHidden
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(keyOf(r)); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(keyOf(r)); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
-    return el('article', { className: `card leads-card${mine ? ' is-mine' : r.rk === 'up' ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
+    return el('article', { className: `card leads-card${mine ? ' is-mine' : rksOf(r).has('up') ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '',
@@ -426,7 +445,9 @@
         el('span', { textContent: `💰 ${wan(r.capital)}` }),
         r['代表人'] ? el('span', { textContent: `👤 ${r['代表人']}` }) : '',
         el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r['公司所在地'])}`, target: '_blank', rel: 'noopener', textContent: r['公司所在地'] })]),
-        el('span', { textContent: `📅 ${r.date}${r.type === 'setup' ? ' 設立' : ' 核准變更'}${all ? `（${r['期別'].slice(0, 3)}/${+r['期別'].slice(3)} 清冊）` : ''}` }),
+        el('span', { textContent: `📅 ${r.date}${r.type === 'setup' ? ' 設立' : ' 核准變更'}${all ? `（${pLabel(r)} 清冊）` : ''}` }),
+        // 好幾期都有：列出每一期是什麼（新到舊）
+        r.history ? el('span', { className: 'leads-history', textContent: `🗂 ${r.history.length} 期都有：${r.history.map((x) => `${pLabel(x)} ${x.type === 'setup' ? '設立' : (x.reason || '變更').slice(0, 12)}`).join('、')}` }) : '',
         // 變更清冊的成立日期是查商工登記來的，秀出來讓人對得上；設立清冊上面那行就是了
         r.type !== 'setup' && r.foundedDate ? el('span', { textContent: `🎂 成立 ${fmtRoc(r.foundedDate)}（${yearsSince(r.foundedDate)} 年）` }) : '',
         el('span', { textContent: `#${r['統一編號']}` }),
@@ -459,17 +480,17 @@
     const files = periodFiles();
     const isLoaded = (subset) => subset.length > 0 && subset.every((x) => loaded.has(x.path));
     const total = (subset) => subset.reduce((n, x) => n + x.rows, 0);
-    const facet = (except, pred) => { let n = 0; rows.forEach((r) => { if (pred(r) && passes(r, c, except)) n += 1; }); return n; };
+    const facet = (except, pred) => { let n = 0; merged().forEach((r) => { if (pred(r) && passes(r, c, except)) n += 1; }); return n; };
     chips($('#leads-fType'), ['change', 'setup'].map((t) => {
       const need = files.filter((x) => x.type === t && (!f.cities.size || f.cities.has(x.city)));
-      return [t, TYPE_LABEL[t], isLoaded(need) ? facet('types', (r) => r.type === t) : `~${total(need)}`];
+      return [t, TYPE_LABEL[t], isLoaded(need) ? facet('types', (r) => typesOf(r).has(t)) : `~${total(need)}`];
     }), f.types);
     const cities = [...new Set(files.map((x) => x.city))];
     chips($('#leads-fCity'), cities.map((city) => {
       const need = files.filter((x) => x.city === city && f.types.has(x.type));
       return [city, city, isLoaded(need) ? facet('cities', (r) => r.city === city) : `~${total(need)}`];
     }), f.cities);
-    chips($('#leads-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => r.type === 'change' && r.rk === k)]), f.reasons);
+    chips($('#leads-fReason'), REASONS.map(([k, label]) => [k, label, facet('reasons', (r) => rksOf(r).has(k))]), f.reasons);
     chips($('#leads-fInd'), IND_ORDER.map((k) => [k, IND[k], facet('inds', (r) => r.classes.includes(k))]), f.inds);
     // 成立年數：只算已經知道設立日期的；還沒查的在名單上方那一行
     chips($('#leads-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
@@ -478,7 +499,7 @@
     chips($('#leads-fPhone'), PHONE_CHIPS.map(([k, label]) => [k, label, facet('phone', (r) => phoneKindsOf(r).has(k))]), f.phone);
     // 分公司：籤是從載進來的列長出來的（清冊裡沒有這一欄），分公司在前、共同區在後、劃分表外最後
     const counts = new Map();
-    rows.forEach((r) => { if (r.branch.key && passes(r, c, 'branches')) counts.set(r.branch.key, (counts.get(r.branch.key) || 0) + 1); });
+    merged().forEach((r) => { if (r.branch.key && passes(r, c, 'branches')) counts.set(r.branch.key, (counts.get(r.branch.key) || 0) + 1); });
     const order = (k) => (/分公司$/.test(k) ? 0 : /共同區$/.test(k) ? 1 : 2);
     const keys = [...new Set([...counts.keys(), ...f.branches])].sort((a, b) => order(a) - order(b) || (counts.get(b) || 0) - (counts.get(a) || 0));
     if (!keys.length) { $('#leads-fBranch').textContent = ''; $('#leads-fBranch').append(el('span', { className: 'muted', textContent: '（載入清冊後才算得出來）' })); }
@@ -497,12 +518,11 @@
     host.textContent = '';
     const c = criteria();
     current.slice(0, limit).forEach((r) => host.append(card(r, c)));
-    const up = current.filter((r) => r.rk === 'up').length;
-    const period = $('#leads-period').value;
+    const up = current.filter((r) => rksOf(r).has('up')).length;
     const inList = current.filter((r) => mineOf(r, c.cm)).length;
-    $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}${inList ? `、已在名單 ${inList} 家` : ''}<span class="muted">　／ ${period === 'all' ? '全部期別' : '本期'}已載入 ${rows.filter((r) => period === 'all' || r['期別'] === period).length.toLocaleString()} 家</span>`;
-    const del = rows.filter(delOf).length;
-    const hid = rows.filter((r) => hidden.has(keyOf(r))).length + del;
+    $('#leads-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家${up ? `，其中增資 ${up} 家` : ''}${inList ? `、已在名單 ${inList} 家` : ''}<span class="muted">　／ ${Object.keys(index.periods || {}).length} 期合在一起，已載入 ${merged().length.toLocaleString()} 家</span>`;
+    const del = merged().filter(delOf).length;
+    const hid = merged().filter((r) => hidden.has(keyOf(r))).length + del;
     const hb = $('#leads-hidden');
     hb.hidden = !hid;
     hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
@@ -664,7 +684,7 @@
       .sort(dailyCompare);
   }
 
-  const csvName = (n) => `登記清冊-${$('#leads-period').value === 'all' ? '全部期別' : $('#leads-period').value}-${n == null ? current.length : n}家.csv`;
+  const csvName = (n) => `登記清冊-全部期別-${n == null ? current.length : n}家.csv`;
 
   function build() {
     root.textContent = '';
@@ -673,7 +693,6 @@
     const filters = el('details', { className: 'leads-filters', id: 'leads-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' }), el('span', { className: 'muted', id: 'leads-filter-sum', textContent: '' })]),
       el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家；帶 ~ 的清冊還沒下載，勾了才會照條件算。' }),
-      group('期別', el('select', { id: 'leads-period' }), 'leads-period'),
       group('清冊', el('div', { className: 'chips', id: 'leads-fType' })),
       group('縣市', el('div', { className: 'chips', id: 'leads-fCity' })),
       group('歸屬分公司（依登記地址，同「規則」的劃分表）', el('div', { className: 'chips', id: 'leads-fBranch' })),
@@ -742,16 +761,13 @@
       $('#leads-count').textContent = '—';
       return;
     }
-    const periods = Object.keys(index.periods || {}).sort().reverse();
-    periods.forEach((k) => $('#leads-period').append(el('option', { value: k, textContent: `${k.slice(0, 3)} 年 ${+k.slice(3)} 月` })));
-    // 跨月份一次篩：找「最近半年增資的製造業」這種問題，一個月一個月切換很煩
-    if (periods.length > 1) $('#leads-period').append(el('option', { value: 'all', textContent: `全部期別（${periods.length} 期）` }));
-    $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
+    const periods = Object.keys(index.periods || {}).sort();
+    const pl = (k) => `${k.slice(0, 3)}/${+k.slice(3)}`;
+    $('#leads-sub').textContent = `經濟部每月公司設立／變更登記清冊（${periods.length > 1 ? `${pl(periods[0])}～${pl(periods[periods.length - 1])} 共 ${periods.length} 期合在一起` : periods.length ? pl(periods[0]) : ''}）　·　最近更新 ${String(index.generatedAt || '').slice(0, 10).replace(/-/g, '/')}`;
     ready = true;
     if (global.Trade && global.Trade.ensurePhones) global.Trade.ensurePhones().then(() => { if (ready) render(); }).catch(() => {});   // 電話表載好再補上 📞
     if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
     const rerender = async () => { limit = PAGE; await ensureLoaded(); render(); };
-    $('#leads-period').onchange = async () => { await rerender(); };
     $('#leads-capMin').oninput = () => { limit = PAGE; render(); };
     $('#leads-capMax').oninput = () => { limit = PAGE; render(); };
     $('#leads-skipHolding').onchange = () => { limit = PAGE; render(); };

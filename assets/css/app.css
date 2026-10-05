@@ -1121,3 +1121,4 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 /* 各來源分頁「已在名單　📝 記錄」：點了直接記這通電話 */
 .badge-mine.is-log { cursor: pointer; }
 .badge-mine.is-log:hover { text-decoration: underline; }
+.leads-history { color: var(--muted); }
