@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-286';
+  const APP_VERSION = '20261005-287';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5345,9 +5345,12 @@
         leadsHost.append(el('div', { className: 'nearby-row' }, [
           el('span', { className: 'badge badge-ind', textContent: x.kind }),
           el('b', { textContent: x.name }),
+          // 複製鈕（使用者：「幫我新增複製鈕」）：公司名稱、電話各一顆，跟名單卡片一樣
+          copyDot(x.name, `複製公司名稱 ${x.name}`, `已複製：${x.name}`),
           x.sameRoad ? el('span', { className: 'badge badge-up', textContent: '同一條路' }) : '',
           el('span', { className: 'muted', textContent: [x.note, String(x.address || '').replace(/^.{2,3}[市縣]/, '')].filter(Boolean).join('・') }),
-          x.tel ? el('a', { className: 'tel', href: `tel:${x.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${x.tel}` }) : el('span', { className: 'muted', textContent: '沒電話' }),
+          x.tel ? el('span', { className: 'tel-group' }, [el('a', { className: 'tel', href: `tel:${x.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${x.tel}` }),
+            copyDot(x.tel.replace(/[^\d#]/g, ''), `複製電話 ${x.tel}`, `已複製 ${x.tel.replace(/[^\d#]/g, '')}`)]) : el('span', { className: 'muted', textContent: '沒電話' }),
           navLink(origin, x.address),
           el('button', { className: 'btn btn-tiny', type: 'button', textContent: '加入名單', onclick: async (e) => { e.target.disabled = true; try { await x.add(); } finally { e.target.textContent = '已加入'; } } }),
         ]));
