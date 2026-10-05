@@ -1130,3 +1130,4 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .mix-srcs li { margin: 2px 0; }
 .mix-srcs .mix-src { font-weight: 600; }
 .mix-status span { margin-right: 2px; }
+.cross-line { font-size: 13px; color: var(--muted); margin: 4px 0; } .cross-line .cross-src { font-weight: 600; }

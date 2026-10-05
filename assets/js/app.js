@@ -3003,6 +3003,39 @@
       } catch (err) { return { key: src.key, label: want[src.key], every: src.every, at: '', extra: '', err: err.message }; }
     }));
   };
+  /*
+   * 分頁之間互通（使用者：「分頁各自的資訊都能互通」）：
+   *   1. 「這家不用了」共用一份（依統編）：在任何一頁（含合併頁）藏，六頁都藏；放回來也一起。各頁自己原本的藏起來清單照留。
+   *   2. 每張卡片多一行「🔗 也在：新設工廠（2026/09 登記工廠）…」：這家在其他名單看到的那一句，點名稱跳到那一頁。
+   *      各頁的資料沒載的話，打開任何一頁時在背景一起載（ensureSourcesLoaded），載好重畫。
+   */
+  const SRC_HIDDEN_KEY = 'src-hidden-tax';
+  let srcHiddenSet = null;
+  const srcHiddenLoad = () => { if (!srcHiddenSet) { try { srcHiddenSet = new Set(JSON.parse(localStorage.getItem(SRC_HIDDEN_KEY) || '[]')); } catch (e) { srcHiddenSet = new Set(); } } return srcHiddenSet; };
+  const srcTaxKey = (t) => String(t || '').replace(/\D/g, '');
+  window.srcHiddenVersion = 0;
+  window.srcHidden = (tax) => { const k = srcTaxKey(tax); return k.length === 8 && srcHiddenLoad().has(k); };
+  const srcHiddenSave = () => { try { localStorage.setItem(SRC_HIDDEN_KEY, JSON.stringify([...srcHiddenLoad()])); } catch (e) { /* 無痕 */ } window.srcHiddenVersion += 1; };
+  window.srcHide = (tax) => { const k = srcTaxKey(tax); if (k.length !== 8) return; srcHiddenLoad().add(k); srcHiddenSave(); };
+  window.srcUnhide = (tax) => { const k = srcTaxKey(tax); if (!srcHiddenLoad().delete(k)) return; srcHiddenSave(); };
+  let sourcesLoading = null;
+  window.ensureSourcesLoaded = () => {
+    if (!sourcesLoading) {
+      sourcesLoading = Promise.all(MIX_SOURCES.map((x) => (x.mod() && x.mod().dailyCandidates ? x.mod().dailyCandidates().catch(() => []) : [])))
+        .then(() => { if (MIX_SOURCES.some((x) => x.tab === state.tab) || state.tab === 'mix') render(); });
+    }
+    return sourcesLoading;
+  };
+  /** 這家在其他名單看到的那一句；selfTab 那一頁自己不列。沒有就回空字串 */
+  window.crossLine = (tax, selfTab) => {
+    const k = srcTaxKey(tax);
+    if (k.length !== 8) return '';
+    const hits = MIX_SOURCES.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
+    if (!hits.length) return '';
+    const box = el('p', { className: 'cross-line' }, [document.createTextNode('🔗 也在：')]);
+    hits.forEach(({ x, f }, i) => box.append(i ? '・' : '', el('button', { className: 'link-btn cross-src', type: 'button', textContent: x.label, onclick: (e) => { e.stopPropagation(); switchTab(x.tab); } }), document.createTextNode(f.info ? `（${f.info}）` : '')));
+    return box;
+  };
   window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
     const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
@@ -9029,6 +9062,7 @@ export default {
     $('#mixtabs').hidden = !inMix;
     [...$('#mixtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
     if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
+    if (inMix && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
     render();
     syncSearchBox();
   }

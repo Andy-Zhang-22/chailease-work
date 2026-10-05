@@ -41,6 +41,10 @@
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  // 「這家不用了」跟六頁共用一份（依統編，app.js 的 srcHide）：這裡藏、那裡也藏
+  const isHid = (it) => hidden.has(it.key) || (typeof global.srcHidden === 'function' && global.srcHidden(it.d.taxId));
+  const hide = (it) => { if (it.d.taxId && typeof global.srcHide === 'function') global.srcHide(it.d.taxId); else { hidden.add(it.key); saveHidden(); } };
+  const unhide = (it) => { hidden.delete(it.key); saveHidden(); if (typeof global.srcUnhide === 'function') global.srcUnhide(it.d.taxId); };
 
   /** 一家合併後要顯示的：電話、資本額、成立年、地址各取看得到的第一個（地址優先公司登記地，不用動保的標的物所在地） */
   function digest(it) {
@@ -59,7 +63,7 @@
     ['cap', '資本額 500～6,000 萬', (it) => it.d.capital >= 5e6 && it.d.capital <= 6e7],
   ];
   function passes(it, except) {
-    if (!showHidden && hidden.has(it.key)) return false;
+    if (!showHidden && isHid(it)) return false;
     if (except !== 'src' && f.src.size && !it.facts.some((x) => f.src.has(x.key))) return false;
     if (except !== 'sig' && f.sig.size && !it.signals.some((s) => f.sig.has(sigKey(s)))) return false;
     if (except !== 'cond') for (const [k, , fn] of COND) if (f.cond.has(k) && !fn(it)) return false;
@@ -93,7 +97,7 @@
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
   function card(it) {
     const d = it.d;
-    const isHidden = hidden.has(it.key);
+    const isHidden = isHid(it);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [findbiz(d.taxId, it.name), copyName(it.name)]),
       ...it.signals.map((s) => el('span', { className: 'badge badge-up', textContent: s })),
@@ -121,8 +125,8 @@
       await reload();
     };
     const actions = el('div', { className: 'card-actions' }, [add,
-      isHidden ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(it.key); saveHidden(); render(); } })
-        : el('button', { className: 'btn btn-tiny mix-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(it.key); saveHidden(); render(); toast('藏起來了（只藏在這一頁）'); } })]);
+      isHidden ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(it); render(); } })
+        : el('button', { className: 'btn btn-tiny mix-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(it); render(); toast('藏起來了（六份名單一起藏）'); } })]);
     return el('article', { className: `card leads-card mix-card${d.branchKey === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': it.key }, [top, phone, meta, srcs, actions]);
   }
 
@@ -139,7 +143,7 @@
     $('#mix-more').hidden = current.length <= limit;
     $('#mix-empty').hidden = !!current.length;
     $('#mix-empty').textContent = items.length ? '沒有符合條件的，把篩選放寬試試。' : '六份名單都還沒載好或都已經在名單裡了。';
-    const hid = items.filter((it) => hidden.has(it.key)).length;
+    const hid = items.filter(isHid).length;
     $('#mix-hidden').hidden = !hid;
     $('#mix-hidden').textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家`;
     const pill = document.getElementById('countMix');
@@ -153,7 +157,9 @@
     status.forEach((s, i) => host.append(el('span', { textContent: `${i ? '・' : ''}${s.label} ${s.every}${s.at ? `（${s.at.replace(/-/g, '/')} 更新${s.extra ? `，${s.extra}` : ''}）` : s.err ? '（讀不到）' : ''}` })));
   }
 
+  let seenVersion = -1;
   async function reload() {
+    seenVersion = global.srcHiddenVersion || 0;
     $('#mix-loading').hidden = false;
     $('#mix-loading').textContent = '六份名單合併中…（第一次要下載各份資料，會久一點）';
     try {
@@ -205,6 +211,7 @@
       if (typeof global.mixSourceStatus === 'function') global.mixSourceStatus().then((s) => { status = s; drawStatus(); }).catch(() => {});
       return;
     }
+    if ((global.srcHiddenVersion || 0) !== seenVersion) { loading = reload(); return; }
     render();
   }
   global.Mix = { show, reload: () => (root ? reload() : Promise.resolve()) };

@@ -207,6 +207,15 @@
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
+  /*
+   * 「這家不用了」各頁互通（使用者：「分頁各自的資訊都能互通」）：除了這一頁自己的清單，也記在共用的那份（依統編，app.js 的 srcHide），
+   * 在任何一頁藏，六頁與合併頁都藏；放回來也一起。
+   */
+  const taxOfRec = (r) => String(r.cust.id || '').replace(/\D/g, '');
+  const isHid = (r) => hidden.has(r.key) || (typeof global.srcHidden === 'function' && global.srcHidden(taxOfRec(r)));
+  // 有統編就只記共用那份（不然別頁「放回來」收不回這一頁自己的）；沒統編才記在這一頁
+  const hide = (r) => { if (taxOfRec(r).length === 8 && typeof global.srcHide === 'function') global.srcHide(taxOfRec(r)); else hidden.add(r.key); };
+  const unhide = (r) => { hidden.delete(r.key); if (typeof global.srcUnhide === 'function') global.srcUnhide(taxOfRec(r)); };
 
   /** 跟名單比對：統編優先，沒統編才比公司名。每次畫都重算（主站的 allViews 有快取，便宜）。 */
   function customerMap() {
@@ -251,7 +260,7 @@
       && (except === 'phone' || !F.phone.size || [...F.phone].some((k) => phoneKindsOf(r).has(k)))
       && r.amount >= c.min && r.amount <= c.max
       && !(c.hideFin && r.custIsFin)
-      && (showHidden || !(hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id)))
+      && (showHidden || !(isHid(r) || deletedOf(r.cust.name, r.cust.id)))
       && c.terms.every((t) => r.blob.includes(t));
   }
   function visible(c) {
@@ -301,6 +310,9 @@
     r.__name = r.cust.name; r.__addr = r.addr;
     const top = art.querySelector('.card-top');
     if (top) top.after(phoneBox(r, r.key, hasPhone(r) || !!mineOf(r, c.cm)));
+    // 這家在其他名單看到的（🔗 也在：…），放在按鈕上面
+    const cross = typeof global.crossLine === 'function' ? global.crossLine(r.cust.id, 'chattel') : '';
+    if (cross) { const acts = [...art.children].filter((n) => n.classList && n.classList.contains('card-actions')).pop(); art.insertBefore(cross, acts || null); }
     return art;
   }
   function cardBody(r, c) {
@@ -317,13 +329,13 @@
     const name = el('span', { className: 'card-name' }, [r.cust.id
       ? el('a', { href: global.Normalize.findbizUrl(r.cust.id, r.cust.name), target: '_blank', rel: 'noopener', textContent: r.cust.name || r.cust.id, title: '商工登記公示資料（開新分頁）' })   // 債務人是商行時走用統編查的結果頁
       : document.createTextNode(r.cust.name || '（沒有名稱）'), copyName(r.cust.name || '')]);
-    const isHidden = hidden.has(r.key) || deletedOf(r.cust.name, r.cust.id);
+    const isHidden = isHid(r) || deletedOf(r.cust.name, r.cust.id);
     const actions = mine
       ? [el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '打開名單上這一家', onclick: () => { if (typeof global.openCustomer === 'function') global.openCustomer(mine.id); } })]
       : [el('button', { className: 'btn btn-tiny btn-primary chattel-add-one', type: 'button', textContent: '加入客戶名單', onclick: () => addToList([r]) }),
         deletedOf(r.cust.name, r.cust.id) ? restoreBtn(r.cust.name, r.cust.id) : isHidden
-          ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { hidden.delete(r.key); saveHidden(); render(); } })
-          : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hidden.add(r.key); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
+          ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(r); saveHidden(); render(); } })
+          : el('button', { className: 'btn btn-tiny chattel-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(r); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card chattel-card${mine ? ' is-mine' : r.days != null && r.days >= 0 && r.days <= 30 ? ' is-overdue' : r.days != null && r.days > 30 && r.days <= 90 ? ' is-due' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': r.key }, [
       el('div', { className: 'card-top' }, [name, (r.recent === 'm3' || r.recent === 'm6') ? el('span', { className: 'badge badge-new', textContent: `🆕 最近買設備 ${ymOf(r.startUse)}`, title: '契約起算 6 個月內' }) : '',
         r.dateOdd ? el('span', { className: 'badge badge-overdue', textContent: '清冊日期疑似有誤', title: `清冊原始：契約 ${r.start || '？'} → ${r.end || '？'}，登記核准日 ${r.approved || '？'}。起日不合理改用登記核准日判斷，迄日不合理就不算到期。` }) : '', dueBadge, el('span', { className: 'badge', textContent: typeShort(r.type) }), lenderBadge, phoneBadge, mineBadge,
@@ -435,7 +447,7 @@
     const inList = current.filter((r) => mineOf(r, c.cm)).length;
     $('#chattel-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">　／ ${soon ? `3 個月內到期 ${soon} 家` : ''}${inList ? `${soon ? '、' : ''}已在名單 ${inList} 家` : ''}${!soon && !inList ? `清冊未註銷共 ${rows.length.toLocaleString()} 筆` : ''}${unknown ? `　·　${unknown} 家還沒查到成立年` : ''}</span>`;
     const del = rows.filter((r) => deletedOf(r.cust.name, r.cust.id)).length;
-    const hid = rows.filter((r) => hidden.has(r.key)).length + del;
+    const hid = rows.filter((r) => isHid(r)).length + del;
     const hb = $('#chattel-hidden');
     hb.hidden = !hid;
     hb.textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家${del ? `（含名單刪過的 ${del} 家）` : ''}`;
@@ -547,7 +559,7 @@
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !hidden.has(r.key) && !deletedOf(r.cust.name, r.cust.id))
+    return rows.filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.cust.name, r.cust.id))
       .map((r) => {
         r._checks = dailyChecks(r);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))
@@ -748,5 +760,16 @@
     return { name: r.cust.name, taxId: String(r.cust.id || '').replace(/\D/g, ''), address: r.addr || '', capital: 0, years: r.years, tel, branchKey: r.branch.key,
       info: `${lenderShort(r.lender.name)} ${ymOf(r.startUse)} 擔保 ${wan(r.amount)}${r.end && r.days != null ? `，${ymOf(r.end)} 到期` : ''}`, add: () => addToList([r]) };
   }
-  global.Chattel = { show, dailyFacts, cardFacts, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
+  let factIdx = null; let factIdxN = -1;
+  function factsOf(taxId) {
+    if (factIdxN !== rows.length) {
+      const idx = new Map();
+      rows.forEach((r) => { const t = taxOfRec(r); if (t.length !== 8) return; const have = idx.get(t); if (!have || ((a, b) => startKey(a) >= startKey(b))(r, have)) idx.set(t, r); });
+      factIdx = idx; factIdxN = rows.length;
+    }
+    const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
+    return r ? cardFacts(r) : null;
+  }
+  global.Chattel = { show, dailyFacts, cardFacts, factsOf, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);
