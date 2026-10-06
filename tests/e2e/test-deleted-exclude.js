@@ -72,11 +72,12 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
 
  // 收回：管理已排除的公司
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('.ask-overlay');
- const box=(await pg.textContent('.ask-overlay')).replace(/\s+/g,' ');
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('#editorBody .excluded-row');
+ const box=(await pg.textContent('#editorBody .excluded-list')).replace(/\s+/g,' ');
  chk(/甲工程有限公司/.test(box)&&/乙精密股份有限公司/.test(box), `排除清單列出兩家：${box.slice(0,200)}`);
- await pg.click('.ask-overlay .ask-list .btn:has-text("乙精密股份有限公司")'); await pg.waitForTimeout(600);
+ await pg.click('#editorBody .excluded-row:has-text("乙精密股份有限公司") button:has-text("收回")'); await pg.waitForTimeout(600);
  chk(/已收回「乙精密股份有限公司」/.test(await pg.textContent('#toast')), `收回有回饋：${await pg.textContent('#toast')}`);
+ await pg.click('#editor .drawer-close'); await pg.waitForTimeout(200);
 
  await pg.click('#btnImport'); await pg.waitForTimeout(400);
  await load(pg,十月,'十二月名單.csv'); await pg.waitForTimeout(3000);

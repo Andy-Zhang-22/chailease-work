@@ -1143,3 +1143,11 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .mix-srcs .mix-src { font-weight: 600; }
 .mix-status span { margin-right: 2px; }
 .cross-line { font-size: 13px; color: var(--muted); margin: 4px 0; } .cross-line .cross-src { font-weight: 600; }
+/* 已排除的公司：一家一列；公開資料查到電話的排最前面 */
+.excluded-list { display: flex; flex-direction: column; gap: 8px; }
+.excluded-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background: var(--surface); }
+.excluded-row.has-phone { border-color: var(--primary); }
+.excluded-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.excluded-meta { font-size: 12.5px; margin: 2px 0; }
+.excluded-phone { margin: 4px 0; font-weight: 600; }
+.badge-phone-back { color: var(--primary); border-color: var(--primary); }
