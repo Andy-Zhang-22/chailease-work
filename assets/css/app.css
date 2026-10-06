@@ -1148,6 +1148,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .cross-line { font-size: 13px; color: var(--muted); margin: 4px 0; } .cross-line .cross-src { font-weight: 600; }
 /* 已排除的公司：一家一列；公開資料查到電話的排最前面 */
 .excluded-list { display: flex; flex-direction: column; gap: 8px; }
+.excluded-q { width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); margin: 4px 0 10px; font-size: 15px; }
+.excluded-all { margin-bottom: 10px; }
 .excluded-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background: var(--surface); }
 .excluded-row.has-phone { border-color: var(--primary); }
 .excluded-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

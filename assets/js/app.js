@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261006-297';
+  const APP_VERSION = '20261006-299';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1582,9 +1582,24 @@
     const rows = await excludedCompanies();
     if (!rows.length) { status.textContent = '目前沒有排除任何公司。'; return; }
     let phones = new Map();
+    /*
+     * 搜尋（使用者：「增加一個搜尋功能」）：公司名、統編、查到的電話，打幾個字就篩；
+     * 「全部放回」也只放搜尋出來的那幾家。
+     */
+    let q = '';
+    const hit = (e) => {
+      if (!q) return true;
+      const ph = phones.get(e.id);
+      const blob = `${e.company} ${e.taxId} ${ph ? ph.tel.replace(/\D/g, '') : ''}`.toLowerCase();
+      return q.split(/\s+/).every((w) => blob.includes(w.replace(/[-()（）\s]/g, '')) || blob.includes(w));
+    };
+    const search = el('input', { type: 'search', className: 'excluded-q', placeholder: '搜尋公司名稱、統編、電話', autocomplete: 'off' });
+    let qt = null;
+    search.oninput = () => { clearTimeout(qt); qt = setTimeout(() => { q = search.value.trim().toLowerCase(); draw(); }, 120); };
+    host.querySelector('h2').after(search);   // 放最上面、標題底下（使用者：「位置放在最上面」）
     let draw = () => {
       list.textContent = '';
-      const live = rows.filter((e) => !e.gone);
+      const live = rows.filter((e) => !e.gone && hit(e));
       const order = (e) => (phones.has(e.id) ? 0 : e.noPhone ? 1 : 2);
       live.sort((a, b) => order(a) - order(b) || b.at - a.at).forEach((e) => {
         const ph = phones.get(e.id);
@@ -1622,7 +1637,7 @@
         row.append(acts);
         list.append(row);
       });
-      if (!live.length) status.textContent = '目前沒有排除任何公司。';
+      if (!live.length) list.append(el('p', { className: 'muted', textContent: q ? '沒有符合的公司。' : '目前沒有排除任何公司。' }));
     };
     /*
      * 整批放回（使用者：「過往那些沒電話被刪掉的名單能把我重新比對一次再加回來嗎」）：
@@ -1630,7 +1645,7 @@
      */
     const allBtn = el('button', { className: 'btn btn-primary excluded-all', type: 'button', hidden: true });
     allBtn.onclick = async () => {
-      const todo = rows.filter((e) => !e.gone && phones.has(e.id));
+      const todo = rows.filter((e) => !e.gone && phones.has(e.id) && hit(e));
       if (!todo.length) return;
       const names = todo.slice(0, 30).map((e) => `・${e.company}（${phones.get(e.id).tel}）`).join('\n');
       const ok = await askConfirm(`把查到電話的 ${todo.length} 家放回名單？下次聯絡日排今天。\n\n${names}${todo.length > 30 ? `\n…還有 ${todo.length - 30} 家` : ''}\n\n`
@@ -1648,10 +1663,10 @@
       toast(`已放回名單 ${todo.filter((e) => e.gone).length} 家，都帶著公開資料查到的電話`);
     };
     const drawAll = () => {
-      const n = rows.filter((e) => !e.gone && phones.has(e.id)).length;
+      const n = rows.filter((e) => !e.gone && phones.has(e.id) && hit(e)).length;
       allBtn.hidden = !n;
       allBtn.disabled = false;
-      allBtn.textContent = `查到電話的 ${n} 家全部放回名單`;
+      allBtn.textContent = q ? `搜尋到、查到電話的 ${n} 家全部放回名單` : `查到電話的 ${n} 家全部放回名單`;
     };
     status.after(allBtn);
     const redraw = draw;
