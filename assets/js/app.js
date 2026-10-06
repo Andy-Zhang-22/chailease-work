@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261006-298';
+  const APP_VERSION = '20261006-299';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1596,7 +1596,7 @@
     const search = el('input', { type: 'search', className: 'excluded-q', placeholder: '搜尋公司名稱、統編、電話', autocomplete: 'off' });
     let qt = null;
     search.oninput = () => { clearTimeout(qt); qt = setTimeout(() => { q = search.value.trim().toLowerCase(); draw(); }, 120); };
-    status.after(search);
+    host.querySelector('h2').after(search);   // 放最上面、標題底下（使用者：「位置放在最上面」）
     let draw = () => {
       list.textContent = '';
       const live = rows.filter((e) => !e.gone && hit(e));
@@ -1668,7 +1668,7 @@
       allBtn.disabled = false;
       allBtn.textContent = q ? `搜尋到、查到電話的 ${n} 家全部放回名單` : `查到電話的 ${n} 家全部放回名單`;
     };
-    search.after(allBtn);
+    status.after(allBtn);
     const redraw = draw;
     draw = () => { redraw(); drawAll(); };
     draw();
