@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-304';
+  const APP_VERSION = '20261007-305';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -9005,6 +9005,7 @@ export default {
       if (result && result.changedDuring) scheduleSync();
       await showSyncTime();
       autoRegistryTick();   // 今天的自動查核等同步成功才跑（見 maybeAutoRegistry）
+      writeSummaryMaybe();   // 雲端硬碟上的小摘要檔（使用統計＋成效數字），最多半小時一次
       if (!quiet) {
         const g = result.gained;
         const gained = [
@@ -9024,6 +9025,100 @@ export default {
       if (status && !quiet) status.textContent = `同步失敗：${err.message || err}`;
       return null;
     }
+  }
+
+  /*
+   * 使用統計＋摘要檔（使用者：「我不常用的功能有哪些？」→「可以」）。
+   * 按了哪個按鈕只記「哪一區＋按鈕上的字」和次數，存在這台裝置；看起來像公司名稱、地址、電話的不記。
+   * 同步成功後（最多半小時一次）把次數和成效統計的數字寫成雲端硬碟上的小摘要檔，Claude 每月看這個給建議。
+   */
+  const USAGE_KEY = 'usage-counts';
+  const DEVICE_KEY = 'device-id';
+  const usageLoad = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}') || {}; } catch (e) { return {}; } };
+  const NAMEISH_RE = /有限公司|股份|企業社|商行|工作室|實業|工業|科技|國際|貿易|[路街巷弄號段]|@|\d{3,}/;
+  function usageArea(b) {
+    if (b.closest('#menu')) return '選單';
+    if (b.closest('#drawer')) return '詳細頁';
+    if (b.closest('#editor')) return '視窗';
+    if (b.closest('#paneCal')) return '行事曆';
+    if (b.closest('#filters')) return '篩選';
+    if (b.closest('#feedBar, #remindBar, #departBar, #oppBar, #phoneBackBar')) return '名單上方';
+    if (b.closest('#cards')) return '名單卡片';
+    if (b.closest('#paneStats')) return '統計';
+    const pane = b.closest('[id^="pane"]');
+    if (pane) return `找名單:${pane.id.replace(/^pane/, '')}`;
+    return '上方';
+  }
+  function usageKey(target) {
+    const b = target && target.closest && target.closest('button, a, summary, .chip');
+    if (!b || b.closest('#lockGate')) return '';
+    if (b.dataset && b.dataset.act) return `選單:${b.dataset.act}`;
+    if (b.classList.contains('tab') || b.classList.contains('subtab')) return `分頁:${b.dataset.tab || b.id || ''}`;
+    if (b.classList.contains('chip')) { const g = b.closest('[data-group]'); return `${usageArea(b)}:篩選${g ? `（${g.dataset.group}）` : ''}`; }
+    if (b.matches('a[href^="tel:"]')) return `${usageArea(b)}:撥號`;
+    if (b.matches('.card-name, .remind-open, .depart-name, .link-btn, .copy-dot') || b.closest('.card-name')) return '';
+    const raw = String(b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!raw || NAMEISH_RE.test(raw)) return '';
+    const label = raw.replace(/（[^）]*）/g, '').replace(/\d+/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+    return label ? `${usageArea(b)}:${label}` : '';
+  }
+  function countUsage(e) {
+    try {
+      const k = usageKey(e.target);
+      if (!k) return;
+      const m = todayISO().slice(0, 7);
+      const all = usageLoad();
+      all[m] = all[m] || {};
+      all[m][k] = (all[m][k] || 0) + 1;
+      const keep = Object.keys(all).sort().slice(-6);   // 留最近 6 個月
+      Object.keys(all).forEach((x) => { if (!keep.includes(x)) delete all[x]; });
+      localStorage.setItem(USAGE_KEY, JSON.stringify(all));
+    } catch (err) { /* 無痕模式或存不下：不影響按鈕本身 */ }
+  }
+  window.usageKey = usageKey;   // 測試用
+  function deviceLabel() {
+    let id = '';
+    try { id = localStorage.getItem(DEVICE_KEY) || ''; if (!id) { id = Math.random().toString(36).slice(2, 8); localStorage.setItem(DEVICE_KEY, id); } } catch (e) { id = 'x'; }
+    const ua = navigator.userAgent || '';
+    const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : '裝置';
+    const app = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone ? 'App' : '瀏覽器';
+    return `${kind}-${app}-${id}`;
+  }
+  /** 摘要：只有家數、比例、次數，沒有公司名稱、電話 */
+  function buildSummary() {
+    const views = allViews();
+    const f = window.funnelStats(views);
+    const month = (iso) => String(iso || '').slice(0, 7);
+    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
+    const logsByMonth = {};
+    state.logs.forEach((l) => {
+      const m = month(l.date); if (!m) return;
+      const t = logsByMonth[m] || (logsByMonth[m] = { calls: 0, contacted: 0, meetings: 0 });
+      t.calls += 1; if (l.outcome === 'contacted') t.contacted += 1; if (l.meeting) t.meetings += 1;
+    });
+    const freshByMonth = {};
+    views.filter((v) => /^每日新名單/.test(String(v.source || ''))).forEach((v) => {
+      const m = month(v.addedDate); if (!m) return;
+      const t = freshByMonth[m] || (freshByMonth[m] = blank());
+      t.n += 1;
+      if (v.blocked || (v.outcome && v.outcome !== 'new')) t.called += 1;
+      if (v.outcome === 'contacted') t.reached += 1;
+      if (v.chance === 'yes') t.chance += 1;
+      if (v.blocked) t.blocked += 1;
+    });
+    const recent = (o) => Object.fromEntries(Object.keys(o).sort().slice(-6).map((k) => [k, o[k]]));
+    return {
+      generatedAt: new Date().toISOString(), version: APP_VERSION, device: deviceLabel(),
+      customers: views.length, settings: { mainCap: mainCap(), newQuota: newQuota() },
+      funnel: f, freshByMonth: recent(freshByMonth), logsByMonth: recent(logsByMonth), usage: usageLoad(),
+    };
+  }
+  window.buildSummary = buildSummary;   // 測試用
+  let summaryAt = 0;
+  async function writeSummaryMaybe() {
+    if (!window.DriveSync.writeSummary || Date.now() - summaryAt < 30 * 60000) return;
+    summaryAt = Date.now();
+    try { await window.DriveSync.writeSummary(`${window.DriveSync.SUMMARY_PREFIX}${deviceLabel()}.json`, buildSummary()); } catch (err) { console.warn('摘要檔寫不上去', err); }
   }
 
   /** 記完通話後過幾秒自動推上去，不要每按一次就打一次 API。 */
@@ -9514,6 +9609,7 @@ export default {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = `assets/vendor/pdfjs/pdf.worker.min.js?v=${APP_VERSION}`;
     $('#menuVersion').textContent = `版本 ${APP_VERSION}`;
     wireEvents();
+    document.addEventListener('click', countUsage, true);   // 使用統計：只記按鈕上的字與次數
     await reload();
     const undone = await undoClosedBatch();
     render();

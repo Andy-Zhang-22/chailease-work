@@ -449,6 +449,20 @@
     return data.id;
   }
 
+  /*
+   * 摘要檔（使用者：「我不常用的功能有哪些？」→「可以」）：同步檔 1.7 MB 太大，Claude 讀不進來；
+   * 另寫一個幾 KB 的「電話推廣名單-摘要-裝置.json」：各功能用了幾次、成效統計的數字，沒有公司名稱、電話。
+   * 一台裝置一個檔（手機、電腦各記各的次數，不會互相蓋掉）。drive.file 權限，跟同步檔同一個範圍。
+   */
+  const SUMMARY_PREFIX = '電話推廣名單-摘要-';
+  async function writeSummary(name, obj) {
+    const token = await getToken({ interactive: false });
+    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and trashed=false`);
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=5`, {}, token);
+    const found = ((await res.json()).files || [])[0];
+    return uploadFile(found ? found.id : null, obj, token, name);
+  }
+
   /* ---------------- 每週備份與找回某天的資料 ---------------- */
 
   /*
@@ -560,6 +574,6 @@
   global.DriveSync = {
     sync, mergeDumps, diffSummary, mergeTombstones, mergeState, mergeRegChanges, regHistoryOf,
     isConfigured, clientId, setClientId, signOut, getToken, describeAuthError,
-    FILE_NAME, SCOPE, listBackups, backupNow, restoreBackup, BACKUP_PREFIX,
+    FILE_NAME, SCOPE, listBackups, backupNow, restoreBackup, BACKUP_PREFIX, writeSummary, SUMMARY_PREFIX,
   };
 })(window);
