@@ -276,9 +276,8 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`工廠登記 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')}` : ''}（經濟部生產中工廠清冊：新登記的工廠）`.replace(' （', '（'),
-      r.products ? `主要產品 ${r.products}` : '', r.industry ? `行業 ${r.industry}` : '', r.capital ? `資本額 ${money(r.capital)}` : '',
-      r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : ''].filter(Boolean).join('，');
+    // 只留重點（使用者：「訪談紀錄那的文字有點太多」）
+    return [`工廠登記 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')} ` : ''}新登記`, r.products ? `產品 ${r.products}` : (r.industry || '')].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {

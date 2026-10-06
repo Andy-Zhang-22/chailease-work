@@ -69,7 +69,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
  const recs=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^商行企業社/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,owner:r.owner,industry:r.industry,capital:r.capital,founded:r.founded,nextDate:r.nextDate,notes:r.notesRaw,address:r.address,addedDate:r.addedDate})));
  chk(recs.length===1 && recs[0].company==='協玖裝潢企業社' && recs[0].taxId==='91712817' && recs[0].capital==='1,000' && recs[0].founded==='2022' && recs[0].industry==='室內裝潢工程', `加進去的資料：${JSON.stringify(recs[0])}`);
- chk(recs[0] && /商行／企業社（稅籍登記）：獨資/.test(recs[0].notes) && /只有稅籍登記/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06' && recs[0].addedDate===TODAY, `備註、排明天、名單新增日期：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
+ chk(recs[0] && /^商行／企業社：獨資，2022-12 設立/.test(recs[0].notes) && /只有稅籍登記/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06' && recs[0].addedDate===TODAY, `備註、排明天、名單新增日期：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200); await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForTimeout(400);
  chk(/已在名單/.test(await pg.locator('#biz-cards .card:has-text("協玖")').locator('.card-top').textContent()), '切回來變成已在名單');

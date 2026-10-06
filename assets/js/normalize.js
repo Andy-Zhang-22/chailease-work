@@ -270,7 +270,8 @@
         // 訪談內容裡的背景一行：不能帶「115/08/18」這種日期，parseNotes 會把它當成一通電話
         background: [
           changed ? `${when}變更登記：${reason || '（案由未載明）'}` : (cell('date') ? `${when}設立登記` : ''),
-          items.length ? `營業項目：${items.slice(0, 6).join('；')}${items.length > 6 ? `…共 ${items.length} 項` : ''}` : '',
+          // 營業項目只留前兩項的名稱（使用者：「訪談紀錄那的文字有點太多」）
+          items.length ? `營業：${items.slice(0, 2).map((x) => x.replace(/^[A-Z]{1,2}\d{5,6}\s*/, '')).join('、')}${items.length > 2 ? ` 等 ${items.length} 項` : ''}` : '',
         ].filter(Boolean).join('。'),
       });
       stats.kept++;
@@ -282,7 +283,7 @@
   function govToStandardRows(records) {
     const out = [STANDARD_HEADER.slice()];
     records.forEach((r) => {
-      const note = [r.background || '', r.hasAssets ? '' : '（名稱看起來是投資／控股類，可能沒有設備標的）'].filter(Boolean).join('\n');
+      const note = [r.background || '', r.hasAssets ? '' : '（投資／控股類）'].filter(Boolean).join('');
       out.push([r.company, r.taxId, '', r.founded, r.capitalThousands, '', r.owner,
         '', r.industry, '', '', note, r.address, '', '']);
     });

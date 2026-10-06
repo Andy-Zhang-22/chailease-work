@@ -63,7 +63,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#einv-cards .card')].find(x=>x.textContent.includes('名祿')); c.querySelector('.einv-add-one').click(); });
  await pg.waitForTimeout(1200);
  const rec=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='名祿實業有限公司'); return r?{phone:r.phoneRaw,founded:r.founded,capital:r.capital,industry:r.industry,notes:r.notesRaw,source:r.source,next:r.nextDate}:null; });
- chk(rec && rec.phone==='02-2960-0000' && rec.founded==='2019' && rec.capital==='12,000' && rec.industry==='運動用品、器材批發業' && /^電子發票 2026-11（財政部導入電子發票營業人清單：剛導入，B2B）/.test(rec.notes) && /^剛開電子發票-2026-11-05-1家\.csv$/.test(rec.source), `加進來的：${JSON.stringify(rec)}`);
+ chk(rec && rec.phone==='02-2960-0000' && rec.founded==='2019' && rec.capital==='12,000' && rec.industry==='運動用品、器材批發業' && /^電子發票 2026-11 剛導入/.test(rec.notes) && /^剛開電子發票-2026-11-05-1家\.csv$/.test(rec.source), `加進來的：${JSON.stringify(rec)}`);
  chk(await pg.isVisible('#drawer') && /名祿/.test(await pg.textContent('#drawerBody h2')), '單張加入直接打開那一筆');
  const op=(await pg.locator('#drawerBody .detail-opener').textContent()).replace(/\s+/g,' ');
  chk(/開始開電子發票、生意上軌道了/.test(op), `開場白：${op}`);

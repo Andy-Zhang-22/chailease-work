@@ -40,5 +40,5 @@ test('分頁：卡片資料、組織型態、剛登記工廠是利率不敏感�
   assert.deepEqual(F.dailyFacts(old).signals, []);
   const csv = F.toStandardCsv([r], ['2026-10-06']);
   assert.match(csv, /甲精密有限公司,12345678,,2018,"30,000",02-2222-3333/);
-  assert.match(csv, /工廠登記 2026-08（經濟部生產中工廠清冊：新登記的工廠），主要產品 金屬模具/);
+  assert.match(csv, /工廠登記 2026-08 新登記，產品 金屬模具/);   // 只留重點
 });

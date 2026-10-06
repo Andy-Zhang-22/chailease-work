@@ -69,7 +69,7 @@ const mk=(id,company,taxId,o)=>Object.assign({id,source:'A.csv',company,aliases:
  await first.locator('button.trade-add-one').click(); await pg.waitForTimeout(1500);
  const recs=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^出進口廠商/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,owner:r.owner,phoneRaw:r.phoneRaw,founded:r.founded,capital:r.capital,nextDate:r.nextDate,notes:r.notesRaw,address:r.address})));
  chk(recs.length===1 && recs[0].company==='晨光貿易有限公司' && recs[0].taxId==='70000001' && recs[0].phoneRaw==='02-2990-1234' && recs[0].owner==='王O明' && recs[0].founded==='2019' && recs[0].capital==='12,000' && recs[0].address==='新北市新莊區中正路100號', `加進去的資料：${JSON.stringify(recs[0])}`);
- chk(recs[0] && /出進口廠商登記（貿易署）：進口＋出口/.test(recs[0].notes) && /原始登記 2026-08-20/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06', `備註、排明天：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
+ chk(recs[0] && /^出進口廠商登記：進口＋出口，2026-08 開始/.test(recs[0].notes) && recs[0].nextDate==='2026-10-06', `備註、排明天：${recs[0]&&recs[0].notes} ${recs[0]&&recs[0].nextDate}`);
  await pg.click('#importer .drawer-close').catch(()=>{}); await pg.waitForTimeout(300);
 
  // 補電話：選單那顆——遠帆（統編對得到）補上、律森（對不到）還是沒有、星辰本來就有不動

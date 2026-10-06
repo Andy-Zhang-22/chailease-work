@@ -272,9 +272,8 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`健保新投保 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')}` : ''}（健保署新成立投保單位：剛開始幫員工投保）`.replace(' （', '（'),
-      r.industry ? `行業 ${r.industry}` : '', r.capital ? `資本額 ${money(r.capital)}` : '',
-      r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : ''].filter(Boolean).join('，');
+    // 只留重點（使用者：「訪談紀錄那的文字有點太多」）
+    return [`健保新投保 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')} ` : ''}剛開始請人`, r.industry || ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {

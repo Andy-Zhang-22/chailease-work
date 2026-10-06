@@ -123,9 +123,8 @@
    */
   function noteFor(r) {
     const dash = (s) => String(s || '').replace(/\//g, '-');
-    return [`動保：${r.lender.name || '不明'}（${typeShort(r.type)}）擔保 ${wan(r.amount)}`,
-      `契約 ${dash(r.start)}～${dash(r.end)}${r.days != null ? `（${dueText(r.days)}）` : ''}`,
-      r.items ? `標的 ${r.items} 件` : '', r.addr ? `標的物所在地：${r.addr}` : '', r.no ? `登記 ${r.no}` : ''].filter(Boolean).join('，');
+    // 只留重點：跟誰借、多少、什麼時候（使用者：「訪談紀錄那的文字有點太多」）；契約迄日、標的物、登記號在動保分頁看得到
+    return `動保：${lenderShort(r.lender.name)} 擔保 ${wan(r.amount)}${r.start ? `，${dash(r.start).slice(0, 7)} 起` : ''}`;
   }
 
   /** 正規的 CSV 解析：欄位裡有逗號、引號、換行都吃得下。 */
