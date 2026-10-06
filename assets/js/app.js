@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-305';
+  const APP_VERSION = '20261007-306';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4098,84 +4098,16 @@
     toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
   }
   /*
-   * 拜訪準備問分身、追蹤訊息草稿（使用者：「都做」）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
+   * 拜訪準備問分身（使用者：「都做」；訊息草稿後來拿掉了）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
    */
   const twinAsk = (r, ask) => [ask, ...twinPrompt(r).split('\n').slice(1)].join('\n');
   const visitPrompt = (r) => twinAsk(r, '請照專案說明，我要去拜訪這家，幫我準備：1. 這次要談的重點（兩三點）2. 對方可能的需求與我可以提的方案（週轉金、投資額度、設備）3. 要先準備的資料 4. 要問老闆的問題（五題內）5. 可能遇到的拒絕與一兩句應對。簡短、條列。');
-  const MSG_KINDS = [
-    ['thanks', '打完電話道謝', '剛跟對方通完電話，傳一則道謝＋重點確認，順便留下聯絡方式的訊息'],
-    ['confirm', '確認拜訪時間', '已經約好拜訪，傳一則確認時間地點的訊息'],
-    ['after', '寄資料後追蹤', '前幾天寄了資料／報價給對方，傳一則追蹤對方看過沒、有沒有問題的訊息'],
-    ['missed', '沒接到電話', '剛打電話沒人接，傳一則簡短自我介紹、請對方方便時回電的訊息'],
-  ];
-  const msgPrompt = (r, kind) => {
-    const k = MSG_KINDS.find((x) => x[0] === kind) || MSG_KINDS[0];
-    return twinAsk(r, `請照專案說明，幫我寫一則傳給這家窗口的 LINE／簡訊：${k[2]}。根據下面的紀錄抓一個具體的點，80 字內，口語、客氣但不油，不要用表情符號；稱呼和我的名字用「○○」代替，我自己改。給兩個版本：LINE 版、簡訊版。`);
-  };
-  function openMsgDraft(r) {
-    if (!isPhone() && !twinUrl()) { openTwinSetup(() => openMsgDraft(r)); return; }
-    const host = $('#editorBody');
-    host.textContent = '';
-    host.append(el('h2', { textContent: `✉️ 追蹤訊息草稿：${r.company}` }),
-      el('p', { className: 'muted', textContent: '選一個，分身寫好 LINE 版和簡訊版。' }));
-    host.append(el('div', { className: 'card-actions msg-kinds' }, MSG_KINDS.map(([key, label]) => el('button', { className: 'btn', type: 'button', textContent: label, 'data-kind': key,
-      onclick: () => { sendToTwin(msgPrompt(r, key), '這家的資料'); $('#editor').hidden = true; } }))));
-    $('#editor').hidden = false;
-  }
   window.visitPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? visitPrompt(v) : ''; };   // 測試用
-  window.msgPrompt = (id, kind) => { const v = allViews().find((x) => x.id === id); return v ? msgPrompt(v, kind) : ''; };   // 測試用
   async function askTwin(r) {
     // 手機用不到專案網址；電腦沒設網址才先跳設定
     if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
     sendToTwin(twinPrompt(r), '這家的資料');
   }
-  /*
-   * 打完電話讓分身整理（使用者：「都做」）：記錄這通電話的筆記亂打就好，按「🤖 讓分身整理」交給分身，
-   * 分身照固定格式回「結果／結論／下一步／下次聯絡」，整段貼回來按「填進表單」，內容、結果、下次聯絡日自動填好，
-   * 使用者看過再按「儲存紀錄」（不自動存：分身寫的不一定對）。
-   */
-  const WEEK_ZH = '日一二三四五六';
-  function tidyPrompt(r, memo) {
-    const t = todayISO();
-    const d = new Date(`${t}T00:00:00`);
-    const before = maskPhones(notesBundle(r).text).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3)
-      .map((x) => (x.length > 200 ? `${x.slice(0, 200)}…` : x));
-    return [`請照專案說明，把我剛打完的這通電話筆記整理好。今天是 ${t.replace(/-/g, '/')}（週${WEEK_ZH[d.getDay()]}），筆記裡的「下週三」「月底」請換算成日期。`,
-      '回覆格式要固定（我會整段貼回系統自動填進表單），只要這四行，不要加其他段落：',
-      '結果：接通／未接／禁止推廣（三選一）', '結論：一兩句，對方的狀況、金額、時間點、態度', '下一步：我接下來要做什麼', '下次聯絡：YYYY/MM/DD（建議哪天再打；沒必要就寫「不用」）', '',
-      `【公司】${r.company}`, before.length ? `【之前的紀錄（新到舊）】\n${before.join('\n')}` : '【之前的紀錄】還沒有', '',
-      '【這通的筆記】', maskPhones(memo).trim(), '', '（電話、負責人、KEYMAN 欄位沒有附上；筆記裡的電話號碼已遮掉）'].join('\n');
-  }
-  /** 分身回的「結果／結論／下一步／下次聯絡」→ { outcome, text, nextDate }；認不出來的欄位是空的 */
-  function parseTidy(reply, today) {
-    const lines = String(reply || '').replace(/\r/g, '').split('\n').map((x) => x.replace(/^[\s*＊#>-]+/, '').replace(/[*＊]+/g, '').trim());
-    const field = (label) => {
-      const at = lines.findIndex((l) => new RegExp(`^${label}\\s*[:：]`).test(l));
-      if (at < 0) return '';
-      const out = [lines[at].replace(new RegExp(`^${label}\\s*[:：]\\s*`), '')];
-      for (let k = at + 1; k < lines.length && lines[k] && !/^(結果|結論|下一步|下次聯絡)\s*[:：]/.test(lines[k]); k += 1) out.push(lines[k]);
-      return out.join('\n').trim();
-    };
-    const res = field('結果');
-    const outcome = /禁止|不要再|拒絕推廣/.test(res) ? 'blocked' : /未接|沒接|無人接/.test(res) ? 'noanswer' : /接通|談|聊/.test(res) ? 'contacted' : '';
-    const sum = field('結論');
-    const step = field('下一步');
-    const when = field('下次聯絡');
-    let nextDate = '';
-    const full = when.match(/(\d{4})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})/);
-    const short = !full && when.match(/(\d{1,2})\s*[/月]\s*(\d{1,2})/);
-    const pad = (n) => String(n).padStart(2, '0');
-    if (full) nextDate = `${full[1]}-${pad(full[2])}-${pad(full[3])}`;
-    else if (short) {
-      const y = Number(today.slice(0, 4));
-      nextDate = `${y}-${pad(short[1])}-${pad(short[2])}`;
-      if (nextDate < today) nextDate = `${y + 1}-${pad(short[1])}-${pad(short[2])}`;
-    }
-    const text = [sum, step ? `下一步：${step}` : ''].filter(Boolean).join('\n');
-    return { outcome, text, nextDate };
-  }
-  window.parseTidy = (reply, today) => parseTidy(reply, today || todayISO());   // 測試用
-  window.tidyPrompt = (id, memo) => { const v = allViews().find((x) => x.id === id); return v ? tidyPrompt(v, memo) : ''; };   // 測試用
 
   /* ---------------- 今日撥打戰略（分身排順序、寫開場白） ---------------- */
 
@@ -6493,39 +6425,8 @@
       openDetail(r.id);
       scheduleSync();
     };
-    // 🤖 讓 AI 整理（使用者：「讓分身整理改成讓ai整理」）：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
-    // 貼回來的框按了「讓 AI 整理」才長出來：平常表單裡只有一個內容框
-    const tidyBox = el('div', { className: 'tidy-box', hidden: true });
-    const buildTidy = () => {
-      if (tidyBox.firstChild) return;
-      const paste = el('textarea', { className: 'tidy-paste', rows: 4, placeholder: '把分身的回覆整段貼在這裡（結果：…／結論：…／下一步：…／下次聯絡：…）' });
-      const msg = el('p', { className: 'muted tidy-msg', hidden: true });
-      const fill = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '填進表單' });
-      fill.onclick = () => {
-        const got = parseTidy(paste.value, todayISO());
-        if (!got.text && !got.nextDate && !got.outcome) { msg.textContent = '認不出來。請確認貼的是分身照格式回的那段（結果：／結論：／下一步：／下次聯絡：）。'; msg.hidden = false; return; }
-        const raw = memo.value.trim();
-        memo.value = got.text || raw;
-        if (got.outcome) outcomeSel.value = got.outcome;
-        if (got.nextDate) { nextInput.value = got.nextDate; nextInput.dispatchEvent(new Event('change')); }
-        writeDraft();
-        msg.textContent = `已填好${got.nextDate ? `，下次聯絡 ${dateLabel(got.nextDate)}` : ''}。看過沒問題再按「儲存紀錄」。`;
-        msg.hidden = false;
-        paste.value = '';
-        memo.focus();
-      };
-      tidyBox.append(paste, el('div', { className: 'card-actions' }, [fill]), msg);
-    };
-    const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓 AI 整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
-    tidy.onclick = () => {
-      if (!memo.value.trim()) { toast('先把這通聊了什麼隨手打進去，再交給分身整理'); memo.focus(); return; }
-      if (!isPhone() && !twinUrl()) { openTwinSetup(() => tidy.click()); return; }
-      sendToTwin(tidyPrompt(r, memo.value), '這通的筆記');
-      buildTidy();
-      tidyBox.hidden = false;
-    };
-    form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy,
-      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '✉️ 訊息草稿', title: '請分身寫一則傳給這家的 LINE／簡訊', onclick: () => openMsgDraft(r) })]), tidyBox, el('div', { className: 'row' }, [
+    // 「讓 AI 整理」「訊息草稿」拿掉了（使用者：「把詳細頁裡的訊息草稿跟讓ai整理刪掉，我用不到」）
+    form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
       el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));
