@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261006-299';
+  const APP_VERSION = '20261006-300';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -446,7 +446,8 @@
      * 今天不打了：把今天排著的全部挪到下一個上班日（使用者：「把今日提醒的 18 通名單退回去，明天再發送給我，今天不想工作了」）。
      * 禁止推廣的、今天已經處理過的不動。明天的新名單額度會把這些算進去，不會又多補 20 家上去。
      */
-    const due = allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate);
+    // 今天約了拜訪的不挪：挪了下次聯絡日，行事曆上那天的拜訪就不見了
+    const due = allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate && !visitBooked(v));
     if (due.length && !off) {
       const next = window.Holidays ? window.Holidays.nextWorkday(addDays(today, 1)).iso : addDays(today, 1);
       const defer = el('button', { className: 'btn btn-tiny', id: 'feedDefer', type: 'button', textContent: `今天的 ${due.length} 家挪到 ${dateLabel(next)}`, title: '今天不打了：今天排著、還沒處理的全部改到下一個上班日' });
@@ -2939,8 +2940,27 @@
    * 算到下一個上班日——那天本來就打不了電話，列在那裡只會讓當天看起來是空的。
    * 排在視野之外的不算，那已經不是「短期內太多」的問題。
    */
-  /** 最近一則通話紀錄勾了「約到拜訪」、約的就是現在的下次聯絡日（跟行事曆同一條規則）：重排不能動它 */
-  const visitBooked = (v) => { const last = latestLog(v.id); return !!(last && last.meeting && last.meetingDate && last.meetingDate === v.nextDate); };
+  /** 每家最近一則勾了「約到拜訪」的紀錄（跟行事曆同一個認法） */
+  let meetLogKey = ''; let meetLogMap = new Map();
+  function latestMeetLog(recordId) {
+    const key = String(dataVersion);
+    if (meetLogKey !== key) {
+      meetLogKey = key;
+      meetLogMap = new Map();
+      state.logs.forEach((l) => {
+        if (!l.meeting || !l.meetingDate) return;
+        const seen = meetLogMap.get(l.recordId);
+        if (!seen || (l.createdAt || 0) > (seen.createdAt || 0)) meetLogMap.set(l.recordId, l);
+      });
+    }
+    return meetLogMap.get(recordId) || null;
+  }
+  /*
+   * 約了拜訪、約的那天就是現在的下次聯絡日：重排、「今天的 N 家挪到…」都不能動它。
+   * 以前只看「最近一則紀錄」，約完之後又記了一通（沒再勾約到拜訪）就不算，被重排挪走、行事曆上就不見了
+   * （使用者：「為什麼我今天有一個利昇的拜訪消失了？」）。改看最近一則勾了約到拜訪的。
+   */
+  const visitBooked = (v) => { const m = latestMeetLog(v.id); return !!(m && m.meetingDate === v.nextDate); };
 
   function bucketByWorkday(days) {
     const today = todayISO();
