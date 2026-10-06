@@ -319,9 +319,9 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`出進口廠商登記（貿易署）：${QUAL.find(([k]) => k === qualOf(r))[1]}`, r.capital ? `資本額 ${money(r.capital)}` : '', r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : '', r.first ? `原始登記 ${ymd(r.first).replace(/\//g, '-')}` : '',
-      r.issued && (!r.first || ymd(r.issued) !== ymd(r.first)) ? `最近異動 ${ymd(r.issued).replace(/\//g, '-')}` : '',
-      r.fax ? `傳真 ${r.fax}` : '', r.ename || '', r.rep ? '代表人是貿易署公開檔（中間字遮掉），打前查商工登記' : ''].filter(Boolean).join('，');
+    // 只留重點（使用者：「訪談紀錄那的文字有點太多」）：進出口哪種、哪年開始做
+    const first = r.first ? String(ymd(r.first)).replace(/\//g, '-').slice(0, 7) : '';
+    return `出進口廠商登記：${QUAL.find(([k]) => k === qualOf(r))[1]}${first ? `，${first} 開始` : ''}`;
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {

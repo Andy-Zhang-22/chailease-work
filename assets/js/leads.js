@@ -586,7 +586,9 @@
       if (iPhone >= 0 && srcKey && typed.get(keyOf(srcKey))) row[iPhone] = typed.get(keyOf(srcKey));   // 卡片上貼的電話一起帶
       // 從哪一期、什麼案由來的寫進去，之後在名單上看得出這家是怎麼來的
       const src = list.find((r) => (r['統一編號'] || r['公司名稱']) === (row[iTax] || row[iName]));
-      if (iNote >= 0 && src) row[iNote] = [`新公司清冊 ${src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${TYPE_LABEL[src.type] || ''}${src.reason ? `：${src.reason}` : ''}`.trim(), src._why ? `每日新名單，${src._why}` : '', row[iNote] || ''].filter(Boolean).join('\n');
+      // 一行就好（使用者：「訪談紀錄那的文字有點太多」）：「新公司清冊 115年8月變更登記：案由。營業：…」，原本那行案由跟背景重複了
+      const head = row[iNote] ? `新公司清冊 ${row[iNote]}` : `新公司清冊 ${src && src['期別'] ? `${src['期別'].slice(0, 3)}/${+src['期別'].slice(3)}` : ''} ${src ? TYPE_LABEL[src.type] || '' : ''}${src && src.reason ? `：${src.reason}` : ''}`.trim();
+      if (iNote >= 0 && src) row[iNote] = [head, src._why ? `每日新名單，${src._why.split('；')[0]}` : ''].filter(Boolean).join('\n');
     });
     return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\n')}\n`;
   }
@@ -759,8 +761,16 @@
     );
   }
 
-  async function start() {
-    if (started) return;
+  /*
+   * 同時有好幾個地方要這份資料（新名單合併頁、每日新名單、背景預載）：大家等同一次載入。
+   * 以前第二個呼叫的看到「已經開始」就直接回來，資料還沒載好就算出 0 家（使用者：「為什麼這個是0」）。
+   */
+  let starting = null;
+  function start() {
+    if (!starting) starting = startOnce();
+    return starting;
+  }
+  async function startOnce() {
     started = true;
     build();
     try {

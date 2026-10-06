@@ -65,9 +65,9 @@ test('畫面：一列 → 卡片資料（分公司、設立年數、行業）、
   assert.equal(rec.company, '原味商行'); assert.equal(rec.taxId, '38965019'); assert.equal(rec.founded, '2022'); assert.equal(rec.capital, '1,000'); assert.equal(rec.owner, '王小明'); assert.equal(rec.industry, '豆類製品零售');
   assert.equal(r.reg, true, '舊檔沒有商業登記欄：有負責人就當有商業登記');
   const t = B.toRecord({ '統編': '98798418', '名稱': '永元水電行', '組織別': '獨資', '資本額': '60000000', '設立日期': '2003/08/01', '地址': '新北市永和區中正路368巷1弄67號1樓', '行業代號': '475', '行業': '居家修繕用品零售', '開發票': 'N', '負責人': '', '稅籍資本額': '60000000', '商業登記': 'N' }, TODAY);
-  assert.equal(t.reg, false); assert.match(B.noteFor(t), /只有稅籍登記/); assert.match(B.noteFor(t), /稅籍自填/);
+  assert.equal(t.reg, false); assert.match(B.noteFor(t), /只有稅籍登記/);
   assert.equal(B.toRecord({ '統編': '1', '名稱': 'x', '組織別': '獨資', '資本額': '1', '設立日期': '', '地址': '', '行業': '', '開發票': 'N', '負責人': '', '商業登記': 'Y' }, TODAY).reg, true, '清冊有這家但沒名字也算有商業登記');
-  assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /商行／企業社（稅籍登記）：獨資，資本額 100 萬，設立 2022-04-13/);
+  assert.equal(rec.nextDate, '2026-10-06'); assert.match(rec.notesRaw, /^商行／企業社：獨資，2022-04 設立/);
   assert.equal(w.Normalize.parseNotes(B.noteFor(r)).length, 1, '備註裡的日期用 - 不會被當成通話');
 });
 
@@ -89,7 +89,7 @@ test('本月設立／變更：清冊一列 → 卡片資料（民國日期、營
   assert.equal(r.kind, '變更'); assert.equal(r.rk, 'move'); assert.equal(r.reg, true); assert.equal(r.monthly, true); assert.equal(r.period, '11508');
   assert.deepEqual(r.inds, ['機車及其零件製造業', '金屬結構及建築組件製造業'], 'ZZ99999 那條不算行業');
   assert.equal(r.branch.key, '新北分公司'); assert.equal(r.district, '土城區');
-  assert.match(B.noteFor(r), /2026\/08 商業變更登記清冊：所在地變更/); assert.match(B.noteFor(r), /核准變更 2026\/08\/17/); assert.doesNotMatch(B.noteFor(r), /統一發票/);
+  assert.match(B.noteFor(r), /^商行／企業社：2026\/08 商業變更：所在地變更/); assert.doesNotMatch(B.noteFor(r), /統一發票/);
   const s = B.toMonthlyRecord({ ...o, '清冊': '設立', '核准設立日期': '115/08/11', '核准變更日期': '', '案由或變更事項': '' }, TODAY);
   assert.equal(s.kind, '設立'); assert.deepEqual(s.setup, { y: 2026, m: 8, d: 11 }); assert.equal(s.years, 0); assert.equal(B.ageOf(s), 'lt5'); assert.equal(s.rk, '');
   assert.equal(B.periodLabel('11508'), '2026/08'); assert.deepEqual(B.parseAnyDate('2026/08/11'), { y: 2026, m: 8, d: 11 }); assert.equal(B.parseAnyDate('115/13/01'), null);

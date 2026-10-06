@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-302';
+  const APP_VERSION = '20261007-304';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3470,7 +3470,9 @@
         const also = SRC.filter((x) => x.key !== k && c.recs[x.key]).map((x) => x.label);
         const sig = [...c.signals];
         const extra = [c.ageRank === 0 ? '成立 6～10 年' : '', c.capOk ? '資本額 500～6,000 萬' : '', c.phone ? '有電話' : '', c.branchRank === 0 ? '我的分公司' : ''].filter(Boolean);
-        r._why = `${sig.length ? `符合：${sig.join('、')}` : '沒有擴張或同業訊號，補位'}${extra.length ? `；其他：${extra.join('、')}` : ''}${also.length ? `；也在：${also.join('、')}` : ''}${via ? `；${SRC.find((x) => x.key === via).label}保底` : ''}`;
+        // 訪談紀錄只留重點（使用者：「在訪談紀錄那的文字有點太多，能盡量給我重點就好嘛」）：其他條件、也在哪幾份、保底不寫
+        void extra; void also; void via;
+        r._why = sig.length ? `符合：${sig.join('、')}` : '沒有擴張或同業訊號，補位';
         bySrc.get(k).push(r);
       });
       const parts = [];
@@ -4780,7 +4782,8 @@
       return { kind: 'hire', text: `看到貴公司最近開始幫員工投保、在擴編，通常這個階段週轉金的需求會跟著上來，我是中租${branch}的，想過去認識一下。` };
     }
     // 剛開始開電子發票（財政部導入電子發票營業人清單）：生意上軌道了
-    const einv = (notes.match(/電子發票 (\d{4}-\d{2})（[^）]*剛導入/) || [])[1];
+    // 舊寫法「電子發票 2026-11（財政部…：剛導入）」、新寫法「電子發票 2026-11 剛導入」都認（名單裡兩種都有）
+    const einv = (notes.match(/電子發票 (\d{4}-\d{2})(?:（[^）]*| )剛導入/) || [])[1];
     if (einv && ago(`${einv}-01`) !== null && ago(`${einv}-01`) <= 200) {
       return { kind: 'einv', text: `看到貴公司最近開始開電子發票、生意上軌道了，這個階段進貨跟週轉的額度中租可以配合，我是中租${branch}的，想過去認識一下。` };
     }
@@ -4789,7 +4792,9 @@
     if ((fac && ago(`${fac}-01`) !== null && ago(`${fac}-01`) <= 200) || r.newFactory) {
       return { kind: 'factory', text: `看到貴公司最近新登記了工廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
     }
-    const first = (notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || [])[1];
+    // 舊寫法「原始登記 2026-08-20」、新寫法「出進口廠商登記：進口＋出口，2026-08 開始」都認
+    const firstM = notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || notes.match(/出進口廠商登記：[^，\n]*，(\d{4}-\d{2}) 開始/);
+    const first = firstM ? (firstM[1].length === 7 ? `${firstM[1]}-01` : firstM[1]) : '';
     if (first && ago(first) !== null && ago(first) <= 365) {
       return { kind: 'trade', text: `貴公司最近開始做進出口，開信用狀、押貨款這一段中租有週轉金額度可以配合，我是中租${branch}的，想過去認識一下。` };
     }

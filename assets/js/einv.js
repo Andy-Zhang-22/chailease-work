@@ -281,9 +281,8 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    return [`電子發票 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')}` : ''}（財政部導入電子發票營業人清單：${r.isNew ? '剛導入' : '起算時已導入'}${r.kind ? `，${r.kind}` : ''}）`.replace(' （', '（'),
-      r.industry ? `行業 ${r.industry}` : '', r.capital ? `資本額 ${money(r.capital)}` : '',
-      r.founded ? `成立 ${r.founded.y}-${String(r.founded.m).padStart(2, '0')}-${String(r.founded.d).padStart(2, '0')}` : ''].filter(Boolean).join('，');
+    // 只留重點（使用者：「訪談紀錄那的文字有點太多」）
+    return [`電子發票 ${r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')} ` : ''}${r.isNew ? '剛導入' : '已導入'}`, r.industry || ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {

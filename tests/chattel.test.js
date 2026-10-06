@@ -74,9 +74,8 @@ test('寫進訪談內容的那一行：主站不會把契約日期當成一筆�
   const note = C.noteFor(r);
   assert.match(note, /和潤/);
   assert.match(note, /860 萬/);
-  assert.match(note, /2023-10-15～2026-10-14/);
-  assert.match(note, /還有 18 天到期/);
-  assert.match(note, /標的 2 件/);
+  // 訪談紀錄只留重點（使用者：「文字有點太多」）：跟誰借、多少、哪個月起
+  assert.equal(note, '動保：和潤 擔保 860 萬，2023-10 起');
   const entries = w.Normalize.parseNotes(note);
   assert.equal(entries.length, 1, '整行是一則備註，不是好幾筆通話');
   assert.equal(entries[0].date, null, '沒有日期，才不會變成最近聯絡日');

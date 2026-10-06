@@ -445,12 +445,10 @@
   /* ---------------- 加入客戶名單 ---------------- */
 
   function noteFor(r) {
-    const src = r.monthly ? `商行／企業社（${periodLabel(r.period)} 商業${r.kind}登記清冊${r.reason ? `：${r.reason}` : ''}）` : `商行／企業社（稅籍登記）：${r.org}`;
-    return [src, `資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}`, r.setup ? `設立 ${r.setup.y}-${String(r.setup.m).padStart(2, '0')}-${String(r.setup.d).padStart(2, '0')}` : '',
-      r.changed ? `核准變更 ${ymd(r.changed)}` : '',
-      r.dyn ? `${periodLabel(r.dyn.period)} 商業登記${r.dyn.kind === '設立' ? '新設立' : `變更：${r.dyn.reason || ''}`}` : '',
-      r.inds.length ? `行業 ${r.inds.slice(0, 3).join('、')}` : '', r.invoice == null ? '' : (r.invoice ? '開統一發票' : '免用統一發票'),
-      !r.reg ? '只有稅籍登記、沒辦商業登記，資本額是稅籍自填的' : (r.owner ? '' : '負責人清冊還沒有，打前查商工登記')].filter(Boolean).join('，');
+    // 只留重點（使用者：「訪談紀錄那的文字有點太多」）：資本額、成立年在名單欄位裡看得到
+    const src = r.monthly ? `商行／企業社：${periodLabel(r.period)} 商業${r.kind}${r.reason ? `：${r.reason}` : ''}`
+      : `商行／企業社：${r.org}${r.setup ? `，${r.setup.y}-${String(r.setup.m).padStart(2, '0')} 設立` : ''}`;
+    return [src, r.inds.length ? r.inds[0] : '', r.reg ? '' : '只有稅籍登記'].filter(Boolean).join('，');
   }
   const thousands = (yuan) => (yuan ? Math.round(yuan / 1000).toLocaleString() : '');
   function toStandardCsv(list, dates) {

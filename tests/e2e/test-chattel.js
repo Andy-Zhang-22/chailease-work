@@ -132,7 +132,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  const recs=await pg.evaluate(async()=>{ const all=await window.Store.allRecords(); return all.filter(r=>/動產擔保名單/.test(r.source)).map(r=>({company:r.company,taxId:r.taxId,source:r.source,notes:r.notesRaw,founded:r.founded,timeline:r.timeline.length,lastDate:r.lastDate,outcome:r.outcome,address:r.address})); });
  chk(recs.length===2, `匯進去 2 家（已在名單的略過）：${recs.map(r=>r.company).join('|')}`);
  const ht=recs.find(r=>r.taxId==='28451237');
- chk(ht && /動保：新鑫股份有限公司（附條件買賣）擔保 1,200 萬/.test(ht.notes) && /2023-10-15～2026-10-14/.test(ht.notes), `訪談內容有金主、金額、契約：${ht&&ht.notes}`);
+ chk(ht && /^動保：新鑫 擔保 1,200 萬，2023-10 起/.test(ht.notes), `訪談內容只留重點：金主、金額、哪個月起：${ht&&ht.notes}`);
  chk(ht && !ht.lastDate, `契約日期沒有被當成最近聯絡日：${ht&&ht.lastDate}`);
  chk(ht && /動產擔保名單-2026-09-26/.test(ht.source), `來源名稱帶日期，之後可以整份管理：${ht&&ht.source}`);
  chk(ht && /新莊區/.test(ht.address), `標的物所在地當地址：${ht&&ht.address}`);
