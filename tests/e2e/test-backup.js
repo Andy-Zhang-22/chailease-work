@@ -52,7 +52,8 @@ const mk=(id,company)=>({id,source:'A.csv',company,aliases:[],taxId:'',grade:'',
  await pg.goto('http://localhost:9496/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('registry-auto','0'); window.DriveSync.setClientId('fake.apps.googleusercontent.com'); },[mk('r1','甲一有限公司'),mk('r2','乙二有限公司')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
- const names=()=>pg.evaluate(()=>Object.values(window.__drive.files).map(f=>f.name).sort());
+ // 摘要檔（使用統計＋成效數字）另外算，這裡只看同步檔與備份
+ const names=()=>pg.evaluate(()=>Object.values(window.__drive.files).map(f=>f.name).filter(n=>!/^電話推廣名單-摘要-/.test(n)).sort());
  await pg.evaluate(()=>window.DriveSync.sync({interactive:true}));
  let n=await names();
  chk(n.length===2 && n.includes('電話推廣名單-同步資料.json') && n.some(x=>/^電話推廣名單-備份-\d{4}-\d{2}-\d{2}\.json$/.test(x)), `第一次同步：同步檔＋一份備份：${n.join(' | ')}`);

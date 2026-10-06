@@ -1,4 +1,4 @@
-// 拜訪準備問分身、追蹤訊息草稿（使用者：「都做」）：拜訪準備頁「🤖 問分身怎麼談」、詳細頁「訊息草稿」選情境交給分身；都不帶電話、負責人、KEYMAN
+// 拜訪準備問分身（使用者：「都做」）：拜訪準備頁「🤖 問分身怎麼談」；詳細頁的「訊息草稿」後來拿掉了；都不帶電話、負責人、KEYMAN
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -23,14 +23,9 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  const last=()=>pg.evaluate(()=>window.__copied[window.__copied.length-1]||'');
  await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
- await pg.click('#drawerBody button:has-text("訊息草稿")'); await pg.waitForSelector('#editorBody .msg-kinds');
- chk((await pg.locator('#editorBody .msg-kinds button').count())===4, '四個情境：道謝、確認拜訪、追蹤資料、沒接到');
- await pg.click('#editorBody .msg-kinds button[data-kind="after"]'); await pg.waitForTimeout(200);
- let p=await last();
- chk(/幫我寫一則傳給這家窗口的 LINE／簡訊：前幾天寄了資料／報價/.test(p) && /LINE 版、簡訊版/.test(p) && /星辰精密有限公司/.test(p) && /CNC 約 800 萬/.test(p), `訊息草稿的指示與資料：${p.slice(0,120)}`);
- chk(!/0912|02-2222-3331|王O明|陳經理/.test(p), '不帶電話、負責人、KEYMAN');
- chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123', '打開分身');
- chk(await pg.locator('#editor').isHidden(), '送出後關掉情境選單，詳細頁還在');
+ // 「訊息草稿」拿掉了（使用者：「把詳細頁裡的訊息草稿跟讓ai整理刪掉，我用不到」）
+ chk((await pg.locator('#drawerBody button:has-text("訊息草稿")').count())===0, '詳細頁沒有「訊息草稿」');
+ let p='';
  await pg.click('#drawerBody button:has-text("拜訪準備")'); await pg.waitForSelector('#editorBody .brief');
  chk((await pg.getAttribute('#editorBody button.twin-btn','title'))==='問 Claude' && (await pg.textContent('#editorBody button.twin-btn'))==='🤖', '拜訪準備的問分身也是 🤖、提示「問 Claude」');
  await pg.click('#editorBody button.twin-btn'); await pg.waitForTimeout(200);

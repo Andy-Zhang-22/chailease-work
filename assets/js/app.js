@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-304';
+  const APP_VERSION = '20261007-306';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4098,84 +4098,16 @@
     toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
   }
   /*
-   * 拜訪準備問分身、追蹤訊息草稿（使用者：「都做」）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
+   * 拜訪準備問分身（使用者：「都做」；訊息草稿後來拿掉了）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
    */
   const twinAsk = (r, ask) => [ask, ...twinPrompt(r).split('\n').slice(1)].join('\n');
   const visitPrompt = (r) => twinAsk(r, '請照專案說明，我要去拜訪這家，幫我準備：1. 這次要談的重點（兩三點）2. 對方可能的需求與我可以提的方案（週轉金、投資額度、設備）3. 要先準備的資料 4. 要問老闆的問題（五題內）5. 可能遇到的拒絕與一兩句應對。簡短、條列。');
-  const MSG_KINDS = [
-    ['thanks', '打完電話道謝', '剛跟對方通完電話，傳一則道謝＋重點確認，順便留下聯絡方式的訊息'],
-    ['confirm', '確認拜訪時間', '已經約好拜訪，傳一則確認時間地點的訊息'],
-    ['after', '寄資料後追蹤', '前幾天寄了資料／報價給對方，傳一則追蹤對方看過沒、有沒有問題的訊息'],
-    ['missed', '沒接到電話', '剛打電話沒人接，傳一則簡短自我介紹、請對方方便時回電的訊息'],
-  ];
-  const msgPrompt = (r, kind) => {
-    const k = MSG_KINDS.find((x) => x[0] === kind) || MSG_KINDS[0];
-    return twinAsk(r, `請照專案說明，幫我寫一則傳給這家窗口的 LINE／簡訊：${k[2]}。根據下面的紀錄抓一個具體的點，80 字內，口語、客氣但不油，不要用表情符號；稱呼和我的名字用「○○」代替，我自己改。給兩個版本：LINE 版、簡訊版。`);
-  };
-  function openMsgDraft(r) {
-    if (!isPhone() && !twinUrl()) { openTwinSetup(() => openMsgDraft(r)); return; }
-    const host = $('#editorBody');
-    host.textContent = '';
-    host.append(el('h2', { textContent: `✉️ 追蹤訊息草稿：${r.company}` }),
-      el('p', { className: 'muted', textContent: '選一個，分身寫好 LINE 版和簡訊版。' }));
-    host.append(el('div', { className: 'card-actions msg-kinds' }, MSG_KINDS.map(([key, label]) => el('button', { className: 'btn', type: 'button', textContent: label, 'data-kind': key,
-      onclick: () => { sendToTwin(msgPrompt(r, key), '這家的資料'); $('#editor').hidden = true; } }))));
-    $('#editor').hidden = false;
-  }
   window.visitPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? visitPrompt(v) : ''; };   // 測試用
-  window.msgPrompt = (id, kind) => { const v = allViews().find((x) => x.id === id); return v ? msgPrompt(v, kind) : ''; };   // 測試用
   async function askTwin(r) {
     // 手機用不到專案網址；電腦沒設網址才先跳設定
     if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
     sendToTwin(twinPrompt(r), '這家的資料');
   }
-  /*
-   * 打完電話讓分身整理（使用者：「都做」）：記錄這通電話的筆記亂打就好，按「🤖 讓分身整理」交給分身，
-   * 分身照固定格式回「結果／結論／下一步／下次聯絡」，整段貼回來按「填進表單」，內容、結果、下次聯絡日自動填好，
-   * 使用者看過再按「儲存紀錄」（不自動存：分身寫的不一定對）。
-   */
-  const WEEK_ZH = '日一二三四五六';
-  function tidyPrompt(r, memo) {
-    const t = todayISO();
-    const d = new Date(`${t}T00:00:00`);
-    const before = maskPhones(notesBundle(r).text).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3)
-      .map((x) => (x.length > 200 ? `${x.slice(0, 200)}…` : x));
-    return [`請照專案說明，把我剛打完的這通電話筆記整理好。今天是 ${t.replace(/-/g, '/')}（週${WEEK_ZH[d.getDay()]}），筆記裡的「下週三」「月底」請換算成日期。`,
-      '回覆格式要固定（我會整段貼回系統自動填進表單），只要這四行，不要加其他段落：',
-      '結果：接通／未接／禁止推廣（三選一）', '結論：一兩句，對方的狀況、金額、時間點、態度', '下一步：我接下來要做什麼', '下次聯絡：YYYY/MM/DD（建議哪天再打；沒必要就寫「不用」）', '',
-      `【公司】${r.company}`, before.length ? `【之前的紀錄（新到舊）】\n${before.join('\n')}` : '【之前的紀錄】還沒有', '',
-      '【這通的筆記】', maskPhones(memo).trim(), '', '（電話、負責人、KEYMAN 欄位沒有附上；筆記裡的電話號碼已遮掉）'].join('\n');
-  }
-  /** 分身回的「結果／結論／下一步／下次聯絡」→ { outcome, text, nextDate }；認不出來的欄位是空的 */
-  function parseTidy(reply, today) {
-    const lines = String(reply || '').replace(/\r/g, '').split('\n').map((x) => x.replace(/^[\s*＊#>-]+/, '').replace(/[*＊]+/g, '').trim());
-    const field = (label) => {
-      const at = lines.findIndex((l) => new RegExp(`^${label}\\s*[:：]`).test(l));
-      if (at < 0) return '';
-      const out = [lines[at].replace(new RegExp(`^${label}\\s*[:：]\\s*`), '')];
-      for (let k = at + 1; k < lines.length && lines[k] && !/^(結果|結論|下一步|下次聯絡)\s*[:：]/.test(lines[k]); k += 1) out.push(lines[k]);
-      return out.join('\n').trim();
-    };
-    const res = field('結果');
-    const outcome = /禁止|不要再|拒絕推廣/.test(res) ? 'blocked' : /未接|沒接|無人接/.test(res) ? 'noanswer' : /接通|談|聊/.test(res) ? 'contacted' : '';
-    const sum = field('結論');
-    const step = field('下一步');
-    const when = field('下次聯絡');
-    let nextDate = '';
-    const full = when.match(/(\d{4})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})/);
-    const short = !full && when.match(/(\d{1,2})\s*[/月]\s*(\d{1,2})/);
-    const pad = (n) => String(n).padStart(2, '0');
-    if (full) nextDate = `${full[1]}-${pad(full[2])}-${pad(full[3])}`;
-    else if (short) {
-      const y = Number(today.slice(0, 4));
-      nextDate = `${y}-${pad(short[1])}-${pad(short[2])}`;
-      if (nextDate < today) nextDate = `${y + 1}-${pad(short[1])}-${pad(short[2])}`;
-    }
-    const text = [sum, step ? `下一步：${step}` : ''].filter(Boolean).join('\n');
-    return { outcome, text, nextDate };
-  }
-  window.parseTidy = (reply, today) => parseTidy(reply, today || todayISO());   // 測試用
-  window.tidyPrompt = (id, memo) => { const v = allViews().find((x) => x.id === id); return v ? tidyPrompt(v, memo) : ''; };   // 測試用
 
   /* ---------------- 今日撥打戰略（分身排順序、寫開場白） ---------------- */
 
@@ -6493,39 +6425,8 @@
       openDetail(r.id);
       scheduleSync();
     };
-    // 🤖 讓 AI 整理（使用者：「讓分身整理改成讓ai整理」）：筆記交給分身 → 貼回來填進表單（見 tidyPrompt）
-    // 貼回來的框按了「讓 AI 整理」才長出來：平常表單裡只有一個內容框
-    const tidyBox = el('div', { className: 'tidy-box', hidden: true });
-    const buildTidy = () => {
-      if (tidyBox.firstChild) return;
-      const paste = el('textarea', { className: 'tidy-paste', rows: 4, placeholder: '把分身的回覆整段貼在這裡（結果：…／結論：…／下一步：…／下次聯絡：…）' });
-      const msg = el('p', { className: 'muted tidy-msg', hidden: true });
-      const fill = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '填進表單' });
-      fill.onclick = () => {
-        const got = parseTidy(paste.value, todayISO());
-        if (!got.text && !got.nextDate && !got.outcome) { msg.textContent = '認不出來。請確認貼的是分身照格式回的那段（結果：／結論：／下一步：／下次聯絡：）。'; msg.hidden = false; return; }
-        const raw = memo.value.trim();
-        memo.value = got.text || raw;
-        if (got.outcome) outcomeSel.value = got.outcome;
-        if (got.nextDate) { nextInput.value = got.nextDate; nextInput.dispatchEvent(new Event('change')); }
-        writeDraft();
-        msg.textContent = `已填好${got.nextDate ? `，下次聯絡 ${dateLabel(got.nextDate)}` : ''}。看過沒問題再按「儲存紀錄」。`;
-        msg.hidden = false;
-        paste.value = '';
-        memo.focus();
-      };
-      tidyBox.append(paste, el('div', { className: 'card-actions' }, [fill]), msg);
-    };
-    const tidy = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '🤖 讓 AI 整理', title: '把這通的筆記交給分身整理成「結論＋下一步」、建議下次聯絡日；回覆貼回來自動填進表單（不附電話）' });
-    tidy.onclick = () => {
-      if (!memo.value.trim()) { toast('先把這通聊了什麼隨手打進去，再交給分身整理'); memo.focus(); return; }
-      if (!isPhone() && !twinUrl()) { openTwinSetup(() => tidy.click()); return; }
-      sendToTwin(tidyPrompt(r, memo.value), '這通的筆記');
-      buildTidy();
-      tidyBox.hidden = false;
-    };
-    form.append(memo, draftNote, saveErr, el('div', { className: 'card-actions tidy-row' }, [tidy,
-      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '✉️ 訊息草稿', title: '請分身寫一則傳給這家的 LINE／簡訊', onclick: () => openMsgDraft(r) })]), tidyBox, el('div', { className: 'row' }, [
+    // 「讓 AI 整理」「訊息草稿」拿掉了（使用者：「把詳細頁裡的訊息草稿跟讓ai整理刪掉，我用不到」）
+    form.append(memo, draftNote, saveErr, el('div', { className: 'row' }, [
       el('span', { className: 'muted', textContent: '結果' }), outcomeSel,
       el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));
@@ -9005,6 +8906,7 @@ export default {
       if (result && result.changedDuring) scheduleSync();
       await showSyncTime();
       autoRegistryTick();   // 今天的自動查核等同步成功才跑（見 maybeAutoRegistry）
+      writeSummaryMaybe();   // 雲端硬碟上的小摘要檔（使用統計＋成效數字），最多半小時一次
       if (!quiet) {
         const g = result.gained;
         const gained = [
@@ -9024,6 +8926,100 @@ export default {
       if (status && !quiet) status.textContent = `同步失敗：${err.message || err}`;
       return null;
     }
+  }
+
+  /*
+   * 使用統計＋摘要檔（使用者：「我不常用的功能有哪些？」→「可以」）。
+   * 按了哪個按鈕只記「哪一區＋按鈕上的字」和次數，存在這台裝置；看起來像公司名稱、地址、電話的不記。
+   * 同步成功後（最多半小時一次）把次數和成效統計的數字寫成雲端硬碟上的小摘要檔，Claude 每月看這個給建議。
+   */
+  const USAGE_KEY = 'usage-counts';
+  const DEVICE_KEY = 'device-id';
+  const usageLoad = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}') || {}; } catch (e) { return {}; } };
+  const NAMEISH_RE = /有限公司|股份|企業社|商行|工作室|實業|工業|科技|國際|貿易|[路街巷弄號段]|@|\d{3,}/;
+  function usageArea(b) {
+    if (b.closest('#menu')) return '選單';
+    if (b.closest('#drawer')) return '詳細頁';
+    if (b.closest('#editor')) return '視窗';
+    if (b.closest('#paneCal')) return '行事曆';
+    if (b.closest('#filters')) return '篩選';
+    if (b.closest('#feedBar, #remindBar, #departBar, #oppBar, #phoneBackBar')) return '名單上方';
+    if (b.closest('#cards')) return '名單卡片';
+    if (b.closest('#paneStats')) return '統計';
+    const pane = b.closest('[id^="pane"]');
+    if (pane) return `找名單:${pane.id.replace(/^pane/, '')}`;
+    return '上方';
+  }
+  function usageKey(target) {
+    const b = target && target.closest && target.closest('button, a, summary, .chip');
+    if (!b || b.closest('#lockGate')) return '';
+    if (b.dataset && b.dataset.act) return `選單:${b.dataset.act}`;
+    if (b.classList.contains('tab') || b.classList.contains('subtab')) return `分頁:${b.dataset.tab || b.id || ''}`;
+    if (b.classList.contains('chip')) { const g = b.closest('[data-group]'); return `${usageArea(b)}:篩選${g ? `（${g.dataset.group}）` : ''}`; }
+    if (b.matches('a[href^="tel:"]')) return `${usageArea(b)}:撥號`;
+    if (b.matches('.card-name, .remind-open, .depart-name, .link-btn, .copy-dot') || b.closest('.card-name')) return '';
+    const raw = String(b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!raw || NAMEISH_RE.test(raw)) return '';
+    const label = raw.replace(/（[^）]*）/g, '').replace(/\d+/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+    return label ? `${usageArea(b)}:${label}` : '';
+  }
+  function countUsage(e) {
+    try {
+      const k = usageKey(e.target);
+      if (!k) return;
+      const m = todayISO().slice(0, 7);
+      const all = usageLoad();
+      all[m] = all[m] || {};
+      all[m][k] = (all[m][k] || 0) + 1;
+      const keep = Object.keys(all).sort().slice(-6);   // 留最近 6 個月
+      Object.keys(all).forEach((x) => { if (!keep.includes(x)) delete all[x]; });
+      localStorage.setItem(USAGE_KEY, JSON.stringify(all));
+    } catch (err) { /* 無痕模式或存不下：不影響按鈕本身 */ }
+  }
+  window.usageKey = usageKey;   // 測試用
+  function deviceLabel() {
+    let id = '';
+    try { id = localStorage.getItem(DEVICE_KEY) || ''; if (!id) { id = Math.random().toString(36).slice(2, 8); localStorage.setItem(DEVICE_KEY, id); } } catch (e) { id = 'x'; }
+    const ua = navigator.userAgent || '';
+    const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : '裝置';
+    const app = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone ? 'App' : '瀏覽器';
+    return `${kind}-${app}-${id}`;
+  }
+  /** 摘要：只有家數、比例、次數，沒有公司名稱、電話 */
+  function buildSummary() {
+    const views = allViews();
+    const f = window.funnelStats(views);
+    const month = (iso) => String(iso || '').slice(0, 7);
+    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
+    const logsByMonth = {};
+    state.logs.forEach((l) => {
+      const m = month(l.date); if (!m) return;
+      const t = logsByMonth[m] || (logsByMonth[m] = { calls: 0, contacted: 0, meetings: 0 });
+      t.calls += 1; if (l.outcome === 'contacted') t.contacted += 1; if (l.meeting) t.meetings += 1;
+    });
+    const freshByMonth = {};
+    views.filter((v) => /^每日新名單/.test(String(v.source || ''))).forEach((v) => {
+      const m = month(v.addedDate); if (!m) return;
+      const t = freshByMonth[m] || (freshByMonth[m] = blank());
+      t.n += 1;
+      if (v.blocked || (v.outcome && v.outcome !== 'new')) t.called += 1;
+      if (v.outcome === 'contacted') t.reached += 1;
+      if (v.chance === 'yes') t.chance += 1;
+      if (v.blocked) t.blocked += 1;
+    });
+    const recent = (o) => Object.fromEntries(Object.keys(o).sort().slice(-6).map((k) => [k, o[k]]));
+    return {
+      generatedAt: new Date().toISOString(), version: APP_VERSION, device: deviceLabel(),
+      customers: views.length, settings: { mainCap: mainCap(), newQuota: newQuota() },
+      funnel: f, freshByMonth: recent(freshByMonth), logsByMonth: recent(logsByMonth), usage: usageLoad(),
+    };
+  }
+  window.buildSummary = buildSummary;   // 測試用
+  let summaryAt = 0;
+  async function writeSummaryMaybe() {
+    if (!window.DriveSync.writeSummary || Date.now() - summaryAt < 30 * 60000) return;
+    summaryAt = Date.now();
+    try { await window.DriveSync.writeSummary(`${window.DriveSync.SUMMARY_PREFIX}${deviceLabel()}.json`, buildSummary()); } catch (err) { console.warn('摘要檔寫不上去', err); }
   }
 
   /** 記完通話後過幾秒自動推上去，不要每按一次就打一次 API。 */
@@ -9514,6 +9510,7 @@ export default {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = `assets/vendor/pdfjs/pdf.worker.min.js?v=${APP_VERSION}`;
     $('#menuVersion').textContent = `版本 ${APP_VERSION}`;
     wireEvents();
+    document.addEventListener('click', countUsage, true);   // 使用統計：只記按鈕上的字與次數
     await reload();
     const undone = await undoClosedBatch();
     render();

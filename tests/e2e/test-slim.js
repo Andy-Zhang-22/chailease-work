@@ -38,7 +38,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.click('#drawerBody .detail-acts-more');
  chk(await pg.isVisible('#drawerBody button:has-text("編輯資料")') && await pg.isVisible('#drawerBody button:has-text("承作檢核")') && await pg.isVisible('#drawerBody button:has-text("匯出 Excel")'), '按「⋯」冒出編輯資料、承作檢核、匯出 Excel');
  chk(!(await pg.evaluate(()=>document.querySelector('#drawerBody .remind-section').open)), '回撥提醒預設收起');
- chk((await pg.locator('#drawerBody button:has-text("讓 AI 整理")').count())===1 && (await pg.locator('#drawerBody button:has-text("讓分身整理")').count())===0, '改名「讓 AI 整理」');
+ chk((await pg.locator('#drawerBody button:has-text("讓 AI 整理")').count())===0 && (await pg.locator('#drawerBody button:has-text("訊息草稿")').count())===0, '「讓 AI 整理」「訊息草稿」拿掉了');
  await pg.click('#drawerBody .remind-section > summary'); await pg.click('#drawerBody button:has-text("1 小時後")'); await pg.waitForTimeout(600);
  chk(await pg.evaluate(()=>document.querySelector('#drawerBody .remind-section').open), '設了提醒之後回撥提醒自動展開');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

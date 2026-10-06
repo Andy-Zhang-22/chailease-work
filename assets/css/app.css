@@ -1130,9 +1130,6 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .opp-bar .opp-btn.is-on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
 .badge-opp { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--text); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); }
 /* 讓分身整理：貼回來的框 */
-.tidy-row { margin: 4px 0; }
-.tidy-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 8px; margin: 6px 0; }
-.tidy-box .tidy-paste { width: 100%; box-sizing: border-box; }
 /* 各來源分頁「已在名單　📝 記錄」：點了直接記這通電話 */
 .badge-mine.is-log { cursor: pointer; }
 .badge-mine.is-log:hover { text-decoration: underline; }
