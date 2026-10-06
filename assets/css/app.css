@@ -1156,3 +1156,12 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .excluded-meta { font-size: 12.5px; margin: 2px 0; }
 .excluded-phone { margin: 4px 0; font-weight: 600; }
 .badge-phone-back { color: var(--primary); border-color: var(--primary); }
+/* 今天要拜訪（出發提醒） */
+.depart-bar { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13.5px; }
+.depart-head { font-weight: 600; margin-bottom: 4px; }
+.depart-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0; border-top: 1px dashed var(--border); }
+.depart-row:first-of-type { border-top: 0; }
+.depart-time { min-width: 7.5em; color: var(--muted); font-weight: 600; }
+.depart-row.is-due { color: var(--danger); }
+.depart-row.is-due .depart-time { color: var(--danger); }
+.depart-name { background: none; border: 0; padding: 0; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 14px; }

@@ -126,7 +126,7 @@
     };
     const actions = el('div', { className: 'card-actions' }, [add,
       isHidden ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(it); render(); } })
-        : el('button', { className: 'btn btn-tiny mix-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(it); render(); toast('藏起來了（六份名單一起藏）'); } })]);
+        : el('button', { className: 'btn btn-tiny mix-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(it); render(); toast('藏起來了（七份名單一起藏）'); } })]);
     return el('article', { className: `card leads-card mix-card${d.branchKey === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': it.key }, [top, phone, meta, srcs, actions]);
   }
 
