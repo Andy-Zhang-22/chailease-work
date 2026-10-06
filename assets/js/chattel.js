@@ -678,8 +678,16 @@
   /** 金主的短名：新鑫股份有限公司 → 新鑫 */
   const lenderShort = (name) => String(name || '').replace(/股份有限公司|有限公司|國際租賃|企業|股份/g, '').trim() || '不明';
 
-  async function start() {
-    if (started) return;
+  /*
+   * 同時有好幾個地方要這份資料（新名單合併頁、每日新名單、背景預載）：大家等同一次載入。
+   * 以前第二個呼叫的看到「已經開始」就直接回來，資料還沒載好就算出 0 家（使用者：「為什麼這個是0」）。
+   */
+  let starting = null;
+  function start() {
+    if (!starting) starting = startOnce();
+    return starting;
+  }
+  async function startOnce() {
     started = true;
     build();
     try {
