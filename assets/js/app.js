@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261006-300';
+  const APP_VERSION = '20261007-301';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -9027,7 +9027,7 @@ export default {
     nhi: { input: '#nhi-q', placeholder: '搜尋剛開始請人：名稱、統編、地址、行業、電話' },
     einv: { input: '#einv-q', placeholder: '搜尋剛開電子發票：名稱、統編、地址、行業、電話' },
     factory: { input: '#factory-q', placeholder: '搜尋新設工廠：名稱、統編、地址、行業、主要產品、電話' },
-    mix: { input: '#mix-q', placeholder: '搜尋新名單（六份合併）：名稱、統編、地址、電話、訊號' },
+    mix: { input: '#mix-q', placeholder: '搜尋新名單（七份合併）：名稱、統編、地址、電話、訊號' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {
