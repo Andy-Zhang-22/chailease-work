@@ -212,12 +212,14 @@
      * 只在這裡記——deleteRecordsById（重匯覆蓋）跟 wipe（清空）都不記，
      * 那兩個不是「不要這家公司」的意思。
      */
-    async deleteRecord(id) {
+    async deleteRecord(id, opts) {
       const before = await tx('records', 'readonly', (store) => req2promise(store.get(id)));
       await tx('records', 'readwrite', (store) => store.delete(id));
       if (before) {
+        // noPhone：「找不到電話，先收起來」——之後公開資料查到電話會提醒（見 app.js phoneBackDaily）
+        const why = opts && opts.noPhone ? { noPhone: true } : {};
         for (const key of window.Normalize.companyKeys(before)) {
-          await api.addTombstone('companies', key, { company: before.company, taxId: before.taxId || '' });
+          await api.addTombstone('companies', key, { company: before.company, taxId: before.taxId || '', ...why });
         }
       }
 
@@ -386,6 +388,24 @@
         // 所以要主動留下「已收回」標記，比對時才蓋得過去
         if (!force && all.companies[k] === undefined) return;
         all.companies[k] = { at: Date.now(), lifted: true, ...(info || {}) };
+        n += 1;
+      });
+      if (n) await api.setMeta('tombstones', all);
+      return n;
+    },
+
+    /*
+     * 改排除中公司墓碑上的註記（例如「還是不要」：不再提醒查到電話）。還是排除中，只換內容；
+     * at 換成現在，同步合併時取新的才會贏。已收回的不動。
+     */
+    async patchCompanyTombstones(keys, patch) {
+      const all = (await api.getMeta('tombstones')) || {};
+      all.companies = all.companies || {};
+      let n = 0;
+      keys.forEach((k) => {
+        const v = all.companies[k];
+        if (v === undefined || (v && v.lifted)) return;
+        all.companies[k] = { ...(v && typeof v === 'object' ? v : {}), ...patch, at: Date.now() };
         n += 1;
       });
       if (n) await api.setMeta('tombstones', all);

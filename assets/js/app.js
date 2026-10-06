@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261005-295';
+  const APP_VERSION = '20261006-296';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -494,6 +494,7 @@
   function renderRemindBar() {
     renderFeedBar();
     renderOppBar();
+    renderPhoneBackBar();
     const bar = $('#remindBar');
     if (!bar) return;
     const items = remindItems();
@@ -1142,17 +1143,29 @@
       const dupNote = twins.length
         ? `\n另外名單裡還有 ${twins.length} 筆同一家公司（來源：${[...new Set(twins.map((x) => x.source))].join('、')}），一起刪掉。\n`
         : '';
-      const ok = await askConfirm(`確定要從名單刪掉「${r.company}」嗎？\n`
+      const msg = `確定要從名單刪掉「${r.company}」嗎？\n`
         + names + dupNote
         + (extra ? `\n連同${extra}會一起刪掉。\n` : '')
         + `\n總共 ${all.length} 筆。這個動作救不回來，其他裝置同步後也會一起消失。`
-        + '\n（之後重新匯入同一份 PDF 的話，這些會再出現）',
-      { danger: true, okText: all.length > 1 ? `全部刪掉（${all.length} 筆）` : '刪掉' });
-      if (!ok) return;
+        + '\n（之後重新匯入同一份 PDF 的話，這些會再出現）';
+      /*
+       * 沒電話的分兩種刪法（使用者：「我刪除的電話中目前有些是在公開資訊上找不到電話的，但可能未來會找的到」）：
+       * 「找不到電話」記在排除名單上，之後出進口、健保、電子發票、新設工廠的公開資料查到電話會提醒；「不要了」照舊。
+       */
+      let noPhone = false;
+      if (core.every((x) => !(x.phones && x.phones.length))) {
+        const NO_PHONE = '找不到電話，先收起來（之後查到電話會提醒你）';
+        const pick = await askPick(msg, [NO_PHONE, all.length > 1 ? `不要了，全部刪掉（${all.length} 筆）` : '不要了，刪掉']);
+        if (!pick) return;
+        noPhone = pick === NO_PHONE;
+      } else {
+        const ok = await askConfirm(msg, { danger: true, okText: all.length > 1 ? `全部刪掉（${all.length} 筆）` : '刪掉' });
+        if (!ok) return;
+      }
 
       // 刪不掉要講出來：以前沒有 try，失敗就是一個沒人看得到的錯誤
       try {
-        for (const id of all) await window.Store.deleteRecord(id);
+        for (const id of all) await window.Store.deleteRecord(id, { noPhone });
         const left = await window.Store.allRecords();
         const stuck = all.filter((id) => left.some((x) => x.id === id));
         if (stuck.length) throw new Error('刪掉了但還讀得到');
@@ -1421,6 +1434,235 @@
   }
   window.tradePhones = tradePhones;   // 測試用
 
+  /*
+   * 找不到電話先收起來的公司（使用者：「我刪除的電話中目前有些是在公開資訊上找不到電話的，但可能未來會找的到」）。
+   *
+   * 刪的時候選「找不到電話」會在排除名單的墓碑上記 noPhone。每天第一次打開時用統編比對幾份每月更新、
+   * 有電話的公開資料（出進口廠商登記、剛開始請人、剛開電子發票、新設工廠），查到了只在名單上面提醒，
+   * 不自動放回名單（使用者：「別亂幫我標記」），放不放回由使用者在「已排除的公司」決定。
+   * Google 地圖不自動查：要用使用者的金鑰、每查一次都算次數。
+   */
+  const PHONE_BACK_KEY = 'phone-back';
+  let phoneBack = (() => { try { return JSON.parse(localStorage.getItem(PHONE_BACK_KEY) || 'null'); } catch (e) { return null; } })();
+  const savePhoneBack = () => { try { localStorage.setItem(PHONE_BACK_KEY, JSON.stringify(phoneBack)); } catch (e) { /* 無痕 */ } };
+  const taxOnly = (t) => String(t || '').replace(/\D/g, '');
+
+  /** 排除中的公司，同一家（統編或名稱）的幾個鍵併成一列 */
+  async function excludedCompanies() {
+    const tombs = (await window.Store.getTombstones()).companies || {};
+    const by = new Map();
+    Object.keys(tombs).forEach((k) => {
+      const v = tombs[k];
+      if (v === undefined || (v && v.lifted)) return;
+      const info = v && typeof v === 'object' ? v : {};
+      const tax = taxOnly(info.taxId || (k.startsWith('tax:') ? k.slice(4) : ''));
+      const name = info.company || k.replace(/^(tax|name):/, '');
+      const id = tax.length === 8 ? `tax:${tax}` : `name:${name}`;
+      const e = by.get(id) || { id, taxId: tax.length === 8 ? tax : '', company: name, keys: [], at: 0, noPhone: false };
+      e.keys.push(k);
+      e.at = Math.max(e.at, info.at || (typeof v === 'number' ? v : 0));
+      if (info.noPhone) e.noPhone = true;
+      if (info.keep) e.keep = true;      // 按過「還是不要」：查到電話也不再提
+      if (info.company) e.company = info.company;
+      by.set(id, e);
+    });
+    return [...by.values()];
+  }
+
+  /** 統編 → 公開資料裡的電話 { tel, from }；資料要先載（loadPhoneSources） */
+  const PHONE_SOURCES = [
+    ['Nhi', '剛開始請人（健保）'], ['Einv', '剛開電子發票'], ['Factory', '新設工廠'],
+  ];
+  async function loadPhoneSources() {
+    await Promise.all([
+      window.Trade && window.Trade.ensurePhones ? window.Trade.ensurePhones().catch(() => null) : null,
+      ...PHONE_SOURCES.map(([m]) => {
+        const mod = window[m];
+        if (!mod) return null;
+        return (mod.ensureData ? mod.ensureData() : mod.dailyCandidates ? mod.dailyCandidates() : Promise.resolve()).catch(() => null);
+      }),
+    ]);
+  }
+  async function publicPhoneOf(tax) {
+    if (taxOnly(tax).length !== 8) return null;
+    if (window.Trade && window.Trade.phoneOf) {
+      const p = await window.Trade.phoneOf(tax).catch(() => null);
+      if (p && p.tel) return { tel: p.tel, from: '出進口廠商登記' };
+    }
+    for (const [m, label] of PHONE_SOURCES) {
+      const mod = window[m];
+      const f = mod && mod.factsOf ? mod.factsOf(tax) : null;
+      if (f && f.tel) return { tel: f.tel, from: label };
+    }
+    return null;
+  }
+  async function phonesOfExcluded(list) {
+    const out = new Map();
+    const want = list.filter((e) => e.taxId && !e.keep);
+    if (!want.length) return out;
+    await loadPhoneSources();
+    for (const e of want) {
+      const p = await publicPhoneOf(e.taxId);
+      if (p) out.set(e.id, p);
+    }
+    return out;
+  }
+
+  /** 每天一次：「找不到電話」的那幾家，公開資料查到電話了沒（查到只提醒，見 renderPhoneBackBar） */
+  async function phoneBackDaily(opts = {}) {
+    const today = todayISO();
+    if (!opts.force && phoneBack && phoneBack.day === today) return phoneBack.hits;
+    const list = (await excludedCompanies()).filter((e) => e.noPhone && e.taxId);
+    const phones = await phonesOfExcluded(list);
+    phoneBack = { day: today, hits: list.filter((e) => phones.has(e.id)).map((e) => ({ id: e.id, taxId: e.taxId, company: e.company, ...phones.get(e.id) })) };
+    savePhoneBack();
+    renderPhoneBackBar();
+    return phoneBack.hits;
+  }
+  window.phoneBackDaily = phoneBackDaily;   // 測試用
+
+  function renderPhoneBackBar() {
+    const bar = $('#phoneBackBar');
+    if (!bar) return;
+    bar.textContent = '';
+    // 已經放回、收回、按了「還是不要」的不算
+    const hits = ((phoneBack && phoneBack.hits) || []).filter((h) => window.deletedCompany && window.deletedCompany(h.company, h.taxId));
+    bar.hidden = !hits.length;
+    if (!hits.length) return;
+    bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `📞 之前找不到電話的 ${hits.length} 家，現在查到電話了`,
+      title: hits.slice(0, 12).map((h) => `${h.company}：${h.tel}（${h.from}）`).join('\n'), onclick: () => openExcluded() }));
+  }
+  const dropPhoneBackHit = (id) => {
+    if (!phoneBack || !phoneBack.hits) return;
+    phoneBack.hits = phoneBack.hits.filter((h) => h.id !== id);
+    savePhoneBack();
+  };
+
+  /** 排除名單的公司放回名單，帶著公開資料查到的電話（跟手動新增同一種來源）；opts.quiet：整批放回時最後才重畫一次 */
+  async function putBackExcluded(e, ph, opts = {}) {
+    await window.Store.liftCompanyTombstones(e.keys, { company: e.company, taxId: e.taxId }, { force: true });
+    const source = '手動新增';
+    const id = window.Normalize.makeId(source, e.company, e.taxId);
+    const dup = state.records.find((r) => r.id === id || sameCompany(r, { company: e.company, taxId: e.taxId }));
+    if (!dup) {
+      // 地址從有這家的那份公開資料拿（沒有就空著，商工登記查核會補）
+      const f = e.taxId ? MIX_SOURCES.map((x) => (x.mod() && x.mod().factsOf ? x.mod().factsOf(e.taxId) : null)).find((x) => x && x.address) : null;
+      const address = (f && f.address) || '';
+      const record = {
+        id, source, company: e.company, aliases: [], taxId: e.taxId,
+        grade: '', founded: '', capital: '', phoneRaw: ph.tel, phones: window.Normalize.extractPhones(ph.tel),
+        owner: '', keyman: '', industry: '', nextDate: todayISO(), lastDate: null, addedDate: todayISO(), country: '台灣',
+        address, addressActual: address, notesRaw: '', timeline: [], outcome: 'new', importedAt: Date.now(),
+      };
+      Object.assign(record, window.Normalize.parseAddressAny(address, address));
+      await window.Store.saveRecords([record]);
+    }
+    dropPhoneBackHit(e.id);
+    if (opts.quiet) return dup ? '' : id;
+    await refreshDeleted();
+    await reload(); render(); scheduleSync();
+    if (!dup) checkNewRecords([id]);
+    toast(dup ? `已收回「${e.company}」（名單裡本來就有）` : `已放回名單：${e.company}（${ph.tel}，來自${ph.from}）`);
+    return dup ? '' : id;
+  }
+
+  /*
+   * 已排除的公司（選單「進階 → 管理已排除的公司」、名單上面那行提醒都開這裡）。
+   * 公開資料查到電話的排最前面，可以直接放回名單；標「找不到電話」的有 Google／地圖／104／1111 自己再找。
+   */
+  async function openExcluded() {
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: '已排除的公司' }),
+      el('p', { className: 'muted', textContent: '這些公司匯入名單、每日新名單都會自動剔除。標「找不到電話」的，每天會用出進口廠商、健保、電子發票、新設工廠的公開資料比對一次，查到電話會在名單上面提醒你。' }));
+    const status = el('p', { className: 'muted excluded-status', textContent: '比對公開資料的電話中…' });
+    const list = el('div', { className: 'excluded-list' });
+    host.append(status, list);
+    $('#editor').hidden = false;
+    const rows = await excludedCompanies();
+    if (!rows.length) { status.textContent = '目前沒有排除任何公司。'; return; }
+    let phones = new Map();
+    let draw = () => {
+      list.textContent = '';
+      const live = rows.filter((e) => !e.gone);
+      const order = (e) => (phones.has(e.id) ? 0 : e.noPhone ? 1 : 2);
+      live.sort((a, b) => order(a) - order(b) || b.at - a.at).forEach((e) => {
+        const ph = phones.get(e.id);
+        const row = el('div', { className: `excluded-row${ph ? ' has-phone' : ''}`, 'data-id': e.id });
+        row.append(el('div', { className: 'excluded-head' }, [
+          el('strong', { textContent: e.company }),
+          e.noPhone ? el('span', { className: 'badge', textContent: '找不到電話' }) : '',
+          ph ? el('span', { className: 'badge badge-phone-back', textContent: '有電話了' }) : '',
+        ]));
+        row.append(el('div', { className: 'muted excluded-meta', textContent: [e.taxId ? `統編 ${e.taxId}` : '', e.at ? `${dateLabel(isoOfMs(e.at))} 排除` : ''].filter(Boolean).join('　') }));
+        if (ph) row.append(el('div', { className: 'excluded-phone', textContent: `📞 ${ph.tel}（${ph.from}）` }));
+        const acts = el('div', { className: 'card-actions' });
+        if (ph) {
+          acts.append(el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '放回名單', onclick: async (ev) => {
+            ev.target.disabled = true;
+            await putBackExcluded(e, ph);
+            e.gone = true; draw();
+          } }));
+          // 以前刪掉的沒記原因，查到電話的裡面可能有當初就不要的：一樣可以按「還是不要」，整批放回時就不會帶到
+          acts.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '還是不要', title: '維持排除，以後不再提醒這家', onclick: async () => {
+            await window.Store.patchCompanyTombstones(e.keys, { noPhone: false, keep: true });
+            dropPhoneBackHit(e.id); scheduleSync(); renderPhoneBackBar();
+            e.noPhone = false; e.keep = true; phones.delete(e.id); draw();
+            toast(`「${e.company}」維持排除，不再提醒`);
+          } }));
+        } else {
+          acts.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '收回', title: '不再排除，之後匯入名單會照常出現', onclick: async () => {
+            await window.Store.liftCompanyTombstones(e.keys, { company: e.company, taxId: e.taxId });
+            await refreshDeleted(); scheduleSync();
+            e.gone = true; draw();
+            toast(`已收回「${e.company}」，之後匯入名單會再出現`);
+          } }));
+          acts.append(...phoneSearchLinks(e.company, ''));
+        }
+        row.append(acts);
+        list.append(row);
+      });
+      if (!live.length) status.textContent = '目前沒有排除任何公司。';
+    };
+    /*
+     * 整批放回（使用者：「過往那些沒電話被刪掉的名單能把我重新比對一次再加回來嗎」）：
+     * 查到電話的一次放回名單。以前刪的沒記原因，所以先列名字確認；不要的先按那家的「還是不要」。
+     */
+    const allBtn = el('button', { className: 'btn btn-primary excluded-all', type: 'button', hidden: true });
+    allBtn.onclick = async () => {
+      const todo = rows.filter((e) => !e.gone && phones.has(e.id));
+      if (!todo.length) return;
+      const names = todo.slice(0, 30).map((e) => `・${e.company}（${phones.get(e.id).tel}）`).join('\n');
+      const ok = await askConfirm(`把查到電話的 ${todo.length} 家放回名單？下次聯絡日排今天。\n\n${names}${todo.length > 30 ? `\n…還有 ${todo.length - 30} 家` : ''}\n\n`
+        + '以前刪掉的沒記原因，裡面如果有當初就不要的，先取消、按那家的「還是不要」再來。', { okText: `全部放回（${todo.length} 家）` });
+      if (!ok) return;
+      allBtn.disabled = true; allBtn.textContent = '放回中…';
+      const ids = [];
+      for (const e of todo) {
+        try { const id = await putBackExcluded(e, phones.get(e.id), { quiet: true }); if (id) ids.push(id); e.gone = true; } catch (err) { console.error(err); }
+      }
+      await refreshDeleted();
+      await reload(); render(); scheduleSync();
+      if (ids.length) checkNewRecords(ids);
+      draw();
+      toast(`已放回名單 ${todo.filter((e) => e.gone).length} 家，都帶著公開資料查到的電話`);
+    };
+    const drawAll = () => {
+      const n = rows.filter((e) => !e.gone && phones.has(e.id)).length;
+      allBtn.hidden = !n;
+      allBtn.disabled = false;
+      allBtn.textContent = `查到電話的 ${n} 家全部放回名單`;
+    };
+    status.after(allBtn);
+    const redraw = draw;
+    draw = () => { redraw(); drawAll(); };
+    draw();
+    try { phones = await phonesOfExcluded(rows); } catch (err) { console.error(err); }
+    status.textContent = `共 ${rows.length} 家。${phones.size ? `其中 ${phones.size} 家在公開資料查到電話了。` : '公開資料裡還查不到這些公司的電話。'}`;
+    draw();
+  }
+  window.openExcluded = openExcluded;
+
   /** 採用某個店家的電話：存成編輯覆蓋（跟手動改電話一樣），並記下來源。 */
   async function adoptPlacePhone(r, p) {
     const st = state.userStates.get(r.id) || {};
@@ -1538,10 +1780,11 @@
           });
         }
         // 找不到就刪：使用者的規矩。放在結果下面，跟刪除鈕一樣要確認
-        const del = el('button', { className: 'btn btn-tiny danger-text', type: 'button', textContent: '找不到，刪掉這家' });
+        // 記成「找不到電話」：之後公開資料查到電話會提醒（見 phoneBackDaily）
+        const del = el('button', { className: 'btn btn-tiny danger-text', type: 'button', textContent: '找不到電話，先收起來' });
         del.onclick = async () => {
-          if (!await askConfirm(`刪掉「${r.company}」？通話紀錄與編輯內容會一起消失，而且會同步到其他裝置。`, { danger: true, okText: '刪除' })) return;
-          await window.Store.deleteRecord(r.id);
+          if (!await askConfirm(`把「${r.company}」從名單收起來？通話紀錄與編輯內容會一起消失，而且會同步到其他裝置。\n\n之後出進口、健保、電子發票、新設工廠的公開資料查到這家的電話，名單上面會提醒你。`, { danger: true, okText: '收起來' })) return;
+          await window.Store.deleteRecord(r.id, { noPhone: true });
           await reload(); closeOverlays(); render(); scheduleSync(); toast(`已刪除 ${r.company}`);
         };
         out.append(el('div', { className: 'card-actions' }, [del]));
@@ -8991,29 +9234,8 @@ export default {
        * 「匯進去卻沒出現」——這種無聲的擋掉比不擋還糟。列出來、一鍵收回。
        * 同一家公司會有統編和公司名兩個鍵，收回時要一起拿掉。
        */
-      if (act === 'excluded') {
-        const tombs = (await window.Store.getTombstones()).companies || {};
-        // 收回過的不算，否則清單會一直留著已經收回的公司
-        const keys = Object.keys(tombs).filter((k) => !(tombs[k] && tombs[k].lifted));
-        if (!keys.length) { toast('目前沒有排除任何公司'); return; }
-        const byName = new Map();
-        keys.forEach((k) => {
-          const info = tombs[k];
-          const label = (info && typeof info === 'object' && info.company) || k.replace(/^(tax|name):/, '');
-          if (!byName.has(label)) byName.set(label, []);
-          byName.get(label).push(k);
-        });
-        const picked = await askPick(
-          `這些公司匯入名單時會自動剔除（共 ${byName.size} 家）。\n選一家就把它收回，之後匯入會照常出現。`,
-          [...byName.keys()],
-        );
-        if (!picked) return;
-        await window.Store.liftCompanyTombstones(byName.get(picked), { company: picked });
-        await refreshDeleted();
-        toast(`已收回「${picked}」，之後匯入名單會再出現`);
-        scheduleSync();
-        return;
-      }
+      // 一家一列：公開資料查到電話的排最前面、可以直接放回名單（見 openExcluded）
+      if (act === 'excluded') { await openExcluded(); return; }
       if (act === 'wipe') {
         const synced = window.DriveSync.isConfigured();
         const total = state.records.length;
@@ -9143,9 +9365,11 @@ export default {
     if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
-      runSync({ quiet: true }).then(() => dailyFeed()).catch(() => dailyFeed()).then(() => autoRebalance()).catch(console.error);
+      runSync({ quiet: true }).then(() => dailyFeed()).catch(() => dailyFeed()).then(() => autoRebalance()).catch(console.error)
+        .then(() => phoneBackDaily()).catch(console.error);
     } else {
-      dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error);
+      dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error)
+        .then(() => phoneBackDaily()).catch(console.error);
     }
     // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）；挑完再照上限重排（一天一次）
     setInterval(() => { dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error); }, 60000);

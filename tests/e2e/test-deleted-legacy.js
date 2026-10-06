@@ -56,14 +56,15 @@ const names=(pg)=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].m
  const after=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies);
  chk(!!after['tax:22222222']&&!!after['name:乙精密股份有限公司'], `已補上公司墓碑：${JSON.stringify(Object.keys(after))}`);
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('.ask-overlay');
- chk(/乙精密股份有限公司/.test(await pg.textContent('.ask-overlay')), '早上刪的那家也列得出來、收得回來');
- await pg.click('.ask-overlay .btn:has-text("取消")'); await pg.waitForTimeout(300);
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('#editorBody .excluded-row');
+ chk(/乙精密股份有限公司/.test(await pg.textContent('#editorBody .excluded-list')), '早上刪的那家也列得出來、收得回來');
+ await pg.click('#editor .drawer-close'); await pg.waitForTimeout(300);
 
  // 收回要能撐過同步：墓碑是聯集合併，直接刪掉的話雲端那份會把它加回來
  await pg.click('#btnMenu'); await pg.waitForTimeout(300);
- await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('.ask-overlay');
- await pg.click('.ask-overlay .ask-list .btn:has-text("乙精密股份有限公司")'); await pg.waitForTimeout(600);
+ await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="excluded"]'); await pg.waitForSelector('#editorBody .excluded-row');
+ await pg.click('#editorBody .excluded-row:has-text("乙精密股份有限公司") button:has-text("收回")'); await pg.waitForTimeout(600);
+ await pg.click('#editor .drawer-close'); await pg.waitForTimeout(200);
  const lifted=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies);
  chk(lifted['tax:22222222']&&lifted['tax:22222222'].lifted===true,
    `收回是寫「已收回」標記而不是刪掉鍵：${JSON.stringify(lifted['tax:22222222'])}`);
