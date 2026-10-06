@@ -171,6 +171,9 @@ button, input, select { font: inherit; color: inherit; }
   width: 100%; padding: 7px 10px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface-2);
 }
+/* 篩選裡的勾選（隱藏「禁止推廣」）：不吃上面那條撐滿整行的輸入框樣式；包一層 div，分組收起來時跟著藏 */
+.filter-check { margin-top: 8px; font-size: 13px; }
+.filter-group .filter-check input[type="checkbox"] { width: auto; padding: 0; margin: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips-row2 { margin-top: 6px; }
 .chip {
