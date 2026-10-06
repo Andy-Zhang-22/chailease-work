@@ -1462,6 +1462,7 @@
       e.keys.push(k);
       e.at = Math.max(e.at, info.at || (typeof v === 'number' ? v : 0));
       if (info.noPhone) e.noPhone = true;
+      if (info.keep) e.keep = true;      // 按過「還是不要」：查到電話也不再提
       if (info.company) e.company = info.company;
       by.set(id, e);
     });
@@ -1497,7 +1498,7 @@
   }
   async function phonesOfExcluded(list) {
     const out = new Map();
-    const want = list.filter((e) => e.taxId);
+    const want = list.filter((e) => e.taxId && !e.keep);
     if (!want.length) return out;
     await loadPhoneSources();
     for (const e of want) {
@@ -1537,8 +1538,8 @@
     savePhoneBack();
   };
 
-  /** 排除名單的公司放回名單，帶著公開資料查到的電話（跟手動新增同一種來源） */
-  async function putBackExcluded(e, ph) {
+  /** 排除名單的公司放回名單，帶著公開資料查到的電話（跟手動新增同一種來源）；opts.quiet：整批放回時最後才重畫一次 */
+  async function putBackExcluded(e, ph, opts = {}) {
     await window.Store.liftCompanyTombstones(e.keys, { company: e.company, taxId: e.taxId }, { force: true });
     const source = '手動新增';
     const id = window.Normalize.makeId(source, e.company, e.taxId);
@@ -1557,10 +1558,12 @@
       await window.Store.saveRecords([record]);
     }
     dropPhoneBackHit(e.id);
+    if (opts.quiet) return dup ? '' : id;
     await refreshDeleted();
     await reload(); render(); scheduleSync();
     if (!dup) checkNewRecords([id]);
     toast(dup ? `已收回「${e.company}」（名單裡本來就有）` : `已放回名單：${e.company}（${ph.tel}，來自${ph.from}）`);
+    return dup ? '' : id;
   }
 
   /*
@@ -1579,7 +1582,7 @@
     const rows = await excludedCompanies();
     if (!rows.length) { status.textContent = '目前沒有排除任何公司。'; return; }
     let phones = new Map();
-    const draw = () => {
+    let draw = () => {
       list.textContent = '';
       const live = rows.filter((e) => !e.gone);
       const order = (e) => (phones.has(e.id) ? 0 : e.noPhone ? 1 : 2);
@@ -1600,14 +1603,13 @@
             await putBackExcluded(e, ph);
             e.gone = true; draw();
           } }));
-          if (e.noPhone) {
-            acts.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '還是不要', title: '維持排除，以後不再提醒這家', onclick: async () => {
-              await window.Store.patchCompanyTombstones(e.keys, { noPhone: false });
-              dropPhoneBackHit(e.id); scheduleSync(); renderPhoneBackBar();
-              e.noPhone = false; phones.delete(e.id); draw();
-              toast(`「${e.company}」維持排除，不再提醒`);
-            } }));
-          }
+          // 以前刪掉的沒記原因，查到電話的裡面可能有當初就不要的：一樣可以按「還是不要」，整批放回時就不會帶到
+          acts.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '還是不要', title: '維持排除，以後不再提醒這家', onclick: async () => {
+            await window.Store.patchCompanyTombstones(e.keys, { noPhone: false, keep: true });
+            dropPhoneBackHit(e.id); scheduleSync(); renderPhoneBackBar();
+            e.noPhone = false; e.keep = true; phones.delete(e.id); draw();
+            toast(`「${e.company}」維持排除，不再提醒`);
+          } }));
         } else {
           acts.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: '收回', title: '不再排除，之後匯入名單會照常出現', onclick: async () => {
             await window.Store.liftCompanyTombstones(e.keys, { company: e.company, taxId: e.taxId });
@@ -1622,6 +1624,38 @@
       });
       if (!live.length) status.textContent = '目前沒有排除任何公司。';
     };
+    /*
+     * 整批放回（使用者：「過往那些沒電話被刪掉的名單能把我重新比對一次再加回來嗎」）：
+     * 查到電話的一次放回名單。以前刪的沒記原因，所以先列名字確認；不要的先按那家的「還是不要」。
+     */
+    const allBtn = el('button', { className: 'btn btn-primary excluded-all', type: 'button', hidden: true });
+    allBtn.onclick = async () => {
+      const todo = rows.filter((e) => !e.gone && phones.has(e.id));
+      if (!todo.length) return;
+      const names = todo.slice(0, 30).map((e) => `・${e.company}（${phones.get(e.id).tel}）`).join('\n');
+      const ok = await askConfirm(`把查到電話的 ${todo.length} 家放回名單？下次聯絡日排今天。\n\n${names}${todo.length > 30 ? `\n…還有 ${todo.length - 30} 家` : ''}\n\n`
+        + '以前刪掉的沒記原因，裡面如果有當初就不要的，先取消、按那家的「還是不要」再來。', { okText: `全部放回（${todo.length} 家）` });
+      if (!ok) return;
+      allBtn.disabled = true; allBtn.textContent = '放回中…';
+      const ids = [];
+      for (const e of todo) {
+        try { const id = await putBackExcluded(e, phones.get(e.id), { quiet: true }); if (id) ids.push(id); e.gone = true; } catch (err) { console.error(err); }
+      }
+      await refreshDeleted();
+      await reload(); render(); scheduleSync();
+      if (ids.length) checkNewRecords(ids);
+      draw();
+      toast(`已放回名單 ${todo.filter((e) => e.gone).length} 家，都帶著公開資料查到的電話`);
+    };
+    const drawAll = () => {
+      const n = rows.filter((e) => !e.gone && phones.has(e.id)).length;
+      allBtn.hidden = !n;
+      allBtn.disabled = false;
+      allBtn.textContent = `查到電話的 ${n} 家全部放回名單`;
+    };
+    status.after(allBtn);
+    const redraw = draw;
+    draw = () => { redraw(); drawAll(); };
     draw();
     try { phones = await phonesOfExcluded(rows); } catch (err) { console.error(err); }
     status.textContent = `共 ${rows.length} 家。${phones.size ? `其中 ${phones.size} 家在公開資料查到電話了。` : '公開資料裡還查不到這些公司的電話。'}`;

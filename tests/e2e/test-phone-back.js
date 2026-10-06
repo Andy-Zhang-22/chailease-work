@@ -15,7 +15,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  let later=false;
  await ctx.route('**/leads/**',r=>{
    const u=r.request().url();
-   if(/trade\/phones\.csv/.test(u)) return r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n'+(later?'11111111,02-0000-1234,,2026/10/01\n33333333,02-0000-5678,,2026/10/01\n':'')});
+   if(/trade\/phones\.csv/.test(u)) return r.fulfill({status:200,contentType:'text/csv',body:'統編,電話,傳真,核發日期\n'+(later?'11111111,02-0000-1234,,2026/10/01\n22222222,02-0000-9999,,2026/10/01\n33333333,02-0000-5678,,2026/10/01\n':'')});
    if(/trade\/index\.json/.test(u)) return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({generatedAt:later?'b':'a'})});
    return r.fulfill({status:404,body:''});
  });
@@ -27,6 +27,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await add('公司名稱：甲範例精密有限公司\n統一編號：11111111\n地址：新北市新莊區中正路1號');
  await add('公司名稱：乙範例實業有限公司\n統一編號：22222222\n地址：新北市五股區五工路2號');
  await add('公司名稱：丙範例工業有限公司\n統一編號：33333333\n地址：新北市泰山區明志路3號');
+ await add('公司名稱：丁範例有限公司\n統一編號：44444444\n地址：新北市新莊區思源路4號');
  const del=async(name,pick)=>{ await pg.locator(`#cards .card:has-text("${name}") .card-name`).click(); await pg.waitForSelector('#drawerBody h2');
    await pg.click('#drawerBody button:has-text("刪除這筆")'); await pg.waitForSelector('.ask-overlay');
    const opts=await pg.$$eval('.ask-overlay .ask-list .btn',bs=>bs.map(b=>b.textContent));
@@ -35,6 +36,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(opts.length===2 && /找不到電話，先收起來/.test(opts[0]) && /不要了/.test(opts[1]), `沒電話的刪除有兩種：${opts.join('｜')}`);
  await del('乙範例','不要了');
  await del('丙範例','找不到電話');
+ await del('丁範例','不要了');
  const tombs=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies);
  chk(tombs['tax:11111111'].noPhone===true && !tombs['tax:22222222'].noPhone, '墓碑記著哪家是「找不到電話」');
  chk(await pg.isHidden('#phoneBackBar'), '還查不到電話時沒有提醒');
@@ -51,17 +53,26 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await pg.click('#phoneBackBar button'); await pg.waitForSelector('#editorBody .excluded-row'); await pg.waitForTimeout(800);
  const rows=await pg.$$eval('#editorBody .excluded-row',rs=>rs.map(r=>r.textContent.replace(/\s+/g,' ')));
- chk(/有電話了/.test(rows[0]) && /有電話了/.test(rows[1]) && /乙範例/.test(rows[2]), `查到電話的排前面：${rows.map(r=>r.slice(0,20)).join('｜')}`);
- const yi=pg.locator('#editorBody .excluded-row:has-text("乙範例")');
- chk((await yi.locator('button:has-text("收回")').count())===1 && (await yi.locator('a:has-text("104")').count())===1 && (await yi.locator('button:has-text("放回名單")').count())===0, '沒電話的：收回＋自己再找');
+ chk(rows.length===4 && rows.slice(0,3).every(r=>/有電話了/.test(r)) && /丁範例/.test(rows[3]) && !/有電話了/.test(rows[3]), `以前「不要了」刪的乙沒記原因，查到電話一樣標出來：${rows.map(r=>r.slice(0,20)).join('｜')}`);
+ chk(/之前找不到電話的 2 家/.test(await pg.textContent('#phoneBackBar')), '但名單上面的提醒只算「找不到電話」的那兩家');
+ chk(/查到電話的 3 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '有「全部放回」');
+ const ding=pg.locator('#editorBody .excluded-row:has-text("丁範例")');
+ chk((await ding.locator('button:has-text("收回")').count())===1 && (await ding.locator('a:has-text("104")').count())===1 && (await ding.locator('button:has-text("放回名單")').count())===0, '沒查到電話的：收回＋自己再找');
 
  await pg.click('#editorBody .excluded-row:has-text("丙範例") button:has-text("還是不要")'); await pg.waitForTimeout(500);
  const t2=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies['tax:33333333']);
- chk(t2 && t2.noPhone===false && !t2.lifted, '還是不要：維持排除、不再提醒');
+ chk(t2 && t2.noPhone===false && t2.keep===true && !t2.lifted, '還是不要：維持排除、不再提醒');
+ chk(/查到電話的 2 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '還是不要的不算進全部放回');
 
  await pg.click('#editorBody .excluded-row:has-text("甲範例") button:has-text("放回名單")'); await pg.waitForTimeout(1200);
- const back=await pg.evaluate(()=>window.customerViews().map(v=>`${v.company}|${v.taxId}|${v.phones.map(p=>p.display||p.raw||p).join(',')}`));
+ let back=await pg.evaluate(()=>window.customerViews().map(v=>`${v.company}|${v.taxId}|${v.phones.map(p=>p.display||p.raw||p).join(',')}`));
  chk(back.length===1 && /^甲範例精密有限公司\|11111111\|.*0000-1234/.test(back[0]), `放回名單、帶著電話：${back.join('、')}`);
+ await pg.click('#editorBody .excluded-all'); await pg.waitForSelector('.ask-overlay');
+ chk(/乙範例實業有限公司（02-0000-9999）/.test(await pg.textContent('.ask-overlay')) && !/丙範例/.test(await pg.textContent('.ask-overlay')), '全部放回先列名字確認');
+ await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(1500);
+ back=await pg.evaluate(()=>window.customerViews().map(v=>v.company).sort());
+ chk(JSON.stringify(back)==='["乙範例實業有限公司","甲範例精密有限公司"]', `整批放回：${back.join('、')}`);
+ chk(await pg.isHidden('#editorBody .excluded-all'), '放完「全部放回」就收起來');
  const t1=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies['tax:11111111']);
  chk(t1 && t1.lifted===true, '放回的不再排除');
  await pg.click('#editor .drawer-close'); await pg.waitForTimeout(300);
