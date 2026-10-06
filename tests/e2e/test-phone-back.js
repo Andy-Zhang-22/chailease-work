@@ -56,6 +56,18 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(rows.length===4 && rows.slice(0,3).every(r=>/有電話了/.test(r)) && /丁範例/.test(rows[3]) && !/有電話了/.test(rows[3]), `以前「不要了」刪的乙沒記原因，查到電話一樣標出來：${rows.map(r=>r.slice(0,20)).join('｜')}`);
  chk(/之前找不到電話的 2 家/.test(await pg.textContent('#phoneBackBar')), '但名單上面的提醒只算「找不到電話」的那兩家');
  chk(/查到電話的 3 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '有「全部放回」');
+ // 搜尋：公司名、統編、電話；全部放回只算搜尋出來的
+ const shown=async()=>pg.$$eval('#editorBody .excluded-row strong',xs=>xs.map(x=>x.textContent));
+ await pg.fill('#editorBody .excluded-q','乙範例'); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await shown())==='["乙範例實業有限公司"]' && /搜尋到、查到電話的 1 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '搜公司名只剩那一家，全部放回只算它');
+ await pg.fill('#editorBody .excluded-q','44444444'); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await shown())==='["丁範例有限公司"]' && await pg.isHidden('#editorBody .excluded-all'), '搜統編；沒電話的不出現全部放回');
+ await pg.fill('#editorBody .excluded-q','0000-5678'); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await shown())==='["丙範例工業有限公司"]', '搜電話（有沒有打「-」都行）');
+ await pg.fill('#editorBody .excluded-q','找不到的字'); await pg.waitForTimeout(300);
+ chk(/沒有符合的公司/.test(await pg.textContent('#editorBody .excluded-list')), '搜不到會講');
+ await pg.fill('#editorBody .excluded-q',''); await pg.waitForTimeout(300);
+ chk((await shown()).length===4, '清掉搜尋就全部回來');
  const ding=pg.locator('#editorBody .excluded-row:has-text("丁範例")');
  chk((await ding.locator('button:has-text("收回")').count())===1 && (await ding.locator('a:has-text("104")').count())===1 && (await ding.locator('button:has-text("放回名單")').count())===0, '沒查到電話的：收回＋自己再找');
 
