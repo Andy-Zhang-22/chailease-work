@@ -20,7 +20,9 @@ const mk=(i)=>({id:`r${String(i).padStart(2,'0')}`,source:'A.csv',company:`主�
  await pg.evaluate(async(recs)=>{ await window.Store.saveRecords(recs); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('main-cap','15');
    const now=Date.now();
    for (const r of recs) await window.Store.setState({recordId:r.id,outcome:'contacted',lastDate:'2026-09-01',nextDate:'2026-10-05',pinDate:r.id==='r01',updatedAt:now});
-   await window.Store.addLog({recordId:'r02',date:'2026-10-01',text:'約好週一過去',outcome:'contacted',meeting:true,meetingDate:'2026-10-05',createdAt:now-1e6}); },
+   await window.Store.addLog({recordId:'r02',date:'2026-10-01',text:'約好週一過去',outcome:'contacted',meeting:true,meetingDate:'2026-10-05',createdAt:now-1e6});
+   // 約完之後又記了一通（沒再勾約到拜訪）：一樣是約了拜訪，不能被挪走（使用者：「為什麼我今天有一個利昇的拜訪消失了？」）
+   await window.Store.addLog({recordId:'r02',date:'2026-10-02',text:'再確認一次時間',outcome:'contacted',createdAt:now-5e5}); },
    Array.from({length:18},(_,i)=>mk(i+1)));
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2000);
  const day=async()=>pg.evaluate(()=>{ const v=window.customerViews(); return { today:v.filter(x=>x.nextDate==='2026-10-05').map(x=>x.id), next:v.filter(x=>x.nextDate==='2026-10-06').length }; });
