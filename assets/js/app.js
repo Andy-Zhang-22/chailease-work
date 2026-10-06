@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-301';
+  const APP_VERSION = '20261007-302';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -363,6 +363,7 @@
   function checkReminders() {
     const now = Date.now();
     checkDueToday();
+    try { checkDepart(); } catch (e) { console.error(e); }
     const due = reminders().filter((r) => r.remindAt <= now);
     if (!due.length) return;
     const seen = notifiedSet();
@@ -492,8 +493,63 @@
     bar.append(...btns);
   }
 
+  /*
+   * 出發提醒（使用者：「還有什麼你能幫我做的？」→「出發提醒」）：今天還沒去的拜訪列在名單最上面，
+   * 出發前 15 分鐘起變色、跳通知（有開通知的話），附導航。沒填時間的也列，只是不提醒。
+   */
+  const DEPART_LEAD = 15 * 60000;
+  const todayAt = (hm) => { const [h, m] = String(hm).split(':').map(Number); const d = new Date(); d.setHours(h, m, 0, 0); return d.getTime(); };
+  function todayVisits() {
+    return (calEvents().get(todayISO()) || []).filter((x) => !x.done);
+  }
+  function renderDepartBar() {
+    const bar = $('#departBar');
+    if (!bar) return;
+    bar.textContent = '';
+    const list = todayVisits();
+    bar.hidden = !list.length;
+    if (!list.length) return;
+    const now = Date.now();
+    bar.append(el('div', { className: 'depart-head', textContent: `🚗 今天要拜訪（${list.length}）` }));
+    list.forEach((x) => {
+      const go = x.depart ? todayAt(x.depart) : x.arrive ? todayAt(x.arrive) - 30 * 60000 : 0;
+      const due = go && now >= go - DEPART_LEAD;
+      const addr = x.v.addressActual || x.v.address || '';
+      const when = x.depart ? `${x.depart} 出發${x.arrive ? `・${x.arrive} 到` : ''}` : x.arrive ? `${x.arrive} 到` : '沒排時間';
+      bar.append(el('div', { className: `depart-row${due ? ' is-due' : ''}` }, [
+        el('b', { className: 'depart-time', textContent: when }),
+        el('button', { className: 'link-btn depart-name', type: 'button', textContent: x.v.company, onclick: () => openDetail(x.v.id) }),
+        addr ? el('a', { className: 'btn btn-tiny', href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}&travelmode=driving`, target: '_blank', rel: 'noopener', textContent: '導航' }) : '',
+      ]));
+    });
+  }
+  /** 出發前 15 分鐘：提示＋通知，一個拜訪只提醒一次 */
+  function checkDepart() {
+    const now = Date.now();
+    const seen = notifiedSet();
+    const fresh = todayVisits().filter((x) => {
+      const go = x.depart ? todayAt(x.depart) : x.arrive ? todayAt(x.arrive) - 30 * 60000 : 0;
+      return go && now >= go - DEPART_LEAD && now <= go + 60 * 60000 && !seen.has(`visit|${x.log.uid || x.log.logId}|${todayISO()}`);
+    });
+    if (!fresh.length) return;
+    fresh.forEach((x) => seen.add(`visit|${x.log.uid || x.log.logId}|${todayISO()}`));
+    try { localStorage.setItem(NOTIFIED_KEY, JSON.stringify([...seen].slice(-200))); } catch (e) { /* 無痕模式 */ }
+    toast(`🚗 該出發了：${fresh.map((x) => `${x.v.company}${x.depart ? `（${x.depart} 出發）` : ''}`).join('、')}`);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      fresh.forEach((x) => {
+        try {
+          const n = new Notification(`該出發了：${x.v.company}`, { body: [x.depart ? `${x.depart} 出發` : '', x.arrive ? `${x.arrive} 到` : '', x.v.addressActual || x.v.address || ''].filter(Boolean).join('　'), tag: `visit-${x.v.id}` });
+          n.onclick = () => { window.focus(); openDetail(x.v.id); };
+        } catch (e) { /* 有些瀏覽器不給在網頁直接 new Notification */ }
+      });
+    }
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* 不支援就算了 */ }
+    renderDepartBar();
+  }
+
   function renderRemindBar() {
     renderFeedBar();
+    renderDepartBar();
     renderOppBar();
     renderPhoneBackBar();
     const bar = $('#remindBar');
@@ -5439,6 +5495,7 @@
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '今天', onclick: () => { cal.sel = today; cal.month = calYm(today); renderCal(); } }),
       el('span', { className: 'cal-legend', textContent: '🚗 要去拜訪　✓ 去過了' }),
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製這週', title: '把這一週的行程變成文字，貼到 LINE 或行事曆', onclick: () => copyWeek() }),
+      el('button', { className: 'btn btn-tiny cal-ics', type: 'button', textContent: '📅 加到手機行事曆', title: '今天起還沒去的拜訪匯成行事曆檔，iPhone／Google 行事曆打開就能加入，出發時間會提醒', onclick: () => exportVisitsIcs() }),
     ]);
     host.append(head);
     const grid = el('div', { className: 'cal-grid' });
@@ -5679,6 +5736,65 @@
     toast(ok ? '已複製這週的行程，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
   }
   window.weekText = weekText;   // 測試用
+
+  /*
+   * 加到手機行事曆（使用者：「還有什麼你能幫我做的？」→ 選「拜訪同步到手機行事曆」）：
+   * 今天起還沒去的拜訪匯成 .ics，iPhone／Google 行事曆打開就能加入；有出發時間的在出發那刻提醒，
+   * 沒有的在抵達前 30 分鐘提醒，沒排時間的當整天。UID 固定（同一則紀錄＋同一天），重匯同一筆會更新、不會多一筆。
+   * 檔案只在這台裝置產生、直接交給手機行事曆，不經過任何伺服器。
+   */
+  const icsEsc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const icsFold = (line) => {
+    // 一行最多 75 bytes（中文一字 3 bytes）：保守一點，40 個字就折
+    const out = []; let cur = '';
+    for (const ch of line) { if (cur.length >= 40) { out.push(cur); cur = ' '; } cur += ch; }
+    out.push(cur);
+    return out.join('\r\n');
+  };
+  const icsDate = (iso) => iso.replace(/-/g, '');
+  const icsTime = (iso, hm) => `${icsDate(iso)}T${hm.replace(':', '')}00`;
+  const addMin = (hm, n) => { const [h, m] = hm.split(':').map(Number); const t = Math.min(23 * 60 + 59, h * 60 + m + n); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+  const minsOf = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return h * 60 + m; };
+  function visitsIcs() {
+    const today = todayISO();
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//chailease-crm//visits//ZH-TW', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:拜訪行程'];
+    let n = 0;
+    [...calEvents().entries()].filter(([iso]) => iso >= today).sort(([a], [b]) => a.localeCompare(b)).forEach(([iso, list]) => {
+      list.filter((x) => !x.done).forEach((x) => {
+        const v = x.v;
+        const addr = v.addressActual || v.address || '';
+        const start = x.arrive || x.depart;
+        const desc = [
+          x.depart || x.arrive ? `${x.depart ? `${x.depart} 出發` : ''}${x.depart && x.arrive ? '、' : ''}${x.arrive ? `${x.arrive} 到` : ''}` : '',
+          v.phones.length ? `電話 ${v.phones[0].display || v.phones[0].raw}` : '',
+          x.note || '',
+        ].filter(Boolean).join('\n');
+        lines.push('BEGIN:VEVENT', `UID:visit-${x.log.uid || x.log.logId}-${icsDate(iso)}@chailease-crm`, `DTSTAMP:${stamp}`);
+        if (start) lines.push(`DTSTART:${icsTime(iso, start)}`, `DTEND:${icsTime(iso, addMin(start, 60))}`);
+        else lines.push(`DTSTART;VALUE=DATE:${icsDate(iso)}`, `DTEND;VALUE=DATE:${icsDate(addDays(iso, 1))}`);
+        lines.push(icsFold(`SUMMARY:${icsEsc(`🚗 拜訪 ${v.company}`)}`));
+        if (addr) lines.push(icsFold(`LOCATION:${icsEsc(addr)}`));
+        if (desc) lines.push(icsFold(`DESCRIPTION:${icsEsc(desc)}`));
+        if (start) {
+          // 有出發時間：出發那刻提醒；只有抵達：前 30 分鐘
+          const before = x.depart && x.arrive && minsOf(x.arrive) > minsOf(x.depart) ? minsOf(x.arrive) - minsOf(x.depart) : x.depart && !x.arrive ? 0 : 30;
+          lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', icsFold(`DESCRIPTION:${icsEsc(`該出發了：${v.company}`)}`), `TRIGGER:-PT${before}M`, 'END:VALARM');
+        }
+        lines.push('END:VEVENT');
+        n += 1;
+      });
+    });
+    lines.push('END:VCALENDAR');
+    return { text: `${lines.join('\r\n')}\r\n`, n };
+  }
+  window.visitsIcs = visitsIcs;   // 測試用
+  function exportVisitsIcs() {
+    const { text, n } = visitsIcs();
+    if (!n) { toast('今天起沒有排拜訪'); return; }
+    download(`拜訪行程_${todayISO()}.ics`, text, 'text/calendar;charset=utf-8');
+    toast(`已匯出 ${n} 個拜訪：打開檔案就能加到手機行事曆（重匯同一筆會更新，不會多一筆）`);
+  }
 
   /* ---------------- 詳細資料抽屜 ---------------- */
 
