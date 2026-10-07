@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-309';
+  const APP_VERSION = '20261007-310';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -7517,6 +7517,8 @@ export default {
   // 這幾個設定要跟著雲端同步：在電腦上設定好，手機打開也要能用
   const SYNCED_PREFS = new Set(['registry-proxy-url', 'registry-dataset-url', 'registry-dataset-taxid-url',
     'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary',
+    // 商工登記查到一半的那一輪：另一台打開也接著查剩下的
+    'registry-round',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
@@ -7710,7 +7712,11 @@ export default {
     if (!state.records.length) return;
     if (registryJob.running) return;   // 手動那輪還在跑，先不要搶，下一分鐘再看
     const today = todayISO();
-    if (registryPref('registry-auto-last') === today) return;
+    if (registryPref('registry-auto-last') === today) {
+      // 今天自動跑過了；只有那一輪被打斷（關掉網頁、手機切走，不是按停止）而且沒有別的分頁在跑，才接著查
+      const round = openRound();
+      if (!round || !round.auto || round.stopped || roundBeatFresh()) return;
+    }
     // 有開雲端同步：今天先同步成功過才查，不然另一台昨天套用的地址還沒進來，這台又查到同一件變更再記一次
     if (window.DriveSync && window.DriveSync.isConfigured()) {
       let last = 0;
@@ -7736,7 +7742,26 @@ export default {
    * 現在按下去就把視窗收起來，底部留一條進度，名單照常可以用；查到的差異
    * 一筆一筆寫進去，中途關掉分頁也只損失還沒查到的那些。
    */
-  const registryJob = { running: false, cancelled: false, done: 0, total: 0, company: '', updated: 0, result: null, auto: false };
+  const registryJob = { running: false, cancelled: false, done: 0, total: 0, company: '', updated: 0, result: null, auto: false, skipped: 0 };
+
+  /*
+   * 接續查詢（使用者：「商工登記的查詢，都會執行到一半就被我跳掉，有辦法讓系統接續查詢，不要再重工了嗎」）。
+   * 每一輪開跑時記下開始時間（registry-round，會同步）；每查完一家都會寫 regAt。這一輪沒跑完（按停止、關掉網頁、
+   * 手機切走），下次再跑（手動「全部更新」或每天自動）只查 regAt 早於這一輪開始的，查過的跳過。
+   * 跑完（沒停、來源也沒掛）才把這一輪收掉，下次從頭。超過 ROUND_DAYS 天的舊輪次不接，直接從頭。
+   * registry-round-beat 是這台裝置正在跑的心跳（不同步）：同一天重開網頁時，別的分頁還在跑就不搶。
+   */
+  const ROUND_DAYS = 3;
+  function openRound() {
+    try {
+      const o = JSON.parse(registryPref('registry-round') || 'null');
+      return o && o.at && Date.now() - o.at < ROUND_DAYS * 864e5 ? o : null;
+    } catch (e) { return null; }
+  }
+  /** 這一輪還沒查的：regAt 早於這一輪開始 */
+  const roundLeft = (targets, round) => targets.filter((t) => (Number(t.r.regAt) || 0) < round.at);
+  const roundBeatFresh = () => { try { return Date.now() - (Number(localStorage.getItem('registry-round-beat')) || 0) < 120000; } catch (e) { return false; } };
+  const roundBeat = () => { try { localStorage.setItem('registry-round-beat', String(Date.now())); } catch (e) { /* 無痕 */ } };
 
   function renderRegistryBar() {
     const bar = $('#registryBar');
@@ -7751,7 +7776,7 @@ export default {
     const closeBtn = $('#btnRegistryClose');
     if (j.running) {
       $('#registryBarTitle').textContent = `登記更新 ${j.done}/${j.total}`;
-      $('#registryBarNote').textContent = j.updated ? `已更新 ${j.updated}` : '';
+      $('#registryBarNote').textContent = [j.skipped ? `接續，前面已查 ${j.skipped}` : '', j.updated ? `已更新 ${j.updated}` : ''].filter(Boolean).join('・');
       // 公司名稱放在提示文字裡：列太小了塞不下，但滑過去還看得到查到哪一家
       bar.title = j.company ? `商工登記更新中 ${j.done} / ${j.total}　目前：${j.company}` : '商工登記更新中';
       stopBtn.hidden = false;
@@ -7763,7 +7788,7 @@ export default {
       const detail = r.sourceDown
         ? '每一筆都失敗，來源被擋住了，不是資料的問題。'
         : `查了 ${r.checkedCount} 筆，更新 ${r.updated} 筆，${r.failed} 筆查不到。`;
-      $('#registryBarTitle').textContent = r.stopped ? '登記更新已停止' : '登記更新完成';
+      $('#registryBarTitle').textContent = r.stopped ? '登記更新已停止（下次接著查）' : '登記更新完成';
       $('#registryBarNote').textContent = r.sourceDown ? '來源被擋住' : `更新 ${r.updated}／查不到 ${r.failed}`;
       bar.title = `${r.stopped ? '商工登記更新已停止' : '商工登記更新完成'}　${detail}`;
       stopBtn.hidden = true;
@@ -7807,14 +7832,26 @@ export default {
     return got;
   }
   window.refreshCorps = async (ids) => { const vs = allViews().filter((v) => !ids || ids.includes(v.id)); const m = await refreshCorps(vs); return Object.fromEntries(m); };   // 測試用
-  async function runRegistryJob({ targets, useMirror, auto }) {
+  async function runRegistryJob({ targets, useMirror, auto, fresh }) {
     if (registryJob.running) { toast('商工登記更新正在進行中'); return null; }
-    Object.assign(registryJob, { running: true, cancelled: false, done: 0, total: targets.length, company: '', updated: 0, result: null, auto: !!auto });
+    // 接續上一輪：查過的跳過；上一輪全部都查過了（或根本還沒查到）就開新的一輪
+    let round = fresh ? null : openRound();
+    let skipped = 0;
+    if (round) {
+      const left = roundLeft(targets, round);
+      skipped = targets.length - left.length;
+      if (left.length && skipped) { targets = left; if (round.stopped) registryPref('registry-round', JSON.stringify({ ...round, stopped: false })); }
+      else { round = null; skipped = 0; }
+    }
+    if (!round) { round = { at: Date.now(), auto: !!auto }; registryPref('registry-round', JSON.stringify(round)); }
+    roundBeat();
+    Object.assign(registryJob, { running: true, cancelled: false, done: 0, total: targets.length, company: '', updated: 0, result: null, auto: !!auto, skipped });
+    if (skipped && !auto) toast(`接續上次：前面 ${skipped} 筆查過了，這次查剩下的 ${targets.length} 筆`);
     renderRegistryBar();
     let wrote = 0;
     const { diffs, failures, checked, stale } = await registryBatch(targets, {
       useMirror,
-      onProgress: (i, n, r) => { registryJob.done = i; registryJob.company = r.company; renderRegistryBar(); },
+      onProgress: (i, n, r) => { registryJob.done = i; registryJob.company = r.company; roundBeat(); renderRegistryBar(); },
       isCancelled: () => registryJob.cancelled,
       onEach: async (item) => {
         if (!item.ok) return;   // 查不到的最後再一起記，才分得出「來源掛了」
@@ -7831,15 +7868,19 @@ export default {
     if (wrote || (!sourceDown && failures.length)) { await reload(); render(); scheduleSync(); }
 
     registryJob.running = false;
+    try { localStorage.removeItem('registry-round-beat'); } catch (e) { /* 無痕 */ }
+    // 整輪跑完才收掉；按停止、來源掛了都留著，下次接著查
+    if (!registryJob.cancelled && !sourceDown) registryPref('registry-round', '');
+    else if (registryJob.cancelled) { const o = openRound(); if (o && !o.stopped) registryPref('registry-round', JSON.stringify({ ...o, stopped: true })); }
     registryJob.result = {
-      at: Date.now(), stopped: registryJob.cancelled, sourceDown,
+      at: Date.now(), stopped: registryJob.cancelled, sourceDown, skipped,
       checkedCount: checked.length, updated: diffs.length, failed: failures.length, stale: stale.length,
       diffs: diffs.slice(0, 20), diffTotal: diffs.length, reason: failures.length ? failures[0].reason : '',
     };
     renderRegistryBar();
     registryPref('registry-auto-summary', sourceDown
       ? `全部失敗（${String(failures[0].reason || '').split('\n')[0]}）`
-      : `查 ${targets.length} 筆，更新 ${diffs.length} 筆，${failures.length} 筆查不到`);
+      : `查 ${targets.length} 筆${skipped ? `（接續上次，前面 ${skipped} 筆已查過）` : ''}，更新 ${diffs.length} 筆，${failures.length} 筆查不到${registryJob.cancelled ? '，中途停止（下次接著查）' : ''}`);
     // 順便補董監事的境外法人（背景，不擋結果）
     if (corpsAuto() && !corpsBusy) { corpsBusy = true; const ids = new Set(targets.map((t) => (t.rec || t).id)); refreshCorps(allViews().filter((v) => ids.has(v.id))).catch(() => {}).finally(() => { corpsBusy = false; }); }
     if (sourceDown) toast('商工登記更新失敗：來源連不上。細節在選單「從商工登記更新公司資料」。');
@@ -8052,6 +8093,10 @@ export default {
 
     const summary = el('p', { className: 'muted registry-summary' });
     host.append(summary);
+    // 上次沒跑完才出現：預設接著查，勾了才從頭
+    const fresh = el('input', { type: 'checkbox', id: 'registryFresh' });
+    const freshRow = el('label', { className: 'rule-field', hidden: true }, [fresh, el('span', { textContent: ' 從頭重查（不接續上次）' })]);
+    host.append(freshRow);
     const refreshSummary = () => {
       const targets = scopeTargets();
       const withTaxId = targets.filter(({ r }) => /^\d{8}$/.test(String(r.taxId || '').replace(/\D/g, ''))).length;
@@ -8062,6 +8107,10 @@ export default {
           + `約需 ${secs} 秒。`
         : `名單共 ${targets.length} 筆，其中 ${withTaxId} 筆有 8 碼統編可直接查，`
           + `其餘用公司名稱查。約需 ${secs} 秒。`;
+      const round = openRound();
+      const left = round ? roundLeft(targets, round).length : targets.length;
+      freshRow.hidden = !(round && left && left < targets.length);
+      if (!freshRow.hidden) summary.textContent += `　上次查到一半：${targets.length - left} 筆已查過，按「全部更新」接著查剩下的 ${left} 筆（約 ${Math.ceil(left * 0.3)} 秒）。`;
     };
     scope.onchange = refreshSummary;
     // 沒有缺地址的客戶時，預設停在「只補地址」會讓人一按就撞到「沒有東西可以查」。
@@ -8206,14 +8255,18 @@ export default {
         return;
       }
       if (registryJob.running) { toast('已經在更新了，進度在畫面下方'); return; }
-      if (!await askConfirm(`要查 ${all.length} 筆嗎？\n\n`
+      // 上次查到一半：接著查剩下的（勾「從頭重查」才全部重來）
+      const round = fresh.checked ? null : openRound();
+      const left = round ? roundLeft(all, round).length : all.length;
+      const resume = round && left && left < all.length;
+      if (!await askConfirm(`${resume ? `上次查到一半，前面 ${all.length - left} 筆已經查過，這次接著查剩下的 ${left} 筆。\n\n` : `要查 ${all.length} 筆嗎？\n\n`}`
         + '會在背景一筆一筆送出（每筆間隔 0.3 秒，避免對政府網站造成負擔），'
         + '這個視窗會自動收起來，你可以繼續打電話；進度在畫面下方，隨時可以按停止。\n\n'
         + '查到跟登記不一致的欄位（統編、資本總額、實收資本額、負責人、登記地址、成立年、最近異動日期）會直接更新，'
         + '記成「已修改」，每一筆都可以在詳細頁還原。')) return;
       $('#editor').hidden = true;
       toast('已在背景開始更新，可以繼續用名單');
-      runRegistryJob({ targets: all, useMirror: mirror.checked })
+      runRegistryJob({ targets: all, useMirror: mirror.checked, fresh: fresh.checked })
         .then((res) => { if (res) renderRegistryRunResult(result); })
         .catch((err) => { console.error('商工登記更新失敗', err); toast('商工登記更新失敗，請看主控台訊息'); });
     };
