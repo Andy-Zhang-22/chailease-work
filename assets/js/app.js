@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-310';
+  const APP_VERSION = '20261007-311';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1799,6 +1799,8 @@
   window.placesLookup = placesLookup;   // 商行分頁「幫篩出來的找電話」用同一條 Google 地圖查法
   window.placesKey = placesKey;
   window.copyDot = copyDot;   // 分頁的卡片也要一顆複製公司名稱的點
+  // 找名單各分頁電話後面的複製鈕（使用者：「在找名單所有分頁的名單電話後都新增複製紐」）：複製純數字，貼到撥號鍵盤直接可用
+  window.copyTel = (tel) => { const d = String(tel || '').replace(/[^\d#]/g, ''); return d ? copyDot(d, `複製電話 ${tel}`, `已複製 ${d}`) : ''; };
   function phoneSearchRow(r, opts = {}) {
     const stop = (e) => e.stopPropagation();
     const input = el('input', { type: 'tel', className: 'phone-paste', placeholder: '找到了貼這裡，Enter 存', autocomplete: 'off', onclick: stop });
@@ -9344,6 +9346,13 @@ export default {
     window.customerViews = () => allViews();
     window.openCustomer = (id) => openDetail(id);
     window.openCustomerLog = (id) => openDetail(id, { log: true });   // 各來源分頁「已在名單　📝 記錄」
+    // 統編或名稱（台／臺、空白不計，跟匯入比對重複同一套）找名單上那一家：找名單的分頁加一家時其實早就在名單上，就打開這一筆
+    window.findCustomer = (name, taxId) => {
+      const tk = taxKey({ taxId }); const nk = nameKey({ company: name });
+      const views = allViews();
+      return (tk && views.find((v) => taxKey(v) === tk))
+        || (nk && views.find((v) => nameKey(v) === nk && !(tk && taxKey(v) && taxKey(v) !== tk))) || null;
+    };
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
     window.splitEvenly = splitEvenly;   // 測試用

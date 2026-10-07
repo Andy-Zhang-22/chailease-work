@@ -54,7 +54,7 @@ const SEED=[mk('1','乙二機械股份有限公司','22222222'), mk('2','丙三�
  // 電話籤：對出進口廠商電話表
  const pc=(await pg.locator('#leads-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話2', `電話籤：${pc}`);
  await pg.locator('#leads-fPhone .chip:has-text("手機")').click(); await pg.waitForTimeout(300); n=await names(); chk(n.join('|')==='甲一精密有限公司', `只按「手機」：${n.join('|')}`);
- chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#leads-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ chk(/📞 09\d{8}（手機，多半是老闆本人）/.test(await pg.locator('#leads-cards .card').first().locator('.card-top').textContent()) && (await pg.locator('#leads-cards .card').first().locator('.card-top .copy-dot').count())===2, '卡片寫出手機號碼、後面有複製鈕');
  await pg.locator('#leads-fPhone .chip:has-text("手機")').click(); await pg.waitForTimeout(300); n=await names(); chk(n.length===4, '放開籤');
  // 這家不用了
  await pg.locator('#leads-cards .card:has-text("丁四")').locator('button.leads-hide').click(); await pg.waitForTimeout(300); n=await names();

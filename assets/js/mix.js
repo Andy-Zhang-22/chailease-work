@@ -37,7 +37,7 @@
   let limit = PAGE;
   let loading = null;
   let status = [];
-  const f = { src: new Set(), sig: new Set(), cond: new Set(), q: '' };
+  const f = { src: new Set(), sig: new Set(), cond: new Set(), phone: new Set(), q: '' };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -58,15 +58,22 @@
   }
   const COND = [
     ['branch', '我的分公司', (it) => it.d.branchKey === myBranch()],
-    ['phone', '有電話', (it) => !!it.d.tel],
     ['age', '成立 6～10 年', (it) => it.d.years != null && it.d.years >= 6 && it.d.years <= 10],
     ['cap', '資本額 500～6,000 萬', (it) => it.d.capital >= 5e6 && it.d.capital <= 6e7],
   ];
+  /*
+   * 電話篩選（使用者：「新增一個篩選，有電話、有手機、無電話」）：跟各頁一樣，籤是「或」的關係；
+   * 手機算有電話的一種（只按「有手機」就只剩手機的）。
+   */
+  const isMobile = (tel) => /^0?9\d{8}$/.test(String(tel || '').replace(/\D/g, '').replace(/^886/, '0'));
+  const phoneKinds = (it) => (it.d.tel ? (isMobile(it.d.tel) ? ['Y', 'M'] : ['Y']) : ['N']);
+  const PHONE = [['Y', '有電話'], ['M', '有手機'], ['N', '沒電話']];
   function passes(it, except) {
     if (!showHidden && isHid(it)) return false;
     if (except !== 'src' && f.src.size && !it.facts.some((x) => f.src.has(x.key))) return false;
     if (except !== 'sig' && f.sig.size && !it.signals.some((s) => f.sig.has(sigKey(s)))) return false;
     if (except !== 'cond') for (const [k, , fn] of COND) if (f.cond.has(k) && !fn(it)) return false;
+    if (except !== 'phone' && f.phone.size && !phoneKinds(it).some((k) => f.phone.has(k))) return false;
     const terms = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return terms.every((t) => it.blob.includes(t));
   }
@@ -88,6 +95,7 @@
     items.forEach((it) => { if (passes(it, 'sig')) new Set(it.signals.map(sigKey)).forEach((s) => sigs.set(s, (sigs.get(s) || 0) + 1)); });
     f.sig.forEach((s) => { if (!sigs.has(s)) sigs.set(s, 0); });
     chips($('#mix-fSig'), [...sigs.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => [s, s, n]), f.sig);
+    chips($('#mix-fPhone'), PHONE.map(([k, label]) => [k, label, count('phone', (it) => phoneKinds(it).includes(k))]), f.phone);
     chips($('#mix-fCond'), COND.map(([k, label, fn]) => [k, label, count('cond', fn)]), f.cond);
   }
 
@@ -104,7 +112,7 @@
       d.branchKey ? el('span', { className: 'badge badge-branch', textContent: d.branchKey }) : '',
     ]);
     const phone = el('div', { className: 'card-actions phone-search' }, [
-      d.tel ? el('a', { className: 'tel', href: `tel:${d.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${d.tel}` }) : el('span', { className: 'muted', textContent: '📞 沒電話' }),
+      ...(d.tel ? [el('a', { className: 'tel', href: `tel:${d.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${d.tel}` }), typeof global.copyTel === 'function' ? global.copyTel(d.tel) : ''] : [el('span', { className: 'muted', textContent: '📞 沒電話' })]),
       ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(it.name, d.address) : []),
     ]);
     const meta = el('div', { className: 'card-meta' }, [
@@ -178,6 +186,7 @@
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
       group('來源', el('div', { className: 'chips', id: 'mix-fSrc' })),
       group('訊號', el('div', { className: 'chips', id: 'mix-fSig' })),
+      group('電話', el('div', { className: 'chips', id: 'mix-fPhone' })),
       group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond' })),
       group('關鍵字', el('input', { id: 'mix-q', type: 'search', placeholder: '名稱、統編、地址、電話、訊號', autocomplete: 'off' }), 'mix-q'),
       el('div', { className: 'leads-row' }, [
@@ -201,7 +210,7 @@
     $('#mix-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; limit = PAGE; render(); }, 120); };
     $('#mix-more').onclick = () => { limit += PAGE; render(); };
     $('#mix-hidden').onclick = () => { showHidden = !showHidden; limit = PAGE; render(); };
-    $('#mix-reset').onclick = () => { f.src.clear(); f.sig.clear(); f.cond.clear(); f.q = ''; $('#mix-q').value = ''; showHidden = false; limit = PAGE; render(); };
+    $('#mix-reset').onclick = () => { f.src.clear(); f.sig.clear(); f.cond.clear(); f.phone.clear(); f.q = ''; $('#mix-q').value = ''; showHidden = false; limit = PAGE; render(); };
   }
 
   function show() {

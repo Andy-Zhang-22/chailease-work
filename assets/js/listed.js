@@ -271,7 +271,7 @@
     const meta = el('div', { className: 'card-meta' }, [
       el('span', { textContent: `💰 實收資本 ${money(r.capital)}` }),
       r.chairman ? el('span', { textContent: `👤 董事長 ${r.chairman}${r.gm && r.gm !== r.chairman ? `・總經理 ${r.gm}` : ''}` }) : '',
-      r.phone ? el('span', { textContent: `📞 ${r.phone}` }) : '',
+      r.phone ? el('span', {}, [`📞 ${r.phone}`, typeof global.copyTel === 'function' ? global.copyTel(r.phone) : '']) : '',
       r.address ? el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}`, target: '_blank', rel: 'noopener', textContent: r.address })]) : '',
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}（${r.years} 年）` }) : '',
       r.listedOn ? el('span', { textContent: `📈 ${r.market} ${r.listedOn.y}` }) : '',
