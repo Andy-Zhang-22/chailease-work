@@ -1,0 +1,48 @@
+# 每月抓經濟部「公司登記（依營業項目別）」的車輛相關業者（汽車貨運、遊覽車、計程車客運、小客車租賃），
+# 只留新北市、臺北市核准設立的，跟上個月的首見表比出剛出現的，成立日、組織別、行業對稅籍檔，電話對貿易署的電話表
+# → leads/industry/；網站的「產業名單」分頁讀這裡。
+name: 每月產業名單
+
+on:
+  schedule:
+    - cron: '0 20 13 * *'   # 每月 14 日台灣 04:00
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: '留哪些縣市（逗號分隔）'
+        required: false
+        default: '新北市,臺北市'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-industry
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 抓產業名單、對稅籍與電話表
+        env:
+          CITIES: ${{ inputs.cities || '新北市,臺北市' }}
+        run: |
+          node tools/fetch-industry.mjs --cities "$CITIES" | tee fetch-industry.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-industry.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/industry
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "產業名單：$(date -u +%Y-%m-%d)"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
