@@ -1,0 +1,14 @@
+name: 探路：駐外館處台商名錄（一次性）
+on:
+  push:
+    branches: [claude/telemarketing-website-hf2uwj]
+    paths: [tools/probe-embassy.mjs, .github/workflows/probe-embassy.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/probe-embassy.mjs
