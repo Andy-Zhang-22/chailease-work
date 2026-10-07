@@ -15,13 +15,13 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  const tabs=await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(tabs.length===4 && tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('行事曆') && tabs[2]==='找名單' && /篩選/.test(tabs[3]), `分頁列四個：${tabs.join(' | ')}`);
  chk(await pg.locator('#subtabs').isHidden(), '在重點推廣名單時第二排收著');
- // 按找名單：第二排兩顆（新名單、上市櫃），預設新名單的「全部（合併）」；第三排是全部＋七份名單
+ // 按找名單：第二排兩顆（新名單、上市櫃），預設新名單的「全部（合併）」；第三排是全部＋八份名單
  // （使用者：「把商行也合併在其他分頁裡，獨立分頁僅上市櫃而已」）
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(400);
  const subs=await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(await pg.locator('#subtabs').isVisible() && subs.length===2 && subs[0].startsWith('新名單') && subs[1].startsWith('上市櫃'), `第二排兩顆：${subs.join(' | ')}`);
  const mix=await pg.$$eval('#mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(await pg.locator('#mixtabs').isVisible() && mix.length===8 && mix[0]==='全部（合併）' && mix[1].startsWith('登記清冊') && mix[3].startsWith('商行／企業社') && mix[7].startsWith('新設工廠'), `第三排全部＋七份：${mix.join(' | ')}`);
+ chk(await pg.locator('#mixtabs').isVisible() && mix.length===9 && mix[0]==='全部（合併）' && mix[1].startsWith('登記清冊') && mix[3].startsWith('商行／企業社') && mix[7].startsWith('新設工廠') && mix[8].startsWith('產業名單'), `第三排全部＋八份：${mix.join(' | ')}`);
  chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#subtabs .subtab[data-group="mix"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneMix').isVisible(), '找名單預設開新名單的合併頁');
  // 上市櫃獨立：第三排收起來；商行在第三排
  await pg.click('#subtabs .subtab[data-tab="listed"]'); await pg.waitForTimeout(300);

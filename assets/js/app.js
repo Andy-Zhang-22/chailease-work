@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-306';
+  const APP_VERSION = '20261007-307';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3212,14 +3212,15 @@
   let feeding = false;
   const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
-  /** 七個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
-   *  加了新設工廠（第七個）之前存的六個數字照樣能用：新設工廠跟剛開始請人同一個比例 */
+  /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
+   *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
   function feedShares() {
     const raw = registryPref('feed-shares');
     if (!raw) return null;
     const a = String(raw).split(',').map((x) => Math.max(0, Math.round(Number(x) || 0)));
     if (a.length === 6) a.push(a[4]);
-    return a.length === 7 && a.some((x) => x > 0) ? a : null;
+    if (a.length === 7) a.push(a[6]);
+    return a.length === 8 && a.some((x) => x > 0) ? a : null;
   }
   /**
    * 照比例分：先依比例算每頁該拿幾家（最大餘數法），哪一頁不夠的，缺的讓有比例的其他頁輪流補；比例 0 的頁最後才補位。
@@ -3316,6 +3317,8 @@
     { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
     { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
     { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
+    // 產業名單（使用者：「這些資料都做，同個統編的公司依資料都合在一起」）：車輛相關業者，之後加食品、環保
+    { key: 'in', tab: 'industry', label: '產業名單', mod: () => window.Industry },
     // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
     { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
   ];
@@ -3331,7 +3334,7 @@
   };
   /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
   window.mixSourceStatus = async () => {
-    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠' };
+    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠', industry: '產業名單' };
     return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
       try {
         const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
@@ -3376,9 +3379,9 @@
     return box;
   };
   window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
-    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory];
+    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
-    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa'];
+    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in'];
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
       .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs) }));
   };
@@ -3394,7 +3397,7 @@
     if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return;
     if (!force && !more && registryPref('daily-feed-on') === today) return;
     if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
-    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
+    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
     /*
      * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
      * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
@@ -3417,7 +3420,7 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
-      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll] = await Promise.all([
+      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Biz.dailyCandidates().catch((e) => { console.error(e); return []; }),
@@ -3425,6 +3428,7 @@
         window.Nhi.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Einv.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Factory.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Industry.dailyCandidates().catch((e) => { console.error(e); return []; }),
       ]);
       /*
        * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
@@ -3447,6 +3451,7 @@
         { key: 'nh', label: '剛開始請人', mod: window.Nhi, list: nhAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'ei', label: '剛開電子發票', mod: window.Einv, list: eiAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'fa', label: '新設工廠', mod: window.Factory, list: faAll.filter((r) => notBuried(r.name, r.taxId)) },
+        { key: 'in', label: '產業名單', mod: window.Industry, list: inAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
       const merged = mergeFeed(SRC);
       const mergedKeys = new Set(merged.map((c) => c.key));
@@ -3455,7 +3460,7 @@
       const bz = bzAll.filter((r) => { const k = bizKey(r); if (!k || bzSeen.has(k) || mergedKeys.has(k) || !notBuried(r.name, r.taxId)) return false; bzSeen.add(k); return true; });
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
-      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa')], need, feedShares());
+      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in')], need, feedShares());
       let bizTake = Math.min(bz.length, take[2]);
       const mixTake = Math.min(merged.length, need - bizTake);
       bizTake = Math.min(bz.length, need - mixTake);
@@ -3581,6 +3586,7 @@
     { key: 'nhi', name: '剛開始請人（健保新成立投保單位）', url: 'leads/nhi/index.json', every: '每月 10 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
     { key: 'einv', name: '剛開電子發票（財政部導入電子發票營業人）', url: 'leads/einv/index.json', every: '每月 11 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛導入 ${Number(j.newTotal || 0).toLocaleString()}，起算 ${j.baseline || ''}` },
     { key: 'factory', name: '新設工廠（經濟部生產中工廠清冊）', url: 'leads/factory/index.json', every: '每月 20 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
+    { key: 'industry', name: '產業名單（經濟部依營業項目別：車輛相關業者）', url: 'leads/industry/index.json', every: '每月 14 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛出現 ${Number(j.newTotal || 0).toLocaleString()}` },
     { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
   ];
   async function openDataStatus() {
@@ -3726,7 +3732,7 @@
       ]));
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
-        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠'];
+        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
         const cur = feedShares();
         const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
         const hint = el('span', { className: 'muted share-hint' });
@@ -3739,12 +3745,12 @@
         inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
         refresh();
         host.append(el('div', { className: 'card-actions cap-row share-row' }, [
-          el('span', { className: 'muted', textContent: '新名單七個來源的比例：' }),
+          el('span', { className: 'muted', textContent: '新名單八個來源的比例：' }),
           ...names.flatMap((n, i) => [el('span', { className: 'muted share-name', textContent: n }), inputs[i]]),
           hint,
         ]));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠挑 ${quota} 家進名單（七頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的六頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的六頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -4724,6 +4730,10 @@
     if ((fac && ago(`${fac}-01`) !== null && ago(`${fac}-01`) <= 200) || r.newFactory) {
       return { kind: 'factory', text: `看到貴公司最近新登記了工廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
     }
+    // 車輛相關業者（產業名單）：換車、買車
+    if (/^產業名單：[^\n]*(貨運|遊覽車|計程車|租賃)/.test(notes)) {
+      return { kind: 'vehicle', text: `貴公司是做運輸／租車的，車輛汰換、新購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
+    }
     // 舊寫法「原始登記 2026-08-20」、新寫法「出進口廠商登記：進口＋出口，2026-08 開始」都認
     const firstM = notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || notes.match(/出進口廠商登記：[^，\n]*，(\d{4}-\d{2}) 開始/);
     const first = firstM ? (firstM[1].length === 7 ? `${firstM[1]}-01` : firstM[1]) : '';
@@ -5025,7 +5035,7 @@
    * 看哪一條真的比較打得出東西。來源從檔名看，每日新名單的看訪談內容開頭（動保：／新公司清冊／商行／企業社）。
    * 成案系統裡沒有，「有機會」當代理指標。
    */
-  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠'];
+  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
   function freshOrigin(v) {
     const src = String(v.source || '');
     if (/^動產擔保名單/.test(src)) return '動產擔保';
@@ -5035,6 +5045,7 @@
     if (/^剛開始請人/.test(src)) return '剛開始請人';
     if (/^剛開電子發票/.test(src)) return '剛開電子發票';
     if (/^新設工廠/.test(src)) return '新設工廠';
+    if (/^產業名單/.test(src)) return '產業名單';
     if (!/^每日新名單/.test(src)) return '';
     const n = String(v.notesRaw || '');
     if (/^動保：/.test(n)) return '動產擔保';
@@ -5044,6 +5055,7 @@
     if (/^健保新投保/.test(n)) return '剛開始請人';
     if (/^電子發票 /.test(n)) return '剛開電子發票';
     if (/^工廠登記 /.test(n)) return '新設工廠';
+    if (/^產業名單：/.test(n)) return '產業名單';
     return '';
   }
   function funnelStats(views) {
@@ -5209,9 +5221,10 @@
     $('#paneNhi').hidden = tab !== 'nhi';
     $('#paneEinv').hidden = tab !== 'einv';
     $('#paneFactory').hidden = tab !== 'factory';
+    $('#paneIndustry').hidden = tab !== 'industry';
     $('#paneMix').hidden = tab !== 'mix';
     // 統計、規則、新公司、動產擔保用不到左側篩選（後兩個有自己的一組），讓內容佔滿整個寬度
-    const wide = tab === 'cal' || tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv' || tab === 'factory' || tab === 'mix';
+    const wide = tab === 'cal' || tab === 'stats' || tab === 'rules' || tab === 'leads' || tab === 'chattel' || tab === 'listed' || tab === 'biz' || tab === 'trade' || tab === 'nhi' || tab === 'einv' || tab === 'factory' || tab === 'industry' || tab === 'mix';
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
@@ -5243,6 +5256,8 @@
       if (window.Einv) window.Einv.show();
     } else if (tab === 'factory') {
       if (window.Factory) window.Factory.show();
+    } else if (tab === 'industry') {
+      if (window.Industry) window.Industry.show();
     } else if (tab === 'mix') {
       if (window.Mix) window.Mix.show();
     } else { renderList(); renderRemindBar(); }
@@ -9144,6 +9159,7 @@ export default {
     nhi: { input: '#nhi-q', placeholder: '搜尋剛開始請人：名稱、統編、地址、行業、電話' },
     einv: { input: '#einv-q', placeholder: '搜尋剛開電子發票：名稱、統編、地址、行業、電話' },
     factory: { input: '#factory-q', placeholder: '搜尋新設工廠：名稱、統編、地址、行業、主要產品、電話' },
+    industry: { input: '#industry-q', placeholder: '搜尋產業名單：名稱、統編、地址、類別、行業、電話' },
     mix: { input: '#mix-q', placeholder: '搜尋新名單（七份合併）：名稱、統編、地址、電話、訊號' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
@@ -9439,9 +9455,9 @@ export default {
    * 分頁列只有「重點推廣名單」「找名單」（使用者：分頁在版面上有點多）：七個名單來源是「找名單」底下的第二排（#subtabs），
    * state.tab 還是那七個 key，各分頁、搜尋欄、?tab= 都不用改；按「找名單」就回到上次看的那個來源。統計、規則從右上選單進，分頁列不亮。
    */
-  const SOURCE_TABS = ['mix', 'leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory'];
+  const SOURCE_TABS = ['mix', 'leads', 'chattel', 'listed', 'biz', 'trade', 'nhi', 'einv', 'factory', 'industry'];
   // 「新名單」底下的第三排：合併頁＋六份名單（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）
-  const MIX_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'einv', 'factory'];
+  const MIX_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'einv', 'factory', 'industry'];
   function switchTab(tab) {
     if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'stats' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
@@ -9581,7 +9597,7 @@ export default {
     if (!state.records.length) $('#importer').hidden = false;
     // 舊的獨立網站網址（leads/）轉過來會帶 ?tab=leads：直接開到新公司分頁
     const want = new URLSearchParams(location.search).get('tab') || location.hash.replace(/^#/, '');
-    if (want === 'cal' || want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv' || want === 'factory' || want === 'mix') {
+    if (want === 'cal' || want === 'leads' || want === 'chattel' || want === 'listed' || want === 'biz' || want === 'trade' || want === 'nhi' || want === 'einv' || want === 'factory' || want === 'industry' || want === 'mix') {
       $('#importer').hidden = true;
       switchTab(want);
     }
