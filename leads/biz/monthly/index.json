@@ -1,25 +1,5 @@
 {
  "periods": {
-  "11503": {
-   "generatedAt": "2026-09-29T15:45:27.039Z",
-   "period": "11503",
-   "files": [
-    {
-     "city": "新北市",
-     "type": "change",
-     "path": "11503/新北市-change.csv",
-     "rows": 695,
-     "capitalUp": 31
-    },
-    {
-     "city": "新北市",
-     "type": "setup",
-     "path": "11503/新北市-setup.csv",
-     "rows": 875,
-     "capitalUp": 0
-    }
-   ]
-  },
   "11504": {
    "generatedAt": "2026-09-29T15:45:29.546Z",
    "period": "11504",
@@ -133,9 +113,43 @@
      "capitalUp": 0
     }
    ]
+  },
+  "11509": {
+   "generatedAt": "2026-10-07T20:07:26.855Z",
+   "period": "11509",
+   "files": [
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11509/新北市-change.csv",
+     "rows": 532,
+     "capitalUp": 22
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11509/新北市-setup.csv",
+     "rows": 571,
+     "capitalUp": 0
+    },
+    {
+     "city": "臺北市",
+     "type": "change",
+     "path": "11509/臺北市-change.csv",
+     "rows": 286,
+     "capitalUp": 16
+    },
+    {
+     "city": "臺北市",
+     "type": "setup",
+     "path": "11509/臺北市-setup.csv",
+     "rows": 281,
+     "capitalUp": 0
+    }
+   ]
   }
  },
- "latest": "11508",
- "generatedAt": "2026-10-01T14:33:16.512Z",
+ "latest": "11509",
+ "generatedAt": "2026-10-07T20:07:26.855Z",
  "kind": "bms"
 }
