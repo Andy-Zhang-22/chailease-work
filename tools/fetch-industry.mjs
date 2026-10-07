@@ -126,14 +126,16 @@ async function csvUrlOf(id) {
   return d.resourceDownloadUrl || d.downloadURL;
 }
 
-async function fetchRetry(url, ms = 10 * 60000, tries = 4) {
+/** 整份下載（連內容一起讀完）失敗就重來：食藥署的伺服器常在傳到一半斷線 */
+async function fetchRetry(url, read, ms = 10 * 60000, tries = 4) {
   for (let i = 1; ; i++) {
     try {
       const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(ms), redirect: 'follow' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r;
+      return await read(r);
     } catch (e) {
       if (i >= tries) throw e;
+      console.log(`  下載失敗（${e.message}），${2 * 2 ** i} 秒後第 ${i + 1} 次`);
       await new Promise((ok) => setTimeout(ok, 2000 * 2 ** i));
     }
   }
@@ -150,7 +152,7 @@ export function unzipFirst(buf) {
 async function fetchFood() {
   const url = await csvUrlOf(FOOD.id);
   console.log(`食品業者登錄（${FOOD.id}）下載 ${url}`);
-  const text = unzipFirst(Buffer.from(await (await fetchRetry(url)).arrayBuffer()));
+  const text = unzipFirst(await fetchRetry(url, async (r) => Buffer.from(await r.arrayBuffer())));
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
   const head = parseLine(lines[0]).map((h) => h.trim());
   if (!head.includes('公司統一編號') || !head.includes('登錄項目')) throw new Error(`食品業者登錄表頭對不上：${head.join(',')}`);
@@ -176,7 +178,7 @@ async function fetchEnv() {
   const by = new Map(); let n = 0; let pages = 0; let head = null;
   for (let off = 0; off < 3000000; off += 1000) {
     u.searchParams.set('limit', '1000'); u.searchParams.set('offset', String(off));
-    const lines = (await (await fetchRetry(u.toString(), 120000)).text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter((x) => x.trim());
+    const lines = (await fetchRetry(u.toString(), (r) => r.text(), 120000)).replace(/^\uFEFF/, '').split(/\r?\n/).filter((x) => x.trim());
     pages++;
     if (!lines.length) break;
     const h = parseLine(lines[0]).map((x) => x.trim());
