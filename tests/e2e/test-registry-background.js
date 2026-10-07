@@ -63,16 +63,23 @@ const SEED=Array.from({length:N},(_,i)=>mk(i+1));
  await pg.click('#btnRegistryClose');
  chk(await pg.$eval('#registryBar', e=>e.hidden), '可以把完成後的進度條關掉');
 
- // 再跑一次：剩下的補完
+ // 再跑一次：接著查剩下的，查過的不重查（使用者：「執行到一半就被我跳掉，有辦法讓系統接續查詢，不要再重工了嗎」）
+ const checkedBefore = await pg.evaluate(async()=>{ const s=await window.Store.allStates(); return s.filter(x=>x.regAt).length; });
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  await pg.selectOption('#editorBody select', 'all');
+ const sum2 = await pg.textContent('#editorBody .registry-summary');
+ chk(new RegExp(`上次查到一半：${checkedBefore} 筆已查過，按「全部更新」接著查剩下的 ${N-checkedBefore} 筆`).test(sum2) && await pg.locator('#registryFresh').isVisible(), `設定視窗說上次查到哪裡、可以勾從頭重查：${sum2.slice(-60)}`);
  await pg.click('#editorBody button:has-text("先試一筆")');
  await pg.waitForSelector('#editorBody button:has-text("全部更新"):not([disabled])',{timeout:15000});
+ calls=0;
  await pg.click('#editorBody button:has-text("全部更新")');
  await pg.waitForSelector('#registryBar:not([hidden])');
+ chk(new RegExp(`接著查剩下的 ${N-checkedBefore} 筆`).test(await asked(pg)), '確認框寫接著查剩下幾筆');
  await pg.waitForFunction(()=>/完成/.test(document.querySelector('#registryBarTitle')?.textContent||''),{timeout:30000});
  const done = await pg.evaluate(async()=>{ const s=await window.Store.allStates(); return s.filter(x=>x.edits&&x.edits.owner==='新負責人').length; });
  chk(done===N, `跑完全部 ${N} 筆都更新了：${done}`);
+ chk(calls===N-checkedBefore, `只查剩下的 ${N-checkedBefore} 筆，查過的沒重查（送出 ${calls} 次）`);
+ chk(!(await pg.evaluate(()=>localStorage.getItem('registry-round'))), '整輪跑完，下次從頭');
  chk(/更新 \d+/.test(await pg.textContent("#registryBarNote")), `完成後顯示結果：${await pg.textContent('#registryBarNote')}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
