@@ -1,11 +1,13 @@
 /*
- * 「產業名單」分頁：經濟部「公司登記（依營業項目別）」裡的車輛相關業者（汽車貨運、遊覽車客運、計程車客運、小客車租賃）。
+ * 「產業名單」分頁：經濟部「公司登記（依營業項目別）」裡的車輛相關業者（汽車貨運、遊覽車客運、計程車客運、小客車租賃），
+ * 加上食藥署食品業者登錄的食品工廠、環境部列管的工廠（空污／水污）與營造業（有工地）（版本 308）。
  *
  * 使用者：「還有什麼資料是能幫我能找到更多客戶的？」→「這些資料都做，同個統編的公司依資料都合在一起」。
- * 車輛相關的公司一直在換車、買車，跟中租的車輛租賃最對口。之後的食品業者、環保許可工廠也放這一頁（類別切換）。
- * 資料由 GitHub Actions 每月抓好放 leads/industry/（tools/fetch-industry.mjs，只留新北市、臺北市核准設立的）：
- *   industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話
+ * 車輛相關的公司一直在換車、買車，跟中租的車輛租賃最對口；食品工廠、列管工廠要設備，營造業要機具。類別用篩選切換。
+ * 資料由 GitHub Actions 每月抓好放 leads/industry/（tools/fetch-industry.mjs，只留新北市、臺北市的總公司）：
+ *   industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所
  *   類別可能好幾個（「汽車貨運業、小客車租賃業」）；首見年月晚於 index.json 的 baseline 就是「剛出現」的。
+ *   場所＝「工地 3 處；列管廠 1 處（空污）」；新場所年月／新場所＝這家最近多了新工地／新廠（每月比對環境部、食藥署的場所）。
  * 程式照「新設工廠」（factory.js）那一頁：篩選、加入名單、每日新名單揉合、合併頁、互通都同一套。
  */
 (function (global) {
@@ -17,7 +19,10 @@
   const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
   const WHEN = [['m3', '3 個月內出現'], ['m6', '3～6 個月'], ['y1', '半年以上'], ['base', '起算時就有']];
   // 類別的短名與圖示（卡片、篩選用）
-  const KIND_SHORT = { 汽車貨運業: '🚚 汽車貨運', 遊覽車客運業: '🚌 遊覽車', 計程車客運業: '🚕 計程車', 小客車租賃業: '🚗 租車' };
+  const KIND_SHORT = { 汽車貨運業: '🚚 汽車貨運', 遊覽車客運業: '🚌 遊覽車', 計程車客運業: '🚕 計程車', 小客車租賃業: '🚗 租車', 食品製造業: '🍱 食品工廠', 環保列管工廠: '🏭 環保列管', 營造業: '🏗 營造工地' };
+  const VEHICLE = /貨運|客運|租賃/;
+  // 每日新名單揉合的訊號：一類一個（同一家好幾類就好幾個訊號）
+  const groupSignal = (k) => (VEHICLE.test(k) ? '車輛業者' : k === '食品製造業' ? '食品工廠' : k === '環保列管工廠' ? '環保列管工廠' : k === '營造業' ? '營造業（有工地）' : k);
   const kindLabel = (k) => KIND_SHORT[k] || k;
   const AGE = [['lt1', '未滿 1 年（新公司）'], ['lt5', '1～5 年'], ['5to10', '5～10 年'], ['ge10', '10 年以上'], ['unknown', '不明']];
 
@@ -60,6 +65,8 @@
   // 起算那個月就在名單上的（不知道什麼時候開始做的）算 base；之後才出現的照出現了幾個月
   const whenOf = (r) => (!r.isNew || r.regMonths == null ? 'base' : r.regMonths < 3 ? 'm3' : r.regMonths < 6 ? 'm6' : 'y1');
   const isFresh = (r) => r.isNew && r.regMonths != null && r.regMonths < 3;
+  // 最近 3 個月多了新工地／新廠（起算之後才出現的場所）
+  const isNewSite = (r) => !!r.newSite && r.newSite.months < 3;
   /*
    * 電話的種類：有電話／手機／沒電話。「手機」是「有電話」的一部分（使用者：「還有哪邊可以精準找到公司負責人的手機」——
    * 登記上填手機當聯絡電話的，多半就是老闆本人）。籤是「或」的關係：只按「手機」就只剩手機的。
@@ -87,14 +94,17 @@
       ym: parseYm(o['首見年月']),
       capital: Number(String(o['資本額'] || '').replace(/\D/g, '')) || 0,   // 元（資本總額）
       orgType: String(o['組織別'] || '').trim(),
+      sites: String(o['場所'] || '').trim(),
     };
+    const ns = parseYm(o['新場所年月']);
+    r.newSite = ns ? { ym: ns, what: String(o['新場所'] || '').trim() || '新場所', months: monthsSinceYm(ns, today) } : null;
     r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.isNew = !!(r.ym && baseline && `${r.ym.y}${String(r.ym.m).padStart(2, '0')}` > String(baseline));
     r.regMonths = r.ym ? monthsSinceYm(r.ym, today) : null;
     r.branch = branchOf(r.address);
     r.district = r.branch.district || '';
     r.key = r.taxId || r.name;
-    r.blob = [r.name, r.taxId, r.address, r.industry, r.kinds.join(' '), r.tel].join(' ').toLowerCase();
+    r.blob = [r.name, r.taxId, r.address, r.industry, r.kinds.join(' '), r.sites, r.tel].join(' ').toLowerCase();
     return r;
   }
 
@@ -198,17 +208,20 @@
     const isHidden = isHid(r) || deletedOf(r.name, r.taxId);
     const top = el('div', { className: 'card-top' }, [
       el('span', { className: 'card-name' }, [findbiz(r.taxId, r.name), copyName(r.name)]),
-      isFresh(r) ? el('span', { className: 'badge badge-up', textContent: '剛出現', title: '最近 3 個月才出現在經濟部這份營業項目名單：剛開始做這一行' }) : '',
+      isFresh(r) ? el('span', { className: 'badge badge-up', textContent: '剛出現', title: '最近 3 個月才出現在這份名單：剛開始做這一行' }) : '',
+      isNewSite(r) ? el('span', { className: 'badge badge-up', textContent: r.newSite.what, title: `${ymLabel(r.newSite.ym)} 環境部／食藥署多了這家的${r.newSite.what.replace(/^新/, '')}：在擴張` }) : '',
       ...r.kinds.map((k) => el('span', { className: 'badge badge-ind', textContent: kindLabel(k), title: `公司登記的營業項目有「${k}」` })),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
-      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), el('small', { className: 'muted', textContent: isMobile(r.tel) ? '（出進口登記，手機，多半是老闆本人）' : '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 工廠清冊沒有電話' }),
+      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), el('small', { className: 'muted', textContent: isMobile(r.tel) ? '（出進口登記，手機，多半是老闆本人）' : '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 這份名單沒有電話' }),
       r.industry ? el('span', { textContent: `🏷 ${r.industry}${r.indCode ? ` (${r.indCode})` : ''}` }) : '',
       r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 成立日不明' }),
-      r.isNew && r.ym ? el('span', { textContent: `🆕 ${ymLabel(r.ym)} 出現在營業項目名單（${whenText(r)}）`, title: '跟上個月的名單比，這個月才出現' }) : '',
+      r.sites ? el('span', { textContent: `🏗 ${r.sites}`, title: '食藥署登錄的食品工廠、環境部列管的工地與工廠（還沒解除列管的）' }) : '',
+      r.newSite ? el('span', { textContent: `🆕 ${ymLabel(r.newSite.ym)} 多了${r.newSite.what}`, title: '跟上個月比，這個月才出現的場所' }) : '',
+      r.isNew && r.ym ? el('span', { textContent: `🆕 ${ymLabel(r.ym)} 出現在產業名單（${whenText(r)}）`, title: '跟上個月的名單比，這個月才出現' }) : '',
       r.address ? el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}`, target: '_blank', rel: 'noopener', textContent: r.address })]) : '',
       r.taxId ? el('span', { textContent: `#${r.taxId}` }) : '',
     ]);
@@ -279,7 +292,8 @@
 
   function noteFor(r) {
     // 只留重點：哪一類、什麼時候出現在名單上（來源漏斗看開頭「產業名單：」）
-    return [`產業名單：${r.kinds.join('、')}`, r.isNew && r.ym ? `${r.ym.y}-${String(r.ym.m).padStart(2, '0')} 新出現` : '', r.industry || ''].filter(Boolean).join('，');
+    const ymIso = (ym) => `${ym.y}-${String(ym.m).padStart(2, '0')}`;
+    return [`產業名單：${r.kinds.join('、')}`, r.newSite ? `${ymIso(r.newSite.ym)} ${r.newSite.what}` : '', r.isNew && r.ym ? `${ymIso(r.ym)} 新出現` : '', r.industry || ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {
@@ -312,13 +326,14 @@
    * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 500～6,000 萬 → 我的分公司（遠近）→ 成立 6～10 年
    * （Rules.ageRank，成交多半 7～8 年）→ 最近 3 個月才出現；全一樣資本額高的先。
    */
-  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年', '剛出現 3 個月內'];
+  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 6～10 年', '剛出現或剛有新工地／新廠（3 個月內）'];
   // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛登記工廠的（在擴廠，缺的是錢，不是便宜的錢）
   const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
   const rateFreeOf = (r) => {
     const peer = peerOf(r.taxId);
     if (peer) return `跟${peer}借`;
-    if (isFresh(r)) return `剛做${r.kinds[0] || '車輛業'}`;
+    if (isNewSite(r)) return `剛有${r.newSite.what}`;
+    if (isFresh(r)) return `剛做${r.kinds[0] || '這一行'}`;
     return '';
   };
   // 分頁篩選的「利率不敏感」：跟每日新名單同一套
@@ -326,7 +341,7 @@
   const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
-  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.tel, capRank(r), branchRank(r), ageRankOf(r), isFresh(r)];
+  const dailyChecks = (r) => [!!rateFreeOf(r), !!r.tel, capRank(r), branchRank(r), ageRankOf(r), isFresh(r) || isNewSite(r)];
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -387,7 +402,7 @@
     // 使用者：「找名單的預設篩選畫面都先收起來，我每次點進來都要自己關」；leads-filters-open＝'1' 是預設打開（測試用）
     filters.open = (() => { try { return localStorage.getItem('leads-filters-open') === '1'; } catch (e) { return false; } })();
     root.append(
-      el('p', { className: 'muted leads-sub', id: 'industry-sub', textContent: '經濟部公司登記（依營業項目別）：新北市、臺北市的車輛相關業者' }),
+      el('p', { className: 'muted leads-sub', id: 'industry-sub', textContent: '新北市、臺北市的車輛相關業者、食品工廠、環保列管工廠、營造業' }),
       filters,
       el('div', { className: 'leads-head' }, [
         el('div', { className: 'leads-count', id: 'industry-count', textContent: '—' }),
@@ -405,7 +420,7 @@
       el('div', { className: 'empty', id: 'industry-empty', hidden: true }),
       el('div', { className: 'leads-row leads-more' }, [el('button', { className: 'btn', id: 'industry-more', type: 'button', textContent: '載入更多', hidden: true })]),
       el('div', { className: 'chattel-legend' }, [el('span', {}, [el('i', { className: 'swatch is-up' }), ' 在我的分公司轄區'])]),
-      el('p', { className: 'muted leads-foot', textContent: '資料來源：經濟部「公司登記（依營業項目別）」（政府資料開放平臺 36719 汽車貨運業、36720 遊覽車客運業、36711 計程車客運業、36715 小客車租賃業，每月），GitHub Actions 每月 14 日抓，只留新北市、臺北市核准設立的；成立日期、行業對財政部稅籍檔，電話對貿易署出進口廠商登記。' }),
+      el('p', { className: 'muted leads-foot', textContent: '資料來源（政府資料開放平臺，每月）：經濟部「公司登記（依營業項目別）」36719 汽車貨運業、36720 遊覽車客運業、36711 計程車客運業、36715 小客車租賃業；食藥署「食品業者登錄」8938（工廠／製造場所）；環境部「環境保護許可管理系統對象」118447（還在列管的工地、空污／水污工廠）。GitHub Actions 每月 14 日抓，只留新北市、臺北市的總公司；成立日期、行業、食品與環保那兩份的名稱地址對財政部稅籍檔，電話對貿易署出進口廠商登記。' }),
     );
   }
 
@@ -450,7 +465,7 @@
         return;
       }
       $('#industry-loading').hidden = true;
-      $('#industry-sub').textContent = `${(index.cities || []).join('、')}的車輛相關業者 ${Number(index.total || 0).toLocaleString()} 家（${Object.entries(index.byKind || {}).map(([k, n]) => `${kindLabel(k).replace(/^\S+ /, '')} ${n}`).join('、')}；對到電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　起算 ${String(index.baseline || '').replace(/^(\d{4})(\d{2})$/, '$1/$2')}，之後新出現的標「剛出現」`;
+      $('#industry-sub').textContent = `${(index.cities || []).join('、')} ${Number(index.total || 0).toLocaleString()} 家（${Object.entries(index.byKind || {}).map(([k, n]) => `${kindLabel(k).replace(/^\S+ /, '')} ${n}`).join('、')}；對到電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　起算 ${String(index.baseline || '').replace(/^(\d{4})(\d{2})$/, '$1/$2')}，之後新出現的標「剛出現」`;
       $('#industry-loading').hidden = true;
       ready = true;
       if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
@@ -492,7 +507,10 @@
    * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
    */
   function dailyFacts(r) {
-    return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: isFresh(r) ? ['車輛業者', '剛做車輛業'] : ['車輛業者'],
+    const signals = [...new Set(r.kinds.map(groupSignal))];
+    if (isFresh(r)) signals.push(r.kinds.some((k) => VEHICLE.test(k)) ? '剛做車輛業' : '剛出現在產業名單');
+    if (isNewSite(r)) signals.push(`剛有${r.newSite.what}`);
+    return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals,
       ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r) };
   }
   /*
@@ -501,7 +519,7 @@
    */
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `${r.kinds.join('、')}${r.isNew && r.ym ? `（${ymLabel(r.ym)} 新出現）` : ''}`, add: () => addToList([r]) };
+      info: `${r.kinds.join('、')}${r.newSite ? `（${ymLabel(r.newSite.ym)} ${r.newSite.what}）` : r.isNew && r.ym ? `（${ymLabel(r.ym)} 新出現）` : ''}`, add: () => addToList([r]) };
   }
   /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
   let factIdx = null; let factIdxN = -1;
@@ -514,5 +532,5 @@
     const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
     return r ? cardFacts(r) : null;
   }
-  global.Industry = { show, ensureData, lookup, dailyFacts, cardFacts, factsOf, toRecord, parseYm, monthsSinceYm, whenOf, ageOf, toStandardCsv, noteFor, dailyCandidates, DAILY_PRIORITY, kindLabel };
+  global.Industry = { show, ensureData, lookup, dailyFacts, cardFacts, factsOf, toRecord, parseYm, monthsSinceYm, whenOf, ageOf, toStandardCsv, noteFor, dailyCandidates, DAILY_PRIORITY, kindLabel, isNewSite };
 })(window);

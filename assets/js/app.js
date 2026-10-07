@@ -3317,7 +3317,7 @@
     { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
     { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
     { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
-    // 產業名單（使用者：「這些資料都做，同個統編的公司依資料都合在一起」）：車輛相關業者，之後加食品、環保
+    // 產業名單（使用者：「這些資料都做，同個統編的公司依資料都合在一起」）：車輛相關業者、食品工廠、環保列管工廠、營造業
     { key: 'in', tab: 'industry', label: '產業名單', mod: () => window.Industry },
     // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
     { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
@@ -3586,7 +3586,7 @@
     { key: 'nhi', name: '剛開始請人（健保新成立投保單位）', url: 'leads/nhi/index.json', every: '每月 10 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
     { key: 'einv', name: '剛開電子發票（財政部導入電子發票營業人）', url: 'leads/einv/index.json', every: '每月 11 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛導入 ${Number(j.newTotal || 0).toLocaleString()}，起算 ${j.baseline || ''}` },
     { key: 'factory', name: '新設工廠（經濟部生產中工廠清冊）', url: 'leads/factory/index.json', every: '每月 20 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，資料到 ${j.latestYm || ''}` },
-    { key: 'industry', name: '產業名單（經濟部依營業項目別：車輛相關業者）', url: 'leads/industry/index.json', every: '每月 14 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛出現 ${Number(j.newTotal || 0).toLocaleString()}` },
+    { key: 'industry', name: '產業名單（車輛相關、食品工廠、環保列管、營造業）', url: 'leads/industry/index.json', every: '每月 14 日', limit: 45, at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家，剛出現 ${Number(j.newTotal || 0).toLocaleString()}，新工地／新廠 ${Number(j.newSiteTotal || 0).toLocaleString()}` },
     { key: 'bizm', name: '商業設立／變更清冊', url: 'leads/biz/monthly/index.json', every: '每月 8 日', limit: 40, at: (j) => j.generatedAt, extra: (j) => `最新期別 ${j.latest || ''}` },
   ];
   async function openDataStatus() {
@@ -3750,7 +3750,7 @@
           hint,
         ]));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的六頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -4730,9 +4730,24 @@
     if ((fac && ago(`${fac}-01`) !== null && ago(`${fac}-01`) <= 200) || r.newFactory) {
       return { kind: 'factory', text: `看到貴公司最近新登記了工廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
     }
+    // 產業名單：最近多了新工地／新廠 → 在擴張
+    const site = notes.match(/^產業名單：[^\n]*?(\d{4}-\d{2}) (新工地|新廠)/);
+    if (site && ago(`${site[1]}-01`) !== null && ago(`${site[1]}-01`) <= 200) {
+      return site[2] === '新工地'
+        ? { kind: 'site', text: `看到貴公司最近又開了新工地，機具、車輛添購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` }
+        : { kind: 'plant', text: `看到貴公司最近多了新的廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
+    }
     // 車輛相關業者（產業名單）：換車、買車
     if (/^產業名單：[^\n]*(貨運|遊覽車|計程車|租賃)/.test(notes)) {
       return { kind: 'vehicle', text: `貴公司是做運輸／租車的，車輛汰換、新購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
+    }
+    // 營造業（環境部列管的工地）：機具
+    if (/^產業名單：[^\n]*營造業/.test(notes)) {
+      return { kind: 'build', text: `貴公司有在做工程，機具、車輛添購或工程週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
+    }
+    // 食品工廠、環保列管工廠：設備
+    if (/^產業名單：[^\n]*(食品製造業|環保列管工廠)/.test(notes)) {
+      return { kind: 'plant', text: `貴公司有自己的工廠，生產設備汰換、添購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
     }
     // 舊寫法「原始登記 2026-08-20」、新寫法「出進口廠商登記：進口＋出口，2026-08 開始」都認
     const firstM = notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || notes.match(/出進口廠商登記：[^，\n]*，(\d{4}-\d{2}) 開始/);
