@@ -558,14 +558,15 @@
     }
     return (a.days == null ? 1e9 : a.days) - (b.days == null ? 1e9 : b.days);
   }
-  async function dailyCandidates() {
+  // withMine：合併頁要連名單裡已經有的也列（卡片標「已在名單」）；每日新名單照舊不要
+  async function dailyCandidates({ withMine = false } = {}) {
     if (!root) root = document.getElementById('paneChattel');
     if (!root) return [];
     await start();
     if (!ready) return [];
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.cust.name, r.cust.id))
+    return rows.filter((r) => (withMine || !mineOf(r, cm)) && !isHid(r) && !deletedOf(r.cust.name, r.cust.id))
       .map((r) => {
         r._checks = dailyChecks(r);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))

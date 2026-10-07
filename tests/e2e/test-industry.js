@@ -55,8 +55,8 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  chk(/運輸／租車/.test(op), `開場白：${op}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  // 合併頁：這一頁的公司進得去，訊號有「車輛業者」「營造業（有工地）、剛有新工地」
- const mix=await pg.evaluate(async()=>{ const m=await window.mixCandidates(); return m.filter(x=>x.facts.some(f=>f.key==='in')).map(x=>`${x.name}|${x.signals.join('、')}`); });
- chk(mix.length===3 && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)), `合併頁有產業名單（名祿加進名單了不列）：${mix.join(' / ')}`);
+ const mix=await pg.evaluate(async()=>{ const m=await window.mixCandidates(); return m.filter(x=>!x.mine && x.facts.some(f=>f.key==='in')).map(x=>`${x.name}|${x.signals.join('、')}`); });
+ chk(mix.length===3 && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
  // 營造業加進來：備註寫新工地、開場白講新工地
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForTimeout(300);
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#industry-cards .card')].find(x=>x.textContent.includes('鼎築')); c.querySelector('.industry-add-one').click(); });

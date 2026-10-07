@@ -680,7 +680,8 @@
     }
     return b.capital - a.capital || (a['公司名稱'] || '').localeCompare(b['公司名稱'] || '', 'zh-Hant');
   }
-  async function dailyCandidates() {
+  // withMine：合併頁要連名單裡已經有的也列（卡片標「已在名單」）；每日新名單照舊不要
+  async function dailyCandidates({ withMine = false } = {}) {
     if (!root) root = document.getElementById('paneLeads');
     if (!root) return [];
     await start();
@@ -693,7 +694,7 @@
     if (global.Trade && global.Trade.ensurePhones) { try { await global.Trade.ensurePhones(); } catch (e) { /* 沒電話表就當都沒有 */ } }
     if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就只看增資／擴張 */ } }
     const cm = customerMap();
-    return rows.filter((r) => r.type === 'change' && !r.holding && !mineOf(r, cm) && !isHid(r) && !delOf(r))
+    return rows.filter((r) => r.type === 'change' && !r.holding && (withMine || !mineOf(r, cm)) && !isHid(r) && !delOf(r))
       .map((r) => {
         r._checks = dailyChecks(r, latest);
         const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i]))

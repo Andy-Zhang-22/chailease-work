@@ -348,14 +348,15 @@
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [hit.length ? `符合：${hit.join('、')}` : '基準都不符，補位', relax].filter(Boolean).join('；');
   };
-  async function dailyCandidates() {
+  // withMine：合併頁要連名單裡已經有的也列（卡片標「已在名單」）；每日新名單照舊不要
+  async function dailyCandidates({ withMine = false } = {}) {
     if (!root) root = document.getElementById('paneEinv');
     if (!root) return [];
     await start();
     if (!ready) return [];
     if (global.Chattel && global.Chattel.ensureData) { try { await global.Chattel.ensureData(); } catch (e) { /* 沒動保資料就不看同業 */ } }
     const cm = customerMap();
-    return rows.filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.name, r.taxId))
+    return rows.filter((r) => (withMine || !mineOf(r, cm)) && !isHid(r) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r, (i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])); return r; })
       .sort(dailyCompare);
   }

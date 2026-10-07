@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-311';
+  const APP_VERSION = '20261007-312';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3310,7 +3310,7 @@
   /*
    * 「新名單」合併頁（mix.js）用：六頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠）的候選
    * 依統編合成一家、照每日新名單同一套排（mergeFeed），每家附上各頁的卡片資料（cardFacts）。
-   * 名單裡有的、藏起來的、刪過的不列（各頁的 dailyCandidates 已經濾掉）。
+   * 藏起來的、刪過的不列（各頁的 dailyCandidates 已經濾掉）；名單裡有的照樣列，標「已在名單」（mine）。
    */
   const MIX_SOURCES = [
     { key: 'ch', tab: 'chattel', label: '動產擔保', mod: () => window.Chattel },
@@ -3327,10 +3327,20 @@
   window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
   window.mixCandidates = async () => {
     const srcs = MIX_SOURCES.filter((x) => x.mod() && x.mod().dailyCandidates);
-    const lists = await Promise.all(srcs.map((x) => x.mod().dailyCandidates().catch((e) => { console.error(e); return []; })));
+    // 名單裡已經有的也列（使用者：「合併頁跟其他分頁不同，其他分頁我加入名單到重點名單後，在該分頁上還是留在上面」），卡片標「已在名單」
+    const lists = await Promise.all(srcs.map((x) => x.mod().dailyCandidates({ withMine: true }).catch((e) => { console.error(e); return []; })));
     const merged = mergeFeed(srcs.map((x, i) => ({ key: x.key, mod: x.mod(), list: lists[i] })));
+    // 名單索引建一次（合併頁可能好幾萬家，不能每家都掃一遍名單）；比對規則跟 findCustomer、匯入比對重複一樣
+    const byTax = new Map(); const byName = new Map();
+    allViews().forEach((v) => { const t = taxKey(v); const n = nameKey(v); if (t && !byTax.has(t)) byTax.set(t, v); if (n && !byName.has(n)) byName.set(n, v); });
+    const mineOf = (c) => {
+      const tk = taxKey({ taxId: /^\d{8}$/.test(c.key) ? c.key : '' }); const nk = nameKey({ company: c.name });
+      const byN = nk ? byName.get(nk) : null;
+      const v = (tk && byTax.get(tk)) || (byN && !(tk && taxKey(byN) && taxKey(byN) !== tk) ? byN : null);
+      return v ? { id: v.id, addedDate: v.addedDate || '', lastDate: v.lastDate || '', nextDate: v.nextDate || '', declined: !!(v.blocked || v.outcome === 'blocked') } : null;
+    };
     return merged.map((c) => ({
-      key: c.key, name: c.name, signals: [...c.signals], buy: c.buy,
+      key: c.key, name: c.name, signals: [...c.signals], buy: c.buy, mine: mineOf(c),
       facts: srcs.filter((x) => c.recs[x.key]).map((x) => ({ key: x.key, tab: x.tab, label: x.label, ...(x.mod().cardFacts ? x.mod().cardFacts(c.recs[x.key]) : { name: c.name }) })),
     }));
   };
