@@ -50,7 +50,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.click('#biz-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選');
  const pc=(await pg.locator('#biz-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話1', `電話籤（對出進口廠商電話表）：${pc}`);
  await clickChip('#biz-fPhone','手機'); n=await names(); chk(n.join('|')==='一塊制作室內裝修工作室', `只按「手機」：${n.join('|')}`);
- chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#biz-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ chk(/📞 09\d{8}（手機，多半是老闆本人）/.test(await pg.locator('#biz-cards .card').first().locator('.card-top').textContent()) && (await pg.locator('#biz-cards .card').first().locator('.card-top .copy-dot').count())===2, '卡片寫出手機號碼、後面有複製鈕');
  await clickChip('#biz-fPhone','沒電話'); n=await names(); chk(n.length===2 && n.includes('協玖裝潢企業社'), `手機＋沒電話是「或」：${n.join('|')}`);
  await pg.click('#biz-reset'); await pg.waitForTimeout(300); n=await names(); chk(n.length===3, '清除篩選也清電話籤');
  // 頂端搜尋欄跟著分頁

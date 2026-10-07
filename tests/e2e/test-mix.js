@@ -31,7 +31,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.route('**/leads/factory/factory.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:FAC}));
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9593/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); },[mk('1','老客戶股份有限公司','11111111')]);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); },[mk('1','老客戶股份有限公司','11111111'), mk('2','丙三工業 有限公司','')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForSelector('#paneMix .mix-card',{timeout:20000}); await pg.waitForTimeout(800);
  const names=async()=>pg.$$eval('#mix-cards .mix-card .card-name',a=>a.map(x=>x.textContent.trim()));
@@ -62,6 +62,16 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  if (await pg.locator('#drawer').isVisible()) { await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200); }
  await pg.click('#mixtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
  chk(!(await names()).includes('宇駿貿易有限公司'), `加完就不列：${(await names()).join('|')}`);
+ // 名單上其實早就有（名稱多一個空白、沒統編，各頁比不出來）：按加入不會重複加，直接打開名單上那一筆
+ // （使用者：「我沒辦法在這裡打開加入重點名單客戶的詳細頁」）
+ await pg.locator('#mix-cards .mix-card:has-text("丙三") .mix-add-one').click(); await pg.waitForTimeout(1500);
+ const h2=await pg.locator('#drawerBody h2').first().textContent().catch(()=>'');
+ chk(await pg.locator('#drawer').isVisible() && /丙三工業/.test(h2) && (await pg.evaluate(()=>window.customerViews().filter(v=>/丙三/.test(v.company)).length))===1, `早就在名單上的：打開名單上那一筆、沒有重複加（${h2}）`);
+ if (await pg.locator('#drawer').isVisible()) { await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200); }
+ // 電話後面有複製鈕
+ await pg.click('#mixtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
+ const cc=pg.locator('#mix-cards .mix-card:has-text("名祿")');
+ chk((await cc.locator('.phone-search .copy-dot').count())===1, '合併頁電話後面有複製鈕');
  // 底下各份名單的更新頻率
  await pg.waitForTimeout(500);
  const st=(await pg.textContent('#mix-status')).replace(/\s+/g,' ');

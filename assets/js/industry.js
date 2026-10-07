@@ -39,6 +39,7 @@
     (children || []).forEach((c) => { if (c !== '' && c != null) n.append(c); });
     return n;
   };
+  const copyTel = (t) => (typeof global.copyTel === 'function' ? global.copyTel(t) : '');   // 電話後面的複製鈕
   function toast(msg) {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -193,9 +194,11 @@
     ]);
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
-  function openJustAdded(fileName, single) {
+  // 加一家就直接打開詳細頁；那家其實早就在名單上（名稱寫法不同、別份名單加過）就打開名單上那一筆
+  function openJustAdded(fileName, single, who) {
     if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
-    const v = global.customerViews().find((x) => x.source === fileName);
+    const v = global.customerViews().find((x) => x.source === fileName)
+      || (who && typeof global.findCustomer === 'function' ? global.findCustomer(who.name, who.taxId) : null);
     if (v) global.openCustomer(v.id);
   }
   // 公司直達登記頁、商業連用統編查的結果頁（規則在 Normalize.findbizUrl）
@@ -216,7 +219,7 @@
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
-      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), el('small', { className: 'muted', textContent: isMobile(r.tel) ? '（出進口登記，手機，多半是老闆本人）' : '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 這份名單沒有電話' }),
+      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), copyTel(r.tel), el('small', { className: 'muted', textContent: isMobile(r.tel) ? '（出進口登記，手機，多半是老闆本人）' : '（出進口登記）' })]) : el('span', { className: 'muted', textContent: '📞 這份名單沒有電話' }),
       r.industry ? el('span', { textContent: `🏷 ${r.industry}${r.indCode ? ` (${r.indCode})` : ''}` }) : '',
       r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 成立日不明' }),
@@ -312,7 +315,7 @@
     const file = new File([toStandardCsv(fresh, dates)], `產業名單-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(r.key));
-    openJustAdded(file.name, fresh.length === 1);
+    openJustAdded(file.name, fresh.length === 1, { name: fresh[0].name, taxId: fresh[0].taxId });
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
     const lost = fresh.length - got;
     const sorted = dates.filter(Boolean).sort();

@@ -42,7 +42,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await card.locator('.card-name a[href="https://findbiz.nat.gov.tw/fts/company/54867253"]').count())===1, '公司名直達商工登記頁（商號走用統編查的規則在 normalize.test.js）');
  const ct=(await card.textContent()).replace(/\s+/g,' ');
  chk(/剛開電子發票/.test(ct) && /B2B/.test(ct) && /成立 7 年才導入/.test(ct) && /📞 02-2960-0000/.test(ct) && /2026\/11 出現在導入名單（這個月）/.test(ct) && /資本額 1,200 萬・有限公司/.test(ct) && /運動用品/.test(ct), `卡片：${ct.slice(0,200)}`);
- chk((await card.locator('.copy-dot').count())===1 && (await card.locator('.phone-search a').count())===4 && (await card.locator('.phone-search input').count())===0, '有複製點；有電話的也有找電話那排，但沒有貼電話的框');
+ chk((await card.locator('.copy-dot').count())===2 && (await card.locator('.card-meta .copy-dot').count())===1 && (await card.locator('.phone-search a').count())===4 && (await card.locator('.phone-search input').count())===0, '公司名、電話後面各有複製點；有電話的也有找電話那排，但沒有貼電話的框');
  // 清掉預設：四家都出來，沒電話的有找電話那排
  await pg.click('#einv-reset'); await pg.waitForTimeout(200);
  await pg.fill('#einv-capMin',''); await pg.fill('#einv-capMax',''); await pg.waitForTimeout(200);

@@ -51,6 +51,11 @@
     (children || []).forEach((c) => { if (c !== '' && c != null) n.append(c); });
     return n;
   };
+  const copyTel = (t) => (typeof global.copyTel === 'function' ? global.copyTel(t) : '');   // 電話後面的複製鈕
+  // 「📞 電話」標籤（貿易署出進口登記的電話，加入名單時會自動填）＋複製鈕；表還沒載好查不到號碼就只寫有電話
+  const phoneBadge = (tel, mobile) => [
+    el('span', { className: 'badge badge-ind', textContent: `📞 ${tel || '有電話'}${mobile ? '（手機，多半是老闆本人）' : ''}`, title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }),
+    tel ? copyTel(tel) : ''];
   function toast(msg) {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -271,9 +276,11 @@
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
   /** 單張加入之後直接打開那一筆（整批不開） */
-  function openJustAdded(fileName, single) {
+  // 加一家就直接打開詳細頁；那家其實早就在名單上（名稱寫法不同、別份名單加過）就打開名單上那一筆
+  function openJustAdded(fileName, single, who) {
     if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
-    const v = global.customerViews().find((x) => x.source === fileName);
+    const v = global.customerViews().find((x) => x.source === fileName)
+      || (who && typeof global.findCustomer === 'function' ? global.findCustomer(who.name, who.taxId) : null);
     if (v) global.openCustomer(v.id);
   }
 
@@ -294,12 +301,12 @@
       r.reg ? '' : el('span', { className: 'badge badge-own', textContent: '只有稅籍登記', title: '沒辦商業登記（小規模營業人可免辦）：商工登記查不到、沒有負責人，資本額是稅籍上自己填的' }),
       r.branch.key && r.branch.kind ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
       r.invoice ? el('span', { className: 'badge badge-ind', textContent: '開發票' }) : '',
-      hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '',
+      ...(hasPhone(r) ? phoneBadge(global.Trade.telOf(r.taxId), phoneKindsOf(r).has('M')) : []),
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
     ]);
     const fp = foundOf(r);
     const meta = el('div', { className: 'card-meta' }, [
-      fp ? el('span', {}, ['📞 ', el('a', { href: `tel:${fp.tel.replace(/[^\d+#]/g, '')}`, textContent: fp.tel }), el('small', { className: 'muted', textContent: fp.level === 'sure' ? '（Google 地圖找到，名稱地址都對）' : '（Google 地圖找到，疑似，打前核對）' }), fp.maps ? el('a', { href: fp.maps, target: '_blank', rel: 'noopener', textContent: ' 地圖', title: 'Google 地圖上的這家' }) : '']) : '',
+      fp ? el('span', {}, ['📞 ', el('a', { href: `tel:${fp.tel.replace(/[^\d+#]/g, '')}`, textContent: fp.tel }), copyTel(fp.tel), el('small', { className: 'muted', textContent: fp.level === 'sure' ? '（Google 地圖找到，名稱地址都對）' : '（Google 地圖找到，疑似，打前核對）' }), fp.maps ? el('a', { href: fp.maps, target: '_blank', rel: 'noopener', textContent: ' 地圖', title: 'Google 地圖上的這家' }) : '']) : '',
       el('span', { textContent: `💰 資本額 ${money(r.capital)}${r.reg ? '' : '（稅籍自填）'}` }),
       r.setup ? el('span', { textContent: `🎂 ${r.monthly && r.kind === '設立' ? '核准設立' : '設立'} ${r.setup.y}/${String(r.setup.m).padStart(2, '0')}${r.monthly && r.kind === '設立' ? `/${String(r.setup.d).padStart(2, '0')}` : `（${r.years} 年）`}` }) : (r.monthly ? '' : el('span', { className: 'muted', textContent: '🎂 設立不明' })),
       r.changed ? el('span', { textContent: `🔁 核准變更 ${ymd(r.changed)}${r.monthly ? `（${periodLabel(r.period)} 清冊）` : ''}` }) : '',
@@ -481,7 +488,7 @@
     const file = new File([toStandardCsv(fresh, dates)], `商行企業社-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(r.key));
-    openJustAdded(file.name, fresh.length === 1);
+    openJustAdded(file.name, fresh.length === 1, { name: fresh[0].name, taxId: fresh[0].taxId });
     // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），不能再說「N 家排在…」
     // （使用者：昨天加進去的，「昨天新增」卻看不到——其實是早就在名單上，加的那次被略過了）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;

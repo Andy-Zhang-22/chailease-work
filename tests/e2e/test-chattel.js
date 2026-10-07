@@ -100,7 +100,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await clickChip('#chattel-fAge','5 年以上');
  const pc=(await pg.locator('#chattel-fPhone .chip').allTextContents()).map(t=>t.replace(/\s+/g,'')).join('|'); chk(pc==='有電話2|手機1|沒電話2', `電話籤（對出進口廠商電話表）：${pc}`);
  await clickChip('#chattel-fPhone','手機'); n=await names(); chk(n.join('|')==='禾泰精密工業有限公司', `只按「手機」：${n.join('|')}`);
- chk(/📞 手機（多半是老闆本人）/.test(await pg.locator('#chattel-cards .card').first().locator('.card-top').textContent()), '卡片標手機');
+ chk(/📞 09\d{8}（手機，多半是老闆本人）/.test(await pg.locator('#chattel-cards .card').first().locator('.card-top').textContent()) && (await pg.locator('#chattel-cards .card').first().locator('.card-top .copy-dot').count())===2, '卡片寫出手機號碼、後面有複製鈕');
  await clickChip('#chattel-fPhone','手機'); await clickChip('#chattel-fPhone','有電話'); n=await names(); chk(n.length===2 && n.includes('昱昌汽車貨運股份有限公司'), `「有電話」含手機：${n.join('|')}`);
  await clickChip('#chattel-fPhone','有電話');
 

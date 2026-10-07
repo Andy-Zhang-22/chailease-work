@@ -42,7 +42,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await card.locator('.card-name a[href="https://findbiz.nat.gov.tw/fts/company/54867253"]').count())===1, '公司名直達商工登記頁（商號走用統編查的規則在 normalize.test.js）');
  const ct=(await card.textContent()).replace(/\s+/g,' ');
  chk(/剛登記工廠/.test(ct) && /2 個廠/.test(ct) && /📞 02-2960-0000/.test(ct) && /🏭 2026\/09 登記工廠（1 個月前）/.test(ct) && /📦 金屬模具、其他金屬製品/.test(ct) && /資本額 1,200 萬/.test(ct) && /金屬製品製造業/.test(ct), `卡片：${ct.slice(0,240)}`);
- chk((await card.locator('.copy-dot').count())===1 && (await card.locator('.phone-search a').count())===4 && (await card.locator('.phone-search input').count())===0, '有複製點；有電話的也有找電話那排，但沒有貼電話的框');
+ chk((await card.locator('.copy-dot').count())===2 && (await card.locator('.card-meta .copy-dot').count())===1 && (await card.locator('.phone-search a').count())===4 && (await card.locator('.phone-search input').count())===0, '公司名、電話後面各有複製點；有電話的也有找電話那排，但沒有貼電話的框');
  // 清掉預設：四家都出來，沒電話的有找電話那排
  await pg.click('#factory-reset'); await pg.waitForTimeout(200);
  await pg.fill('#factory-capMin',''); await pg.fill('#factory-capMax',''); await pg.waitForTimeout(200);

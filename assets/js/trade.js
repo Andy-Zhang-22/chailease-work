@@ -31,6 +31,7 @@
     (children || []).forEach((c) => { if (c !== '' && c != null) n.append(c); });
     return n;
   };
+  const copyTel = (t) => (typeof global.copyTel === 'function' ? global.copyTel(t) : '');   // 電話後面的複製鈕
   function toast(msg) {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -221,9 +222,11 @@
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
   /** 單張加入之後直接打開那一筆（整批不開） */
-  function openJustAdded(fileName, single) {
+  // 加一家就直接打開詳細頁；那家其實早就在名單上（名稱寫法不同、別份名單加過）就打開名單上那一筆
+  function openJustAdded(fileName, single, who) {
     if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
-    const v = global.customerViews().find((x) => x.source === fileName);
+    const v = global.customerViews().find((x) => x.source === fileName)
+      || (who && typeof global.findCustomer === 'function' ? global.findCustomer(who.name, who.taxId) : null);
     if (v) global.openCustomer(v.id);
   }
 
@@ -242,7 +245,7 @@
       mine ? (declined(mine) ? el('span', { className: 'badge badge-own', textContent: '名單上是禁止推廣' }) : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${mine.addedDate ? `・${mmdd(mine.addedDate)} 加入` : ''}${mine.lastDate ? `・上次 ${mmdd(mine.lastDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(mine.id) })) : '',
     ]);
     const meta = el('div', { className: 'card-meta' }, [
-      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), isMobile(r.tel) ? el('small', { className: 'muted', textContent: '（手機，多半是老闆本人）' }) : '']) : el('span', { className: 'muted', textContent: '📞 登記上沒有電話' }),
+      r.tel ? el('span', {}, ['📞 ', el('a', { href: `tel:${r.tel.replace(/[^\d+#]/g, '')}`, textContent: r.tel }), copyTel(r.tel), isMobile(r.tel) ? el('small', { className: 'muted', textContent: '（手機，多半是老闆本人）' }) : '']) : el('span', { className: 'muted', textContent: '📞 登記上沒有電話' }),
       r.fax ? el('span', { textContent: `📠 ${r.fax}` }) : '',
       r.rep ? el('span', { textContent: `👤 代表人 ${r.rep}`, title: '貿易署公開檔把中間字遮掉' }) : '',
       r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
@@ -339,7 +342,7 @@
     const file = new File([toStandardCsv(fresh, dates)], `出進口廠商-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(r.key));
-    openJustAdded(file.name, fresh.length === 1);
+    openJustAdded(file.name, fresh.length === 1, { name: fresh[0].name, taxId: fresh[0].taxId });
     // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），不能再說「N 家排在…」
     // （使用者：昨天加進去的，「昨天新增」卻看不到——其實是早就在名單上，加的那次被略過了）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;

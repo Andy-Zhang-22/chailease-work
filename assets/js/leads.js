@@ -42,6 +42,11 @@
     (children || []).forEach((c) => { if (c !== '' && c != null) n.append(c); });
     return n;
   };
+  const copyTel = (t) => (typeof global.copyTel === 'function' ? global.copyTel(t) : '');   // 電話後面的複製鈕
+  // 「📞 電話」標籤（貿易署出進口登記的電話，加入名單時會自動填）＋複製鈕；表還沒載好查不到號碼就只寫有電話
+  const phoneBadge = (tel, mobile) => [
+    el('span', { className: 'badge badge-ind', textContent: `📞 ${tel || '有電話'}${mobile ? '（手機，多半是老闆本人）' : ''}`, title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }),
+    tel ? copyTel(tel) : ''];
   function toast(msg) {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -409,9 +414,11 @@
   }
   const copyName = (name) => (typeof global.copyDot === 'function' ? global.copyDot(name, '複製公司名稱', `已複製：${name}`) : '');
   /** 單張加入之後直接打開那一筆（整批不開） */
-  function openJustAdded(fileName, single) {
+  // 加一家就直接打開詳細頁；那家其實早就在名單上（名稱寫法不同、別份名單加過）就打開名單上那一筆
+  function openJustAdded(fileName, single, who) {
     if (!single || typeof global.customerViews !== 'function' || typeof global.openCustomer !== 'function') return;
-    const v = global.customerViews().find((x) => x.source === fileName);
+    const v = global.customerViews().find((x) => x.source === fileName)
+      || (who && typeof global.findCustomer === 'function' ? global.findCustomer(who.name, who.taxId) : null);
     if (v) global.openCustomer(v.id);
   }
   /** 卡片：公司名那行底下接找電話那排（名單裡有的也有，只是不給輸入框） */
@@ -452,7 +459,7 @@
       el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '',
-        hasPhone(r) ? el('span', { className: 'badge badge-ind', textContent: phoneKindsOf(r).has('M') ? '📞 手機（多半是老闆本人）' : '📞 有電話', title: '貿易署出進口廠商登記裡有電話，加入名單時會自動填' }) : '', mineBadge]),
+        ...(hasPhone(r) ? phoneBadge(global.Trade.telOf(r['統一編號']), phoneKindsOf(r).has('M')) : []), mineBadge]),
       el('div', { className: 'card-meta' }, [
         el('span', { textContent: `💰 ${wan(r.capital)}` }),
         r['代表人'] ? el('span', { textContent: `👤 ${r['代表人']}` }) : '',
@@ -611,7 +618,7 @@
     const file = new File([toStandardCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(keyOf(r)));
-    openJustAdded(file.name, fresh.length === 1);
+    openJustAdded(file.name, fresh.length === 1, { name: fresh[0]['公司名稱'], taxId: fresh[0]['統一編號'] });
     // 匯入時靠名稱比對到已在名單的會被略過，不能再說「N 家排在…」（使用者：昨天加的「昨天新增」看不到——早就在名單上）
     const got = (typeof global.customerViews === 'function' ? global.customerViews() : []).filter((v) => v.source === file.name).length;
     const lost = fresh.length - got;

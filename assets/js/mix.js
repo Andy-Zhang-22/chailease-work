@@ -104,7 +104,7 @@
       d.branchKey ? el('span', { className: 'badge badge-branch', textContent: d.branchKey }) : '',
     ]);
     const phone = el('div', { className: 'card-actions phone-search' }, [
-      d.tel ? el('a', { className: 'tel', href: `tel:${d.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${d.tel}` }) : el('span', { className: 'muted', textContent: '📞 沒電話' }),
+      ...(d.tel ? [el('a', { className: 'tel', href: `tel:${d.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${d.tel}` }), typeof global.copyTel === 'function' ? global.copyTel(d.tel) : ''] : [el('span', { className: 'muted', textContent: '📞 沒電話' })]),
       ...(typeof global.phoneSearchLinks === 'function' ? global.phoneSearchLinks(it.name, d.address) : []),
     ]);
     const meta = el('div', { className: 'card-meta' }, [
