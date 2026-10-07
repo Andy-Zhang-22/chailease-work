@@ -1,0 +1,14 @@
+name: 探路：食品業者、環保許可（一次性）
+on:
+  push:
+    branches: [claude/telemarketing-website-hf2uwj]
+    paths: [tools/probe-pr2.mjs, .github/workflows/probe-pr2.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/probe-pr2.mjs
