@@ -568,7 +568,8 @@
       ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 3, capOk: r.capital >= 5000000 && r.capital <= 60000000,
       phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r) };
   }
-  async function dailyCandidates() {
+  // withMine：合併頁要連名單裡已經有的也列（卡片標「已在名單」）；每日新名單照舊不要
+  async function dailyCandidates({ withMine = false } = {}) {
     if (!root) root = document.getElementById('paneBiz');
     if (!root) return [];
     await start();
@@ -583,7 +584,7 @@
       const minCap = (index && index.minCapital) || 500000;
       extra = [...mrows[p].setup, ...mrows[p].change].filter((r) => { if (!r.taxId || seen.has(r.taxId) || r.capital < minCap) return false; seen.add(r.taxId); return true; });
     } catch (e) { extra = []; }
-    return [...rows, ...extra].filter((r) => !mineOf(r, cm) && !isHid(r) && !deletedOf(r.name, r.taxId))
+    return [...rows, ...extra].filter((r) => (withMine || !mineOf(r, cm)) && !isHid(r) && !deletedOf(r.name, r.taxId))
       .map((r) => { r._checks = dailyChecks(r); r._why = whyOf(r); return r; })
       .sort(dailyCompare);
   }

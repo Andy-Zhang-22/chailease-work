@@ -6,7 +6,8 @@
  *
  * 做法：六頁各自照舊（自己的篩選、加入名單、每月更新），這一頁把它們的候選依統編合成一家（app.js 的 mixCandidates，
  * 跟每日新名單同一套 mergeFeed 排序：訊號多的在前 → 最近買設備 → 成立 6～10 年 → 資本額 → 有電話 → 分公司遠近），
- * 卡片上寫每一份名單看到的那一句。名單裡已經有的、在各頁藏起來的、刪過的不列。
+ * 卡片上寫每一份名單看到的那一句。在各頁藏起來的、刪過的不列；名單裡已經有的照樣列、標「已在名單　📝 記錄」（跟各頁一樣，
+ * 使用者：「合併頁跟其他分頁不同，其他分頁我加入名單到重點名單後，在該分頁上還是留在上面」）。
  * 篩選只留共用的幾組；各頁特有的（動保契約、清冊案由…）到那一頁看。
  */
 (function (global) {
@@ -37,7 +38,11 @@
   let limit = PAGE;
   let loading = null;
   let status = [];
-  const f = { src: new Set(), sig: new Set(), cond: new Set(), phone: new Set(), q: '' };
+  const f = { src: new Set(), sig: new Set(), cond: new Set(), phone: new Set(), mine: new Set(), q: '' };
+  const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
+  const mineKey = (it) => (!it.mine ? 'out' : it.mine.declined ? 'declined' : 'in');
+  const MINE = [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']];
+  const openLog = (id) => { if (typeof global.openCustomerLog === 'function') global.openCustomerLog(id); else if (typeof global.openCustomer === 'function') global.openCustomer(id); };
   let hidden = new Set();
   try { hidden = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (e) { hidden = new Set(); }
   const saveHidden = () => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch (e) { /* 無痕 */ } };
@@ -74,6 +79,7 @@
     if (except !== 'sig' && f.sig.size && !it.signals.some((s) => f.sig.has(sigKey(s)))) return false;
     if (except !== 'cond') for (const [k, , fn] of COND) if (f.cond.has(k) && !fn(it)) return false;
     if (except !== 'phone' && f.phone.size && !phoneKinds(it).some((k) => f.phone.has(k))) return false;
+    if (except !== 'mine' && f.mine.size && !f.mine.has(mineKey(it))) return false;
     const terms = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return terms.every((t) => it.blob.includes(t));
   }
@@ -97,6 +103,7 @@
     chips($('#mix-fSig'), [...sigs.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => [s, s, n]), f.sig);
     chips($('#mix-fPhone'), PHONE.map(([k, label]) => [k, label, count('phone', (it) => phoneKinds(it).includes(k))]), f.phone);
     chips($('#mix-fCond'), COND.map(([k, label, fn]) => [k, label, count('cond', fn)]), f.cond);
+    chips($('#mix-fMine'), MINE.map(([k, label]) => [k, label, count('mine', (it) => mineKey(it) === k)]), f.mine);
   }
 
   const findbiz = (taxId, text) => (taxId && global.Normalize && global.Normalize.findbizUrl
@@ -110,6 +117,9 @@
       el('span', { className: 'card-name' }, [findbiz(d.taxId, it.name), copyName(it.name)]),
       ...it.signals.map((s) => el('span', { className: 'badge badge-up', textContent: s })),
       d.branchKey ? el('span', { className: 'badge badge-branch', textContent: d.branchKey }) : '',
+      !it.mine ? '' : it.mine.declined
+        ? el('span', { className: 'badge badge-own', textContent: `名單上是禁止推廣${it.mine.lastDate ? `・${mmdd(it.mine.lastDate)}` : ''}` })
+        : el('span', { className: 'badge badge-mine is-log', textContent: `已在名單${it.mine.addedDate ? `・${mmdd(it.mine.addedDate)} 加入` : ''}${it.mine.lastDate ? `・上次 ${mmdd(it.mine.lastDate)}` : ''}${it.mine.nextDate ? `・下次 ${mmdd(it.mine.nextDate)}` : ''}　📝 記錄`, title: '點一下打開名單上這一筆，直接記這通電話', onclick: () => openLog(it.mine.id) }),
     ]);
     const phone = el('div', { className: 'card-actions phone-search' }, [
       ...(d.tel ? [el('a', { className: 'tel', href: `tel:${d.tel.replace(/[^\d+#]/g, '')}`, textContent: `📞 ${d.tel}` }), typeof global.copyTel === 'function' ? global.copyTel(d.tel) : ''] : [el('span', { className: 'muted', textContent: '📞 沒電話' })]),
@@ -132,10 +142,10 @@
       try { await it.facts[0].add(); } finally { add.disabled = false; }
       await reload();
     };
-    const actions = el('div', { className: 'card-actions' }, [add,
+    const actions = el('div', { className: 'card-actions' }, [it.mine ? '' : add,
       isHidden ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(it); render(); } })
         : el('button', { className: 'btn btn-tiny mix-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(it); render(); toast('藏起來了（七份名單一起藏）'); } })]);
-    return el('article', { className: `card leads-card mix-card${d.branchKey === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': it.key }, [top, phone, meta, srcs, actions]);
+    return el('article', { className: `card leads-card mix-card${it.mine ? ' is-mine' : d.branchKey === myBranch() ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}`, 'data-key': it.key }, [top, phone, meta, srcs, actions]);
   }
 
   let current = [];
@@ -147,10 +157,12 @@
     host.textContent = '';
     current.slice(0, limit).forEach((it) => host.append(card(it)));
     const multi = current.filter((it) => it.facts.length > 1).length;
-    $('#mix-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${multi ? `　／ 其中 ${multi} 家出現在兩份以上的名單` : ''}</span>`;
+    const mineN = current.filter((it) => it.mine).length;
+    const notes = [multi ? `${multi} 家出現在兩份以上的名單` : '', mineN ? `${mineN} 家已在名單` : ''].filter(Boolean);
+    $('#mix-count').innerHTML = `符合 <b>${current.length.toLocaleString()}</b> 家<span class="muted">${notes.length ? `　／ 其中 ${notes.join('、')}` : ''}</span>`;
     $('#mix-more').hidden = current.length <= limit;
     $('#mix-empty').hidden = !!current.length;
-    $('#mix-empty').textContent = items.length ? '沒有符合條件的，把篩選放寬試試。' : '七份名單都還沒載好或都已經在名單裡了。';
+    $('#mix-empty').textContent = items.length ? '沒有符合條件的，把篩選放寬試試。' : '各份名單都還沒載好。';
     const hid = items.filter(isHid).length;
     $('#mix-hidden').hidden = !hid;
     $('#mix-hidden').textContent = `${showHidden ? '收起' : '顯示'}藏起來的 ${hid} 家`;
@@ -188,6 +200,7 @@
       group('訊號', el('div', { className: 'chips', id: 'mix-fSig' })),
       group('電話', el('div', { className: 'chips', id: 'mix-fPhone' })),
       group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond' })),
+      group('跟我的名單比對', el('div', { className: 'chips', id: 'mix-fMine' })),
       group('關鍵字', el('input', { id: 'mix-q', type: 'search', placeholder: '名稱、統編、地址、電話、訊號', autocomplete: 'off' }), 'mix-q'),
       el('div', { className: 'leads-row' }, [
         el('button', { className: 'btn btn-tiny', id: 'mix-reset', type: 'button', textContent: '清除篩選' }),
@@ -210,7 +223,7 @@
     $('#mix-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; limit = PAGE; render(); }, 120); };
     $('#mix-more').onclick = () => { limit += PAGE; render(); };
     $('#mix-hidden').onclick = () => { showHidden = !showHidden; limit = PAGE; render(); };
-    $('#mix-reset').onclick = () => { f.src.clear(); f.sig.clear(); f.cond.clear(); f.phone.clear(); f.q = ''; $('#mix-q').value = ''; showHidden = false; limit = PAGE; render(); };
+    $('#mix-reset').onclick = () => { f.src.clear(); f.sig.clear(); f.cond.clear(); f.phone.clear(); f.mine.clear(); f.q = ''; $('#mix-q').value = ''; showHidden = false; limit = PAGE; render(); };
   }
 
   function show() {
