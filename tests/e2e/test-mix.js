@@ -48,9 +48,13 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  // 篩選：來源只看新設工廠
  await pg.locator('#mix-fSrc .chip:has-text("新設工廠")').click(); await pg.waitForTimeout(300);
  chk(JSON.stringify((await names()).sort())===JSON.stringify(['丙三工業有限公司','名祿實業有限公司']), `來源篩新設工廠：${(await names()).join('|')}`);
- await pg.locator('#mix-fSrc .chip:has-text("新設工廠")').click(); await pg.locator('#mix-fCond .chip:has-text("有電話")').click(); await pg.waitForTimeout(300);
- chk(JSON.stringify(await names())==='["名祿實業有限公司"]', `條件有電話：${(await names()).join('|')}`);
- await pg.locator('#mix-fCond .chip:has-text("有電話")').click(); await pg.waitForTimeout(200);
+ await pg.locator('#mix-fSrc .chip:has-text("新設工廠")').click(); await pg.locator('#mix-fPhone .chip:has-text("有電話")').click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await names())==='["名祿實業有限公司"]', `電話篩有電話：${(await names()).join('|')}`);
+ await pg.locator('#mix-fPhone .chip:has-text("有電話")').click(); await pg.locator('#mix-fPhone .chip:has-text("沒電話")').click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify((await names()).sort())===JSON.stringify(['丙三工業有限公司','宇駿貿易有限公司']), `電話篩沒電話：${(await names()).join('|')}`);
+ await pg.locator('#mix-fPhone .chip:has-text("沒電話")').click(); await pg.locator('#mix-fPhone .chip:has-text("有手機")').click(); await pg.waitForTimeout(300);
+ chk((await names()).length===0, `電話篩有手機（這兩家都是市話）：${(await names()).join('|')}`);
+ await pg.locator('#mix-fPhone .chip:has-text("有手機")').click(); await pg.waitForTimeout(200);
  // 點來源名稱到那一頁
  await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(500);
  chk(await pg.locator('#paneFactory').isVisible() && await pg.locator('#mixtabs .subtab[data-tab="factory"]').evaluate(e=>e.classList.contains('is-active')), '點來源名稱跳到那一頁');
