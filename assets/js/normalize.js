@@ -401,7 +401,24 @@
 
     const PHONE_RE_SRC = '\\(?0\\d{1,3}\\)?[\\s-]?\\d{3,4}[\\s-]?\\d{3,4}';
     const STOP_LEAD = /^(電話|手機|公司|市話|傳真|TEL|Tel|tel|FAX|Fax|行動|聯絡電話|公司電話|辦公室|總機)$/;
-    for (const line of toHalfWidth(raw).split(/\n+/)) {
+    /*
+     * 國際號碼（+66 2 381 8780、+84-28-3822-1234、+66(0)25419775）：使用者做外幣額度，名單有泰國、越南的台商。
+     * 撥號用「+國碼＋號碼」（去掉國碼後面那個 (0)），不能當台灣號碼——泰國的 02 開頭撥出去會變成台北。
+     * 先挑出來、從那一行拿掉，剩下的才照台灣的規則找。
+     */
+    const INTL_RE = /\+\s?\d{1,3}(?:\s?\(0\))?(?:[\s\-()]?\d){7,13}/g;
+    for (const rawLine of toHalfWidth(raw).split(/\n+/)) {
+      let line = rawLine;
+      for (const m of rawLine.match(INTL_RE) || []) {
+        const digits = m.replace(/\(0\)/, '').replace(/\D/g, '');
+        if (digits.length < 9 || digits.length > 15) continue;
+        line = line.replace(m, ' ');
+        const key = `+${digits}#`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const before = rawLine.slice(0, rawLine.indexOf(m)).split(/[\/,，;；]/).pop().replace(/[:：\s]+$/, '').trim();
+        out.push({ display: m.trim(), dial: `+${digits}`, note: /^[^\d+]{1,12}$/.test(before) && !STOP_LEAD.test(before) ? before : '' });
+      }
       const re = new RegExp(PHONE_RE_SRC, 'g');
       let m;
       let foundInLine = false;
@@ -803,6 +820,20 @@
       if (score > best.score || (score === best.score && shift === 0)) best = { shift, score };
     }
     return best;
+  }
+
+  /** 照表頭位置直接讀（外國名單用，不做台灣格式的驗證）；日期欄還是要是日期 */
+  function resolveByPosition(cells, map) {
+    const out = {};
+    for (const [field] of FIELD_RULES) {
+      const idx = map[field];
+      if (idx === undefined) continue;
+      const raw = String(cells[idx] == null ? '' : cells[idx]).trim();
+      if (!raw) continue;
+      if (['nextDate', 'lastDate', 'addedDate'].includes(field)) { const iso = dateOnly(raw); if (iso) out[field] = iso; continue; }
+      out[field] = raw;
+    }
+    return out;
   }
 
   /**
@@ -1228,7 +1259,13 @@
     let repaired = 0;
 
     for (const row of merged.rows) {
-      const field = resolveRow(row, map, ignored);
+      /*
+       * 國家欄寫的不是台灣（泰國、越南台商名錄…）：英文公司名、外國地址、外國人名都過不了台灣格式的驗證，
+       * 照內容找會把產業別塞進公司名、地址整格丟掉。這種列照表頭位置直接讀（CSV／Excel 的欄位本來就對齊）。
+       */
+      const countryCell = map.country !== undefined ? String(row[map.country] || '').trim() : '';
+      const foreign = !!countryCell && !/^(臺灣|台灣|中華民國|taiwan|tw|roc)$/i.test(countryCell);
+      const field = foreign ? resolveByPosition(row, map) : resolveRow(row, map, ignored);
       const company = field.company || '';
       const phoneRaw = field.phone || '';
       if (!company && !phoneRaw) continue;
@@ -1248,8 +1285,9 @@
       const record = {
         id: makeId(source, company, field.taxId || ''),
         source,
-        company: names[0] || company.replace(/\n/g, ''),
-        aliases: names.slice(1),
+        // 外國公司的英文名保留空白（「Acme (Thailand) Co., Ltd.」），台灣的照舊拆別名、去空白
+        company: foreign ? company.replace(/\s+/g, ' ').trim() : (names[0] || company.replace(/\n/g, '')),
+        aliases: foreign ? [] : names.slice(1),
         taxId: field.taxId || '',
         grade: field.grade || '',
         founded: field.founded || '',
