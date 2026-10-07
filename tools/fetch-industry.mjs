@@ -302,7 +302,7 @@ async function main() {
   const index = {
     generatedAt: new Date().toISOString(), source: [...KINDS.map((k) => k.id), FOOD.id, ENV.id].map((id) => `https://data.gov.tw/dataset/${id}`),
     kinds: [...KINDS.map((k) => k.kind), FOOD.kind, ENV.factory, ENV.site], cities: CITIES,
-    baseline, siteBaseline: sitesSeen.baseline, newSiteTotal: list.filter((r) => r.newSite).length, dataYm: ym, taxFileDate: fileDate, total: list.length, newTotal: list.filter((r) => r.isNew).length, newThisMonth: newIds.size,
+    baseline, siteBaseline: sitesSeen.baseline, newSiteTotal: list.filter((r) => r.newSite).length, dataYm: ym, taxFileDate: fileDate, total: list.length, newTotal: list.filter((r) => r.isNew).length, newThisMonth: list.filter((r) => r.isNew && r.firstYm === ym).length,
     withPhone: list.filter((r) => r.tel).length, byKind, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     files: [{ path: 'industry.csv', rows: list.length }],
   };

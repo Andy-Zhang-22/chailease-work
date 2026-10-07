@@ -24,6 +24,7 @@
   // 每日新名單揉合的訊號：一類一個（同一家好幾類就好幾個訊號）
   const groupSignal = (k) => (VEHICLE.test(k) ? '車輛業者' : k === '食品製造業' ? '食品工廠' : k === '環保列管工廠' ? '環保列管工廠' : k === '營造業' ? '營造業（有工地）' : k);
   const kindLabel = (k) => KIND_SHORT[k] || k;
+  const kindRank = (k) => { const i = Object.keys(KIND_SHORT).indexOf(k); return i < 0 ? 99 : i; };
   const AGE = [['lt1', '未滿 1 年（新公司）'], ['lt5', '1～5 年'], ['5to10', '5～10 年'], ['ge10', '10 年以上'], ['unknown', '不明']];
 
   let root = null;
@@ -255,7 +256,7 @@
     chips($('#industry-fDistrict'), dkeys.map((k) => [k, k, dc.get(k) || 0]), f.districts);
     chips($('#industry-fWhen'), WHEN.map(([k, label]) => [k, label, facet('when', (r) => whenOf(r) === k)]), f.when);
     chips($('#industry-fAge'), AGE.map(([k, label]) => [k, label, facet('ages', (r) => ageOf(r) === k)]), f.ages);
-    const kindKeys = [...new Set([...rows.flatMap((r) => r.kinds), ...f.kinds])];
+    const kindKeys = [...new Set([...rows.flatMap((r) => r.kinds), ...f.kinds])].sort((a, b) => kindRank(a) - kindRank(b));
     chips($('#industry-fKind'), kindKeys.map((k) => [k, kindLabel(k), facet('kinds', (r) => r.kinds.includes(k))]), f.kinds);
     chips($('#industry-fRate'), [['Y', '利率不敏感'], ['N', '其他']].map(([k, label]) => [k, label, facet('rate', (r) => rateKey(r) === k)]), f.rate);
     chips($('#industry-fPhone'), [['Y', '有電話'], ['M', '手機'], ['N', '沒電話']].map(([k, label]) => [k, label, facet('phone', (r) => phoneKinds(r).has(k))]), f.phone);
@@ -465,7 +466,7 @@
         return;
       }
       $('#industry-loading').hidden = true;
-      $('#industry-sub').textContent = `${(index.cities || []).join('、')} ${Number(index.total || 0).toLocaleString()} 家（${Object.entries(index.byKind || {}).map(([k, n]) => `${kindLabel(k).replace(/^\S+ /, '')} ${n}`).join('、')}；對到電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　起算 ${String(index.baseline || '').replace(/^(\d{4})(\d{2})$/, '$1/$2')}，之後新出現的標「剛出現」`;
+      $('#industry-sub').textContent = `${(index.cities || []).join('、')} ${Number(index.total || 0).toLocaleString()} 家（${Object.entries(index.byKind || {}).sort((a, b) => kindRank(a[0]) - kindRank(b[0])).map(([k, n]) => `${kindLabel(k).replace(/^\S+ /, '')} ${n}`).join('、')}；對到電話 ${Number(index.withPhone || 0).toLocaleString()}）　·　起算 ${String(index.baseline || '').replace(/^(\d{4})(\d{2})$/, '$1/$2')}，之後新出現的標「剛出現」`;
       $('#industry-loading').hidden = true;
       ready = true;
       if (global.Chattel && global.Chattel.ensureData) global.Chattel.ensureData().then(() => { if (ready) render(); }).catch(() => {});   // 動保載好才知道誰跟同業借（利率不敏感）
