@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261007-312';
+  const APP_VERSION = '20261007-313';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -7559,6 +7559,8 @@ export default {
 
   /** 一批客戶逐一查商工登記，回傳差異與失敗清單；不寫入。 */
   async function registryBatch(targets, { useMirror, onProgress, isCancelled, onEach, delay = 300 }) {
+    // 外國公司（泰國、越南台商名錄…）在台灣的商工登記查不到，不查，免得每天記一筆「查不到」
+    targets = targets.filter(({ r }) => !r.country || /^(臺灣|台灣|中華民國|taiwan|tw|roc)$/i.test(String(r.country).trim()));
     const diffs = [];
     const failures = [];
     const checked = [];   // 每一筆查成功的都在這裡，含沒差異的；變更登記的分類靠它

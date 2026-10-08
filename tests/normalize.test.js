@@ -209,3 +209,28 @@ test('parseKeyValue：分身讀名片回的格式（Markdown、聯絡人＋職�
   assert.equal(got.address, '新北市新莊區中正路1號');
   assert.equal(Normalize.extractPhones(got.phoneRaw).length, 2);
 });
+
+test('extractPhones：國際號碼（泰國、越南台商名錄）照國碼撥，不當台灣號碼', () => {
+  const th = Normalize.extractPhones('+66-2-381-8780 / +66-81-619-1909');
+  assert.deepEqual(th.map((p) => p.dial), ['+6623818780', '+66816191909']);
+  assert.equal(th[0].display, '+66-2-381-8780');
+  assert.deepEqual(Normalize.extractPhones('+66(0)25419775').map((p) => p.dial), ['+6625419775'], '國碼後面的 (0) 去掉');
+  const two = Normalize.extractPhones('泰國: +66-957631359 / 台灣: +886-937098359');
+  assert.deepEqual(two.map((p) => [p.dial, p.note]), [['+66957631359', '泰國'], ['+886937098359', '台灣']]);
+  assert.deepEqual(Normalize.extractPhones('02-2345-6789 / +84 28 3822 1234').map((p) => p.dial), ['+842838221234', '0223456789'], '台灣號碼照舊');
+});
+
+test('toRecords：國家不是台灣的列照欄位位置讀（英文公司名、外國地址、外國電話）', () => {
+  const head = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
+  const row = ['Acme (Thailand) Co., Ltd.', '', '', '', '', '+66-2-381-8780', 'Mr. Chen / MD', '', 'General Construction', '', '', '泰國台商名錄', '68/59 Moo 5 Kingkaew Road, Bangkok', '2026-10-07', '泰國'];
+  const tw = ['甲乙股份有限公司', '12345678', '', '', '', '02-2345-6789', '王大明', '', '製造業', '', '', '', '新北市新莊區中正路1號', '2026-10-07', ''];
+  const { records } = Normalize.toRecords([head, row, tw], 'x.csv');
+  const th = records.find((r) => r.country === '泰國');
+  assert.equal(th.company, 'Acme (Thailand) Co., Ltd.');
+  assert.equal(th.address, '68/59 Moo 5 Kingkaew Road, Bangkok');
+  assert.equal(th.owner, 'Mr. Chen / MD');
+  assert.equal(th.industry, 'General Construction');
+  assert.deepEqual(th.phones.map((p) => p.dial), ['+6623818780']);
+  const local = records.find((r) => r.company === '甲乙股份有限公司');
+  assert.ok(local && local.taxId === '12345678' && /新北市/.test(local.address), '台灣的列照舊');
+});
