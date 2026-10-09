@@ -4267,3 +4267,12 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
 ### 測試
 - 新：`test-feed-phone-gate.js`（三家都沒電話：貿易署有的進、Google 查到的進、查不到的跳過且不排除；Google 各查一次）。
 - 改：`test-daily-feed`、`test-feed-merge`、`test-chattel-cases`、`test-cross-tabs`、`test-source-log`、`test-opener-call`、`test-concurrent-load`（關門檻）。
+
+## 後台商工登記更新：啟用（2026/10/09）
+
+使用者說「我來設服務帳戶」，走 Workload Identity 聯盟照 README 的步驟設好（集區與提供者上次就建過，直接沿用；
+GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，這個開發環境不准改 Actions 設定）。
+第一次 report 模式跑 5 筆：權杖換得到、同步檔讀得到（786 筆）、報告寫得回去。
+
+- 修一個假差異：舊資料的地址一格寫「104登記：… / 公司登記：…」，後台腳本拿整格去比，永遠跟登記查到的不一樣。
+  `listValue('address')` 改成只取「公司登記」那段（`registeredAddress`，跟 `normalize.js` 的 `splitAddress` 同一條規則）。單元測試補三個案例。

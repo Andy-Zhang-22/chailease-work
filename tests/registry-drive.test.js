@@ -19,6 +19,12 @@ test('比對與分類：查到不一樣就算差異；原本空白的不算變�
   assert.deepEqual(m.classify(ch, m.viewOf(rec, null)), ['owner']);
   const ch2 = m.diffFields(m.viewOf(rec, { edits: { capitalPaid: '5,000' } }), data);
   assert.deepEqual(m.classify(ch2, m.viewOf(rec, { edits: { capitalPaid: '5,000' } })), ['capitalUp', 'owner'], '編輯過的值當成名單現值');
+  // 舊資料的地址寫「104登記：… / 公司登記：…」：登記地址取公司登記那段，跟查到的一樣就不算差異（第一次後台跑出來的假差異）
+  const legacy = { ...rec, address: '104登記：新北市新莊區中正路9號 / 公司登記：新北市新莊區中正路1號' };
+  assert.equal(m.diffFields(m.viewOf(legacy, null), data).address, undefined, '登記地址只比「公司登記」那段');
+  const legacy2 = { ...rec, address: '公司登記：新北市新莊區中正路1號' };
+  assert.equal(m.diffFields(m.viewOf(legacy2, null), data).address, undefined, '只有「公司登記：」前綴的也拆掉');
+  assert.equal(m.diffFields(m.viewOf({ ...rec, address: '新北市新莊區中正路2號' }, null), data).address.to, '新北市新莊區中正路1號', '真的不一樣還是算');
 });
 
 test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不到記 regError、registry-auto-last 設成今天', async () => {
