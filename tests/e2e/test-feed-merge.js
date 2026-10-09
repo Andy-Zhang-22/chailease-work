@@ -85,7 +85,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.route('**/leads/einv/einv.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:ECSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9567/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','10'); localStorage.setItem('daily-feed-auto','0');
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('feed-need-phone','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','10'); localStorage.setItem('daily-feed-auto','0');
    // 昱昌以前刪掉過（公司墓碑）：挑的時候就要跳過，不然挑了 4 家只進來 3 家
    await window.Store.addCompanyTombstones([{key:'tax:53217846',company:'昱昌汽車貨運股份有限公司',taxId:'53217846'}]); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2500);

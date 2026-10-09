@@ -26,7 +26,7 @@ const INDEX={generatedAt:'2026-10-01T02:00:00.000Z',dataThrough:'2026/09/01',tot
  const ctx=await br.newContext({viewport:{width:1300,height:1100}});
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
- await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('rate-filter-default','0'); localStorage.setItem('leads-filters-open','1');}catch(e){}});
+ await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('feed-need-phone','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('rate-filter-default','0'); localStorage.setItem('leads-filters-open','1');}catch(e){}});
  await ctx.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(INDEX)}));
  await ctx.route('**/leads/chattel/ntpc.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  await ctx.route('**/leads/trade/**',r=>r.fulfill({status:404,body:''}));

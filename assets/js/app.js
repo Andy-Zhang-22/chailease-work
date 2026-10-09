@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261009-317';
+  const APP_VERSION = '20261009-318';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1405,10 +1405,13 @@
     return { best: best && best.level !== 'none' ? best : null, candidates: places };
   }
 
+  const placesCache = new Map();   // 同一家同一個地址這次開著網站只查一次：挑名單前查過的，匯入後不用再付一次
   async function placesLookup(r) {
     const key = placesKey();
     if (!key) throw new Error('還沒設定 Google 地圖的 API 金鑰');
     const addr = r.addressActual || r.address || '';
+    const ck = `${r.company}|${addr}`;
+    if (placesCache.has(ck)) return placesCache.get(ck);
     const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
       method: 'POST',
       headers: {
@@ -1431,7 +1434,10 @@
       phone: p.nationalPhoneNumber || p.internationalPhoneNumber || '', website: p.websiteUri || '',
       maps: p.googleMapsUri || '', status: p.businessStatus || '',
     }));
-    return gradePlaces(r, places);
+    const graded = gradePlaces(r, places);
+    if (placesCache.size > 500) placesCache.clear();
+    placesCache.set(ck, graded);
+    return graded;
   }
 
   /*
@@ -3035,6 +3041,9 @@
    */
   let feeding = false;
   const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
+  /** 每日新名單只進有電話的（版本 318）；feed-need-phone＝'0' 關掉（測試用）。一天最多用 Google 地圖查 GATE_LOOKUPS 家 */
+  const feedNeedPhone = () => { try { return localStorage.getItem('feed-need-phone') !== '0'; } catch (e) { return true; } };
+  const GATE_LOOKUPS = 40;
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
   /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
@@ -3304,11 +3313,50 @@
         { key: 'fa', label: '新設工廠', mod: window.Factory, list: faAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'in', label: '產業名單', mod: window.Industry, list: inAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
-      const merged = mergeFeed(SRC);
+      let merged = mergeFeed(SRC);
       const mergedKeys = new Set(merged.map((c) => c.key));
       const bizKey = (r) => String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, '');
       const bzSeen = new Set();
-      const bz = bzAll.filter((r) => { const k = bizKey(r); if (!k || bzSeen.has(k) || mergedKeys.has(k) || !notBuried(r.name, r.taxId)) return false; bzSeen.add(k); return true; });
+      let bz = bzAll.filter((r) => { const k = bizKey(r); if (!k || bzSeen.has(k) || mergedKeys.has(k) || !notBuried(r.name, r.taxId)) return false; bzSeen.add(k); return true; });
+      /*
+       * 只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
+       * 這是每日新名單唯一的門檻（合併頁、各分頁照舊都看得到）：沒電話的先用 Google 地圖查一次（名稱、地址都對得上才算），
+       * 查不到就跳過，換下一家補滿額度。跳過的不刪、不排除，下個月公開資料有電話了會再被挑到。
+       * 候選照排名只看前面夠用的一段（額度兩倍），一天最多查 GATE_LOOKUPS 家，不會把整份清冊查一遍；沒金鑰就只收公開資料有電話的。
+       */
+      let skippedNoPhone = 0;
+      const googleHits = new Map();   // 公司名稱 → Google 查到的那家，匯入後直接填（placesLookup 有快取，不會再付一次）
+      if (feedNeedPhone()) {
+        let budget = GATE_LOOKUPS;
+        const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
+        const confirm = async (name, address, known) => {
+          if (known) return true;
+          if (!placesKey() || budget <= 0) return false;
+          budget -= 1;
+          const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
+          try {
+            const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
+            if (best && best.level === 'sure') { googleHits.set(name, best); return true; }
+          } catch (err) {
+            console.error('挑名單前找電話', name, err);
+            if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
+          }
+          return false;
+        };
+        const enough = Math.max(need * 2, 4);
+        const okMerged = [];
+        for (const c of merged) {
+          if (okMerged.length >= enough) break;
+          if (await confirm(c.name, addrOf(c), c.phone)) okMerged.push(c); else skippedNoPhone += 1;
+        }
+        const okBz = [];
+        for (const r of bz) {
+          if (okBz.length >= enough) break;
+          const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null;
+          if (await confirm(r.name, r.address || '', !!(bf && bf.phone))) okBz.push(r); else skippedNoPhone += 1;
+        }
+        merged = okMerged; bz = okBz;
+      }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
       const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in')], need, feedShares());
@@ -3317,7 +3365,7 @@
       bizTake = Math.min(bz.length, need - mixTake);
       const picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
       const pickB = bz.slice(0, bizTake);
-      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more) toast('六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話（Google 地圖也查不到），今天沒補` : '六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
       // 每家用哪一頁的資料匯入：保底挑到的用那一頁，其他照動保 → 登記清冊 → 出進口 → 請人 → 電子發票；「符合：」改寫成合併後的訊號
       const bySrc = new Map(SRC.map((x) => [x.key, []]));
       picks.forEach(({ c, via }) => {
@@ -3342,6 +3390,14 @@
       const file = new File([csv], name, { type: 'text/csv' });
       await importFiles([file]);
       registryPref('daily-feed-on', today);
+      // 挑名單前 Google 查到的電話直接填進去（不用等背景再查一次）
+      if (googleHits.size) {
+        for (const v of allViews().filter((x) => x.source === name && !x.phones.length)) {
+          const hit = googleHits.get(v.company);
+          if (hit) { try { await adoptPlacePhone(v, hit); } catch (err) { console.error('填入挑名單前查到的電話', err); } }
+        }
+        await reload(); render(); scheduleSync();
+      }
       tradePhones(name).catch((e) => console.error('出進口廠商補電話失敗', e)).then(() => autoPhones(name)).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
       const picked = picks.length + pickB.length;
@@ -3349,7 +3405,7 @@
       const lost = picked - got;
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
-      toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}`);
+      toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);

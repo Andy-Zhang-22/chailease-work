@@ -24,7 +24,7 @@ const IDX=(f)=>JSON.stringify({generatedAt:'2026-10-02T20:00:00.000Z',cities:['æ
  const ctx=await br.newContext({viewport:{width:1300,height:1100}});
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
- await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('rate-filter-default','0'); localStorage.setItem('leads-filters-open','1');}catch(e){}});
+ await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('feed-need-phone','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('rate-filter-default','0'); localStorage.setItem('leads-filters-open','1');}catch(e){}});
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  await ctx.route('**/leads/nhi/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:IDX('nhi.csv')}));
  await ctx.route('**/leads/nhi/nhi.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:NHI}));

@@ -11,7 +11,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
  const ctx=await br.newContext();
- await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0');localStorage.setItem('daily-feed-auto','0');localStorage.setItem('auto-rebalance','0');}catch(e){}});
+ await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('feed-need-phone','0');localStorage.setItem('daily-feed-auto','0');localStorage.setItem('auto-rebalance','0');}catch(e){}});
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
  await pg.goto('http://localhost:9619/index.html'); await pg.waitForSelector('#dropzone');
  const r=await pg.evaluate(async()=>{
