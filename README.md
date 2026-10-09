@@ -4276,3 +4276,8 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 
 - 修一個假差異：舊資料的地址一格寫「104登記：… / 公司登記：…」，後台腳本拿整格去比，永遠跟登記查到的不一樣。
   `listValue('address')` 改成只取「公司登記」那段（`registeredAddress`，跟 `normalize.js` 的 `splitAddress` 同一條規則）。單元測試補三個案例。
+
+- 兩次完整 report（786 筆各約 24 分鐘，39 筆不一致、0 筆查不到）使用者看過報告說「沒問題」，
+  Actions 變數 `REGISTRY_DRIVE_MODE` 已設 `write`，排程開回來：每天台灣 05:00（UTC 21:00），上班前跑完。
+  write 模式會把 `registry-auto-last` 寫進同步檔，網站當天就不再自己在背景查，離開網站也不會中斷。
+  想停就把變數改回 `report`（只寫報告、不動資料），或在 Actions 頁面 disable 這個 workflow。
