@@ -49,7 +49,15 @@ const REGISTRY_FIELDS = [
 const FIELD_LABEL = Object.fromEntries(REGISTRY_FIELDS);
 const REG_KIND_ORDER = ['capitalUp', 'capitalDown', 'address', 'owner', 'other'];
 const registryValue = (key, data) => { const v = String((data && data[key]) || '').trim(); if (key === 'founded') { const m = v.match(/^(\d{4})/); return m ? m[1] : ''; } return v; };
-const listValue = (key, r) => { const v = String((r && r[key]) || '').trim(); if (key === 'founded') { const m = v.match(/(\d{4})/); return m ? m[1] : v; } return v; };
+/** 舊資料的地址一格裡寫「104登記：… / 公司登記：…」：登記地址取「公司登記」那段（跟 normalize.js 的 splitAddress 同一條規則），不然會跟登記查到的永遠不一樣 */
+const registeredAddress = (raw) => {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  const m1 = text.match(/104登記[：:]\s*(.+?)\s*[\/／]\s*公司登記[：:]\s*(.+)$/); if (m1) return m1[2].trim();
+  const m2 = text.match(/公司登記[：:]\s*(.+?)\s*[\/／]\s*104登記[：:]\s*(.+)$/); if (m2) return m2[1].trim();
+  const only = text.match(/^(?:104登記|公司登記)[：:]\s*(.+)$/); if (only) return only[1].trim();
+  return text;
+};
+const listValue = (key, r) => { const v = String((r && r[key]) || '').trim(); if (key === 'founded') { const m = v.match(/(\d{4})/); return m ? m[1] : v; } if (key === 'address') return registeredAddress(v); return v; };
 
 /** 名單上這筆現在的樣子＝原始資料蓋上使用者（或上次登記更新）的編輯 */
 const viewOf = (rec, st) => (st && st.edits ? { ...rec, ...st.edits } : rec);
