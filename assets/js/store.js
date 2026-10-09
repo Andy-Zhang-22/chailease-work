@@ -217,7 +217,8 @@
       await tx('records', 'readwrite', (store) => store.delete(id));
       if (before) {
         // noPhone：「找不到電話，先收起來」——之後公開資料查到電話會提醒（見 app.js phoneBackDaily）
-        const why = opts && opts.noPhone ? { noPhone: true } : {};
+        // deadTels：「空號」收起來的，記下打不通的號碼，公開資料查到同一支不算查到
+        const why = opts && opts.noPhone ? { noPhone: true, ...(Array.isArray(opts.deadTels) && opts.deadTels.length ? { deadTels: opts.deadTels } : {}) } : {};
         for (const key of window.Normalize.companyKeys(before)) {
           await api.addTombstone('companies', key, { company: before.company, taxId: before.taxId || '', ...why });
         }

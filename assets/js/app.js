@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261009-314';
+  const APP_VERSION = '20261009-315';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -442,6 +442,11 @@
       title: '照優先順序從登記清冊、動產擔保、商行／企業社再挑一批進名單，排在今天' });
     more.onclick = async () => { more.disabled = true; more.textContent = '挑選中…'; try { await dailyFeed({ more: true }); } finally { more.disabled = false; more.textContent = `再補 ${quota} 家`; render(); } };
     bar.append(el('span', { className: 'feed-text', textContent: text }), more);
+    // 自動補電話做好很久了，但要有 Google 金鑰才會動：今天的新名單有沒電話的、又還沒設金鑰，提一句（版本 315）
+    if (!placesKey() && fresh.some((v) => !v.phones.length)) {
+      bar.append(el('button', { className: 'btn btn-tiny feed-key', type: 'button', textContent: '設定 Google 金鑰，沒電話的自動補', title: '每天挑完新名單，沒電話的用 Google 地圖自動查一次（在 Google 的免費額度內）',
+        onclick: () => { $('#clientId').value = window.DriveSync.clientId(); $('#placesKeyInput').value = placesKey(); $('#syncSetup').hidden = false; } }));
+    }
     /*
      * 今天不打了：把今天排著的全部挪到下一個上班日（使用者：「把今日提醒的 18 通名單退回去，明天再發送給我，今天不想工作了」）。
      * 禁止推廣的、今天已經處理過的不動。明天的新名單額度會把這些算進去，不會又多補 20 家上去。
@@ -1503,10 +1508,11 @@
       const tax = taxOnly(info.taxId || (k.startsWith('tax:') ? k.slice(4) : ''));
       const name = info.company || k.replace(/^(tax|name):/, '');
       const id = tax.length === 8 ? `tax:${tax}` : `name:${name}`;
-      const e = by.get(id) || { id, taxId: tax.length === 8 ? tax : '', company: name, keys: [], at: 0, noPhone: false };
+      const e = by.get(id) || { id, taxId: tax.length === 8 ? tax : '', company: name, keys: [], at: 0, noPhone: false, deadTels: [] };
       e.keys.push(k);
       e.at = Math.max(e.at, info.at || (typeof v === 'number' ? v : 0));
       if (info.noPhone) e.noPhone = true;
+      if (Array.isArray(info.deadTels)) e.deadTels = [...new Set([...e.deadTels, ...info.deadTels.map(taxOnly)])];   // 空號收起來的：這幾支打不通
       if (info.keep) e.keep = true;      // 按過「還是不要」：查到電話也不再提
       if (info.company) e.company = info.company;
       by.set(id, e);
@@ -1548,7 +1554,8 @@
     await loadPhoneSources();
     for (const e of want) {
       const p = await publicPhoneOf(e.taxId);
-      if (p) out.set(e.id, p);
+      // 空號收起來的：公開資料給的還是那支打不通的，不算查到
+      if (p && !(e.deadTels || []).includes(taxOnly(p.tel))) out.set(e.id, p);
     }
     return out;
   }
@@ -1651,7 +1658,7 @@
         const row = el('div', { className: `excluded-row${ph ? ' has-phone' : ''}`, 'data-id': e.id });
         row.append(el('div', { className: 'excluded-head' }, [
           el('strong', { textContent: e.company }),
-          e.noPhone ? el('span', { className: 'badge', textContent: '找不到電話' }) : '',
+          e.noPhone ? el('span', { className: 'badge', textContent: e.deadTels && e.deadTels.length ? '空號' : '找不到電話' }) : '',
           ph ? el('span', { className: 'badge badge-phone-back', textContent: '有電話了' }) : '',
         ]));
         row.append(el('div', { className: 'muted excluded-meta', textContent: [e.taxId ? `統編 ${e.taxId}` : '', e.at ? `${dateLabel(isoOfMs(e.at))} 排除` : ''].filter(Boolean).join('　') }));
@@ -5519,6 +5526,23 @@
     if (r.phones.length) {
       const box = el('div', { className: 'card-actions' });
       telLinks(r).forEach((a) => box.append(a));
+      /*
+       * 空號（版本 315）：以前要開詳細頁 → 刪除這筆 → 確認，而且刪掉就沒了。現在按一下收起來，走「找不到電話」那條：
+       * 記下打不通的號碼，之後出進口、健保、電子發票、新設工廠的公開資料查到「不同的」電話才在名單上面提醒（見 phoneBackDaily）。
+       * 借來的號碼（同老闆那家的）不算這家的空號，不給按。
+       */
+      if (!r.phonesFrom) {
+        const dead = el('button', { className: 'btn btn-tiny danger-text dead-tel', type: 'button', textContent: '空號', title: '這家的電話打不通：收起來，之後公開資料查到別的電話再提醒你' });
+        dead.onclick = async () => {
+          const ok = await askConfirm(`「${r.company}」的電話都是空號？\n\n會先收起來（通話紀錄一起消失，其他裝置也會同步）。之後公開資料查到不同的電話，名單上面會提醒你；也可以在「管理已排除的公司」放回來。`, { danger: true, okText: '空號，收起來' });
+          if (!ok) return;
+          try { await window.Store.deleteRecord(r.id, { noPhone: true, deadTels: r.phones.map((p) => String(p.digits || p.dial || p.display || '').replace(/\D/g, '')).filter(Boolean) }); }
+          catch (err) { console.error('空號收起來失敗', err); toast(`收不起來：${err && err.message ? err.message : err}`); return; }
+          await reload(); closeOverlays(); render(); scheduleSync();
+          toast(`「${r.company}」已收起來，查到別的電話會提醒`);
+        };
+        box.append(dead);
+      }
       body.append(box);
       // 借來的號碼要標明是哪一家的，不然打過去會說錯公司名
       if (r.phonesFrom) {
@@ -6006,8 +6030,9 @@
         : '';
       const coolNote = cooled === 'cold' ? `；連續未接 ${streak} 次，移到冷名單、不再排日期（打通一次就解除）` : cooled === 'cool' ? `；連續未接 ${streak} 次，自動排到兩週後 ${dateLabel(picked)}` : '';
       toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? `，約到 ${dateLabel(picked)} 拜訪 🚗${arriveInput.value ? ` ${departInput.value ? `${departInput.value} 出發、` : ''}${arriveInput.value} 到` : ''}` : ''));
+      // 存完直接回到名單（版本 315；使用次數顯示每存一次就要再按一次關閉）。要設回撥提醒的再點開那一家
       render();
-      openDetail(r.id);
+      closeOverlays();
       scheduleSync();
     };
     // 「讓 AI 整理」「訊息草稿」拿掉了（使用者：「把詳細頁裡的訊息草稿跟讓ai整理刪掉，我用不到」）
@@ -8703,13 +8728,18 @@ export default {
       if (!res.ok) return;
       const data = await res.json();
       if (!data || !data.version || data.version === APP_VERSION) return;
-
+      // 換一個沒看過的網址，瀏覽器才會重新抓 index.html 而不是用快取
+      const go = () => location.replace(`${location.pathname}?v=${encodeURIComponent(data.version)}`);
+      /*
+       * 沒在做事就直接換新版，不問（版本 315；三天按了 7 次「立即更新」）。
+       * 正在做事（詳細頁、視窗、匯入開著，正在打字，商工登記在跑，正在同步）才跳提示條讓人自己按。
+       */
+      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      const busy = !$('#drawer').hidden || !$('#editor').hidden || !$('#importer').hidden || typing || registryJob.running || !!document.querySelector('#btnSync.is-busy');
+      if (!busy) { go(); return; }
       const bar = $('#updateBar');
       bar.hidden = false;
-      $('#btnUpdate').onclick = () => {
-        // 換一個沒看過的網址，瀏覽器才會重新抓 index.html 而不是用快取
-        location.replace(`${location.pathname}?v=${encodeURIComponent(data.version)}`);
-      };
+      $('#btnUpdate').onclick = go;
       $('#btnUpdateLater').onclick = () => { bar.hidden = true; };
     } catch (err) {
       // 以 file:// 開啟或離線時抓不到，忽略即可
@@ -8873,6 +8903,16 @@ export default {
       window.DriveSync.signOut();
       toast('已登出，下次同步會重新要求授權');
     };
+    // Google 地圖金鑰也在這裡設（版本 315）：填一次，每日新名單沒電話的就自動補（autoPhones）。以前只有詳細頁找電話時才會問
+    $('#btnSavePlacesKey').onclick = () => {
+      const v = $('#placesKeyInput').value.trim();
+      if (!v) { try { localStorage.removeItem(PLACES_KEY); } catch (e) { /* 無痕 */ } toast('已清除金鑰，新名單不再自動補電話'); return; }
+      if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(v)) { toast('金鑰看起來不對，應該以 AIza 開頭'); return; }
+      try { localStorage.setItem(PLACES_KEY, v); } catch (e) { toast('這個瀏覽器不讓網頁存東西'); return; }
+      toast('已儲存金鑰，之後每天的新名單沒電話的會自動補');
+      render();
+    };
+    $('#btnPlacesHelp').onclick = () => { $('#syncSetup').hidden = true; openPlacesSetup(); };
     // 匯入視窗把四種新增方式集中在一起：檔案、104 截圖、貼上整列、手動輸入
     $('#importer').addEventListener('click', (e) => {
       const btn = e.target.closest && e.target.closest('[data-act]');
@@ -8955,6 +8995,7 @@ export default {
       if (act === 'export-xlsx') exportXlsx();
       if (act === 'sync-setup') {
         $('#clientId').value = window.DriveSync.clientId();
+        $('#placesKeyInput').value = placesKey();
         $('#syncSetup').hidden = false;
         showSyncTime().then((at) => {
           $('#syncStatus').textContent = at

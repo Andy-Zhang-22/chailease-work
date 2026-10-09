@@ -21,6 +21,9 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  // 禁止推廣不用填
  await pg.selectOption('#drawerBody select','blocked'); await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(900);
  chk(/已標記禁止推廣/.test(await pg.textContent('#toast')), `禁止推廣可直接儲存：${await pg.textContent('#toast')}`);
+ // 存完會自動關閉詳細頁（版本 315），再點開看
+ chk(await pg.isHidden('#drawer'), '存完自動關閉詳細頁');
+ await pg.locator('.card:has-text("甲公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/禁止推廣 — 請勿撥打/.test(await pg.textContent('#drawerBody')), '詳細頁出現禁止推廣警告');
  chk(/（禁止推廣）/.test((await pg.textContent('#drawerBody .timeline')).replace(/\s+/g,' ')), '時間軸有一則（禁止推廣）');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);

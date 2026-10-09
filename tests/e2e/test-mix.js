@@ -60,6 +60,12 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.locator('#mix-fPhone .chip:has-text("沒電話")').click(); await pg.locator('#mix-fPhone .chip:has-text("有手機")').click(); await pg.waitForTimeout(300);
  chk((await names()).length===0, `電話篩有手機（這兩家都是市話）：${(await names()).join('|')}`);
  await pg.locator('#mix-fPhone .chip:has-text("有手機")').click(); await pg.waitForTimeout(200);
+ // 記住上次的篩選（版本 315）：篩了來源，重新整理後還在；清除篩選就清掉
+ await pg.locator('#mix-fSrc .chip:has-text("新設工廠")').click(); await pg.waitForTimeout(300);
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600); await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForSelector('#mix-cards .card'); await pg.waitForTimeout(500);
+ chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='true' && JSON.stringify((await names()).sort())===JSON.stringify(['丙三工業有限公司','名祿實業有限公司']), `重新整理後篩選還在：${(await names()).join('|')}`);
+ await pg.click('#mix-reset'); await pg.waitForTimeout(300);
+ chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='false' && (await names()).length===4, '清除篩選就清掉');
  // 點來源名稱到那一頁
  await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(500);
  chk(await pg.locator('#paneFactory').isVisible() && await pg.locator('#subtabs .subtab[data-tab="factory"]').evaluate(e=>e.classList.contains('is-active')), '點來源名稱跳到那一頁');
