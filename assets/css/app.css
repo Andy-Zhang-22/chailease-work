@@ -329,21 +329,6 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 .import-log .err { color: var(--danger); }
 .import-log .ok { color: var(--ok); }
 
-/* ---------- 統計 ---------- */
-.stats { display: grid; gap: 16px; }
-.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.stat {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px;
-}
-.stat b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
-.stat span { font-size: 13px; color: var(--muted); }
-.bars { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
-.bars h3 { font-size: 14px; margin-bottom: 12px; }
-.bar { display: grid; grid-template-columns: 110px 1fr 48px; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; }
-.bar i { display: block; height: 9px; border-radius: 999px; background: var(--primary); }
-.bar u { text-decoration: none; text-align: left; color: var(--muted); font-variant-numeric: tabular-nums; }
-
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 90;
   background: var(--text); color: var(--bg); padding: 10px 18px;
@@ -514,8 +499,7 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 .remind-bar { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; }
 .remind-bar.is-due { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
 .remind-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13.5px; }
-.remind-toggle { background: none; border: 0; padding: 4px 0; font: inherit; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.remind-caret { font-size: 11px; opacity: .7; }
+.remind-title { padding: 4px 0; }
 .remind-tools { display: flex; gap: 6px; flex-shrink: 0; }
 .remind-list { margin-top: 4px; }
 .remind-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px dashed var(--border); font-size: 13.5px; }
@@ -565,7 +549,6 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
  * 規則頁只有 6 張卡，實測加 content-visibility 並沒有比較快（成本只是從
  * 繪製移到排版），所以只在幾百筆的名單卡片上使用。
  */
-.bars { content-visibility: auto; contain-intrinsic-size: auto 260px; }
 
 /* ---------- 編輯客戶資料 ---------- */
 .detail-badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
@@ -1040,15 +1023,10 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .biz-modes .chip[aria-pressed="true"] { font-weight: 600; }
 .biz-dyn { color: var(--primary); font-weight: 600; }
 
-/* 資料狀態 */
+/* 備份那頁的表格 */
 .status-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
 .status-table th, .status-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .status-table tr.is-bad td { background: color-mix(in srgb, var(--danger) 8%, transparent); }
-
-/* 新名單成效 */
-.funnel { margin-top: 12px; }
-.funnel h3 + table, .funnel table + h3 { margin-top: 10px; }
-.funnel-table td:not(:first-child), .funnel-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- 行事曆 ---------- */
 .cal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -1136,8 +1114,6 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .leads-history { color: var(--muted); }
 .badge-foreign { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); }
 /* 新名單：第三排（全部＋六份名單）、合併頁每份名單那一句 */
-.mixtabs { padding-top: 4px; }
-.mixtabs .subtab { font-size: 13px; }
 .mix-srcs { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; color: var(--muted); }
 .mix-srcs li { margin: 2px 0; }
 .mix-srcs .mix-src { font-weight: 600; }

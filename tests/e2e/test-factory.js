@@ -30,7 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9589/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk((await pg.$$eval('#subtabs .subtab, #mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('新設工廠')), '找名單底下有「新設工廠」');
+ chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('新設工廠')), '找名單底下有「新設工廠」');
  await pg.evaluate(()=>window.switchTab('factory')); await pg.waitForSelector('#factory-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#factory-sub')).replace(/\s+/g,' ');
  chk(/新北市最近 12 個月登記的工廠 4 家（對到電話 2）/.test(sub) && /資料到 2026\/09/.test(sub), `標題：${sub}`);
@@ -62,9 +62,8 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(/最近新登記了工廠/.test(op), `開場白：${op}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  chk((await pg.locator('#factory-cards .card:has-text("名祿") .badge-mine').count())===1, '加完卡片標已在名單');
- // 統計的來源漏斗認得這個來源
- await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(400);
- chk(/新設工廠/.test(await pg.textContent('#paneStats .funnel')), '來源漏斗列「新設工廠」');
+ // 來源漏斗（摘要檔的數字）認得這個來源
+ chk(Object.keys(await pg.evaluate(()=>window.funnelStats().byOrigin)).includes('新設工廠'), '來源漏斗列「新設工廠」');
  // 名單上已經有的客戶剛登記工廠：卡片標 🏭（不用打開新設工廠那一頁）
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(400);
  const fb=await pg.locator('#cards .card:has-text("老客戶") .badge:has-text("新登記工廠")').textContent().catch(()=>'');

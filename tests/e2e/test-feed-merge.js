@@ -94,7 +94,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(top && top.name==='乙二機械股份有限公司', `同一家出現在四頁、訊號最多的排第一：${pv.slice(0,3).map(x=>x.name+'('+x.signals.length+')').join('、')}`);
  chk(top && ['本期增資','剛做進出口','剛開電子發票','最近買設備（2026/08）','跟同業借（和潤）'].every(x=>top.signals.includes(x)) && ['ch','le','tr','ei'].every(k=>top.srcs.includes(k)), `訊號加總：${top&&top.signals.join('、')}／來源 ${top&&top.srcs.join(',')}`);
  chk(pv.filter(x=>x.name==='乙二機械股份有限公司').length===1, '同一家只算一次');
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="feed-more"]'); await pg.waitForTimeout(3000);
+ await pg.click('#feedMore'); await pg.waitForTimeout(3000);
  const fed=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,notes:(r.notesRaw.match(/每日新名單，[^\n]*/)||[''])[0],head:r.notesRaw.split('\n')[0]})));
  const yi=fed.find(f=>f.company==='乙二機械股份有限公司');
  chk(yi && /符合：[^；]*本期增資/.test(yi.notes) && /剛做進出口/.test(yi.notes) && /最近買設備（2026\/08）/.test(yi.notes) && !/也在：|其他：|保底/.test(yi.notes), `訪談內容只寫合併後的訊號（也在、其他條件、保底不寫）：${yi&&yi.notes}`);

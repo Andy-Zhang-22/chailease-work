@@ -11,7 +11,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await ctx.addInitScript(()=>{try{localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');}catch(e){}});
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9537/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- for (const t of ['leads','chattel','listed','biz','trade','nhi','einv']) {
+ for (const t of ['leads','chattel','listed','biz','trade','nhi','factory','industry']) {
    await pg.evaluate((t)=>window.switchTab(t), t);
    await pg.waitForSelector(`#${t}-filters`, {state:'attached', timeout:10000}).catch(()=>{});
    const st=await pg.evaluate((t)=>{ const d=document.getElementById(`${t}-filters`); return d ? String(d.open) : 'missing'; }, t);

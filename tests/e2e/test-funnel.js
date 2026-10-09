@@ -1,4 +1,4 @@
-// 統計頁：新名單成效（來源漏斗）
+// 新名單成效（來源漏斗）：數字給雲端硬碟的摘要檔與每月報告用（統計頁版本 314 拿掉了）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.csv':'text/csv'};
@@ -38,14 +38,8 @@ const RECS=[
  // 訊號成效：不分來源、同時有幾個訊號（使用者：「都做」）
  chk(f.bySignal['成立 5 年內'].n===3 && f.bySignal['成立 5 年內'].called===3 && f.bySignal['增資'].chance===1 && f.bySignal['3 個月內到期'].n===1, `依訊號（不分來源）：${JSON.stringify(f.bySignal)}`);
  chk(f.bySigCount['2 個'].n===3 && f.bySigCount['1 個'].n===2 && f.bySigCount['2 個'].chance===2, `依訊號數：${JSON.stringify(f.bySigCount)}`);
- await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(500);
- chk(await pg.locator('#paneStats .funnel-signals').evaluate(d=>!d.open), '各訊號的成效預設收起來');
- await pg.click('#paneStats .funnel-signals summary'); await pg.waitForTimeout(200);
- const txt=(await pg.innerText('#paneStats .funnel')).replace(/\s+/g,' ');
- chk(/新名單成效/.test(txt) && /動產擔保 4 4（100%） 50% 25% 1/.test(txt) && /登記清冊 2 1（50%） 100% 100% 0/.test(txt), `統計頁表格：${txt.slice(0,260)}`);
- chk(/動產擔保・成立 5 年內/.test(txt), '打過 3 家以上的條件有列出來');
- chk(!/主力客戶/.test(txt), '主力名單不算');
- chk(/各訊號的成效/.test(txt) && /成立 5 年內 3 3（100%）/.test(txt) && /同時有幾個/.test(txt) && /2 個訊號 3 2（67%）/.test(txt), '統計頁有訊號、訊號數兩張表');
+ chk(!Object.keys(f.byRule).some(k=>/主力客戶/.test(k)) && Object.values(f.byOrigin).reduce((a,t)=>a+t.n,0)===7, '主力名單不算');
+ chk(await pg.evaluate(()=>!!window.buildSummary().funnel.byOrigin['動產擔保']), '摘要檔帶這份數字');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'全部通過');
  await br.close(); srv.close();

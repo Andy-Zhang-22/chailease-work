@@ -30,11 +30,6 @@ const mk=(id,company)=>({id,source:'A.csv',company,aliases:[],taxId:'',grade:'',
  const warn=(await pg.textContent('#drawerBody .blocked-warning')).replace(/\s+/g,' ');
  chk(/2026\/9\/20|2026\/09\/20/.test(warn) && /老闆說不要再打/.test(warn), `詳細頁警示有日期與原因：${warn}`);
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
- // 資料狀態（清冊全部 404 → 全標紅）
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="data-status"]'); await pg.waitForTimeout(1500);
- const st=(await pg.textContent('#editorBody')).replace(/\s+/g,' ');
- chk(/資料狀態/.test(st) && /上市櫃公司/.test(st) && /讀不到/.test(st) && /項有問題/.test(st), `資料狀態面板：${st.slice(0,200)}`);
- chk(await pg.locator('#editorBody .status-table tr.is-bad').count()>=5, '五個來源都標紅');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'全部通過');
  await br.close(); srv.close();

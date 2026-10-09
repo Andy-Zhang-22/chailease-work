@@ -21,7 +21,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await pg.click('#btnMenu');
  const vis=await pg.evaluate(()=>[...document.querySelectorAll('#menu button')].filter(b=>b.offsetParent&&b.dataset.act!=='menu-more').map(b=>b.textContent));
- chk(vis.length===8 && vis.includes('今日覆盤') && vis.includes('資料狀態') && !vis.includes('商工登記更新'), `選單外面八項：${vis.join('、')}`);
+ chk(vis.length===3 && vis.includes('今日覆盤') && vis.includes('匯出 Excel') && vis.includes('Claude 分身') && !vis.includes('商工登記更新'), `選單外面三項：${vis.join('、')}`);
  await pg.click('#menu [data-act="menu-more"]');
  chk(await pg.isVisible('#menu [data-act="registry"]') && await pg.isVisible('#menu [data-act="wipe"]'), '點「進階」才看得到其餘功能');
  await pg.click('#btnMenu'); await pg.click('#btnMenu');
@@ -34,9 +34,9 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await withTel.locator('.card-name').click(); await pg.waitForSelector('#drawerBody h2');
  chk((await pg.locator('#drawerBody .phone-search a').count())===4, '詳細頁有 Google／地圖／104／1111');
- chk(await pg.isVisible('#drawerBody button:has-text("刪除這筆")') && !(await pg.isVisible('#drawerBody button:has-text("編輯資料")')), '刪除這筆在外面、編輯資料收著');
+ chk(await pg.isVisible('#drawerBody button:has-text("刪除這筆")') && await pg.isVisible('#drawerBody button:has-text("編輯資料")') && !(await pg.isVisible('#drawerBody button:has-text("承作檢核")')), '刪除這筆、編輯資料在外面，承作檢核收著');
  await pg.click('#drawerBody .detail-acts-more');
- chk(await pg.isVisible('#drawerBody button:has-text("編輯資料")') && await pg.isVisible('#drawerBody button:has-text("承作檢核")') && await pg.isVisible('#drawerBody button:has-text("匯出 Excel")'), '按「⋯」冒出編輯資料、承作檢核、匯出 Excel');
+ chk(await pg.isVisible('#drawerBody button:has-text("承作檢核")') && await pg.isVisible('#drawerBody button:has-text("匯出 Excel")'), '按「⋯」冒出承作檢核、匯出 Excel');
  chk(!(await pg.evaluate(()=>document.querySelector('#drawerBody .remind-section').open)), '回撥提醒預設收起');
  chk((await pg.locator('#drawerBody button:has-text("讓 AI 整理")').count())===0 && (await pg.locator('#drawerBody button:has-text("訊息草稿")').count())===0, '「讓 AI 整理」「訊息草稿」拿掉了');
  await pg.click('#drawerBody .remind-section > summary'); await pg.click('#drawerBody button:has-text("1 小時後")'); await pg.waitForTimeout(600);

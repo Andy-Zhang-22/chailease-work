@@ -37,13 +37,8 @@ const SEED=[mk('1','今天甲',today),mk('2','今天乙',today),mk('3','明天�
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  chk((await pg.locator('#remindBar .remind-row').count())===3&&(await pg.locator('#remindBar .remind-row:has-text("今天甲")').count())===1&&/找王經理/.test(await pg.textContent('#remindBar .remind-row:has-text("今天甲")')), '同一家只列一次，用有時間的那列');
  chk((await pg.locator('#remindBar .remind-tel[href^="tel:"]').count())===3, '每列的電話可直接撥');
- // 收起／展開
- await pg.click('#remindBar .remind-toggle'); await pg.waitForTimeout(200);
- chk((await pg.locator('#remindBar .remind-row').count())===0&&/今天要打（3）/.test(await pg.textContent('#remindBar')), '收起後只剩標題');
- await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
- chk((await pg.locator('#remindBar .remind-row').count())===0, '收起狀態記住');
- await pg.click('#remindBar .remind-toggle'); await pg.waitForTimeout(200);
- chk((await pg.locator('#remindBar .remind-row').count())===3, '再點展開');
+ // 固定展開，沒有收合鈕（版本 314：三天點了一百多次，等於每次都要先點開）
+ chk((await pg.locator('#remindBar .remind-toggle').count())===0 && (await pg.locator('#remindBar .remind-row').count())===3, '沒有收合鈕，清單直接展開');
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();
