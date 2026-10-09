@@ -1,4 +1,4 @@
-// 新設工廠分頁（經濟部生產中工廠清冊）：讀資料、預設篩選、卡片（主要產品、登記年月、幾個廠）、加入客戶名單帶電話與行業、開場白、來源漏斗
+// 新設工廠分頁（經濟部生產中工廠清冊）：讀資料、預設篩選、卡片（主要產品、登記年月、幾個廠）、加入客戶名單帶電話與行業、來源漏斗
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -58,8 +58,6 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const rec=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='名祿實業有限公司'); return r?{phone:r.phoneRaw,founded:r.founded,capital:r.capital,industry:r.industry,notes:r.notesRaw,source:r.source,next:r.nextDate}:null; });
  chk(rec && rec.phone==='02-2960-0000' && rec.founded==='2019' && rec.capital==='12,000' && rec.industry==='金屬製品製造業' && /^工廠登記 2026-09/.test(rec.notes) && /產品 金屬模具/.test(rec.notes) && /^新設工廠-2026-10-05-1家\.csv$/.test(rec.source), `加進來的：${JSON.stringify(rec)}`);
  chk(await pg.isVisible('#drawer') && /名祿/.test(await pg.textContent('#drawerBody h2')), '單張加入直接打開那一筆');
- const op=(await pg.locator('#drawerBody .detail-opener').textContent()).replace(/\s+/g,' ');
- chk(/最近新登記了工廠/.test(op), `開場白：${op}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  chk((await pg.locator('#factory-cards .card:has-text("名祿") .badge-mine').count())===1, '加完卡片標已在名單');
  // 來源漏斗（摘要檔的數字）認得這個來源

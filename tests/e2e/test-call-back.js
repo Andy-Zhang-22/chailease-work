@@ -1,4 +1,4 @@
-// 開場白：照這家為什麼值得打給一句話；打完電話切回來自動開那家的通話紀錄
+// 打完電話切回來自動開那家的通話紀錄（卡片／詳細頁的 💬 開場白版本 319 拿掉了，這裡只留撥完回來的那段）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -25,14 +25,9 @@ const RECS=[
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
 
- const op=async(name)=>{ const c=pg.locator(`#cards .card:has-text("${name}")`).first(); return (await c.locator('.card-opener').count())? (await c.locator('.card-opener').textContent()).replace(/\s+/g,' ') : ''; };
- chk(/增資/.test(await op('星辰')) && /新莊分公司/.test(await op('星辰')), `清冊增資的卡片有開場白：${await op('星辰')}`);
- chk(/進出口/.test(await op('遠帆')), `剛做進出口的卡片有開場白：${await op('遠帆')}`);
- chk((await op('律森'))==='', '只有成立年的卡片上不放（太普遍），詳細頁才有');
- chk((await op('範例'))==='', '沒訊號的沒有開場白');
+ chk((await pg.locator('#cards .card-opener').count())===0, '卡片上沒有 💬 開場白了');
  await pg.locator('#cards .card:has-text("律森") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
- const dop=(await pg.locator('#drawerBody .detail-opener').textContent()).replace(/\s+/g,' ');
- chk(/成立 7 年/.test(dop) && (await pg.locator('#drawerBody .detail-opener .copy-dot').count())===1, `詳細頁有成立年的開場白＋複製點：${dop}`);
+ chk((await pg.locator('#drawerBody .detail-opener').count())===0 && !/💬/.test(await pg.textContent('#drawerBody')), '詳細頁也沒有 💬 開場白了');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
 
  // 按電話撥出去 → 記下是哪一家；切回來（visibilitychange）就開那一筆的通話紀錄、游標在內容框

@@ -4288,81 +4288,6 @@
 
   /** 一支電話 = 撥號連結 + 複製鈕。複製的是純數字，貼到撥號鍵盤直接可用。 */
   /*
-   * 開場白：照這家為什麼值得打，給一句打電話用的話（使用者：重點是「讓客戶先認識我、容易約到拜訪」，
-   * 第一句聽到跟自己公司有關的事比較不會掛）。只挑一個最強的訊號；什麼都沒有就不給，免得每張都一樣。
-   */
-  function openerFor(r) {
-    const ago = (iso) => (iso ? -dayDiff(iso) : null);
-    const branch = (() => { let b = ''; try { b = registryPref('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; })();
-    const notes = String(r.notesRaw || '');
-    const reason = (notes.match(/變更(?:登記)?[：:]([^\n，,。]*)/) || [])[1] || '';
-    if (r.chattelNext && r.chattelNext.days <= 92 && r.chattelNext.lender && !/中租/.test(r.chattelNext.lender.name || '')) {
-      return { kind: 'chattel', text: `您跟${window.Chattel ? window.Chattel.lenderShort(r.chattelNext.lender.name) : r.chattelNext.lender.name}的案子 ${r.chattelNext.end} 快到期了，之後如果有資金安排可以比較看看，我是中租${branch}的，想先過去認識一下。` };
-    }
-    const up = ago(r.regKindDate && r.regKindDate.capitalUp);
-    if ((up !== null && up <= 180) || /增資|發行新股/.test(reason)) {
-      return { kind: 'up', text: `看到貴公司最近增資，恭喜。通常這之後會開始擴充，中租有配合的週轉金跟投資額度，我是中租${branch}的，想找時間過去認識一下。` };
-    }
-    const moved = ago(r.regKindDate && r.regKindDate.address);
-    if ((moved !== null && moved <= 180) || /所在地|遷/.test(reason)) {
-      return { kind: 'move', text: `貴公司最近搬到${r.district || r.city || '這邊'}，我是中租${branch}的，就在附近，想過去打聲招呼。` };
-    }
-    // 剛開始幫員工投保（健保新成立投保單位）：在擴編
-    const hire = (notes.match(/健保新投保 (\d{4}-\d{2})/) || [])[1];
-    if (hire && ago(`${hire}-01`) !== null && ago(`${hire}-01`) <= 200) {
-      return { kind: 'hire', text: `看到貴公司最近開始幫員工投保、在擴編，通常這個階段週轉金的需求會跟著上來，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 剛開始開電子發票（財政部導入電子發票營業人清單）：生意上軌道了
-    // 舊寫法「電子發票 2026-11（財政部…：剛導入）」、新寫法「電子發票 2026-11 剛導入」都認（名單裡兩種都有）
-    const einv = (notes.match(/電子發票 (\d{4}-\d{2})(?:（[^）]*| )剛導入/) || [])[1];
-    if (einv && ago(`${einv}-01`) !== null && ago(`${einv}-01`) <= 200) {
-      return { kind: 'einv', text: `看到貴公司最近開始開電子發票、生意上軌道了，這個階段進貨跟週轉的額度中租可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 剛登記工廠（經濟部生產中工廠清冊）：在設廠、擴廠
-    const fac = (notes.match(/工廠登記 (\d{4}-\d{2})/) || [])[1];
-    if ((fac && ago(`${fac}-01`) !== null && ago(`${fac}-01`) <= 200) || r.newFactory) {
-      return { kind: 'factory', text: `看到貴公司最近新登記了工廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 產業名單：最近多了新工地／新廠 → 在擴張
-    const site = notes.match(/^產業名單：[^\n]*?(\d{4}-\d{2}) (新工地|新廠)/);
-    if (site && ago(`${site[1]}-01`) !== null && ago(`${site[1]}-01`) <= 200) {
-      return site[2] === '新工地'
-        ? { kind: 'site', text: `看到貴公司最近又開了新工地，機具、車輛添購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` }
-        : { kind: 'plant', text: `看到貴公司最近多了新的廠，設廠、添設備這段時間資金需求比較大，中租設備跟週轉都可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 車輛相關業者（產業名單）：換車、買車
-    if (/^產業名單：[^\n]*(貨運|遊覽車|計程車|租賃)/.test(notes)) {
-      return { kind: 'vehicle', text: `貴公司是做運輸／租車的，車輛汰換、新購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 營造業（環境部列管的工地）：機具
-    if (/^產業名單：[^\n]*營造業/.test(notes)) {
-      return { kind: 'build', text: `貴公司有在做工程，機具、車輛添購或工程週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 食品工廠、環保列管工廠：設備
-    if (/^產業名單：[^\n]*(食品製造業|環保列管工廠)/.test(notes)) {
-      return { kind: 'plant', text: `貴公司有自己的工廠，生產設備汰換、添購或週轉的資金中租都可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    // 舊寫法「原始登記 2026-08-20」、新寫法「出進口廠商登記：進口＋出口，2026-08 開始」都認
-    const firstM = notes.match(/原始登記 (\d{4}-\d{2}-\d{2})/) || notes.match(/出進口廠商登記：[^，\n]*，(\d{4}-\d{2}) 開始/);
-    const first = firstM ? (firstM[1].length === 7 ? `${firstM[1]}-01` : firstM[1]) : '';
-    if (first && ago(first) !== null && ago(first) <= 365) {
-      return { kind: 'trade', text: `貴公司最近開始做進出口，開信用狀、押貨款這一段中租有週轉金額度可以配合，我是中租${branch}的，想過去認識一下。` };
-    }
-    const y = String(r.founded || '').match(/\d{2,4}/);
-    if (y) {
-      let yr = +y[0]; if (yr < 200) yr += 1911;
-      const years = +todayISO().slice(0, 4) - yr;
-      if (years >= 6 && years <= 10) return { kind: 'age', text: `貴公司成立 ${years} 年了，營運穩定，這個階段通常可以談比較大的額度，我是中租${branch}的，想過去認識一下。` };
-    }
-    return null;
-  }
-  function openerNode(r, cls) {
-    const o = openerFor(r);
-    if (!o) return '';
-    return el('p', { className: cls, title: '打電話用的開場白，照這家為什麼值得打寫的' }, [document.createTextNode(`💬 ${o.text}`), copyDot(o.text, '複製開場白', '已複製開場白')]);
-  }
-
-  /*
    * 打完電話回來就開這家的通話紀錄（使用者：「更好用」——以前打完要自己再找卡片、開紀錄、填）。
    * 按卡片或詳細頁的電話時先記下是哪一家；手機撥完切回網站（visibilitychange）就直接打開那一筆、捲到「記錄這通電話」。
    * 20 分鐘內有效，超過就當沒事（可能只是看一眼號碼）。
@@ -4468,7 +4393,6 @@
       latest = { text: mine.text || `（${window.Normalize.outcomeLabel(mine.outcome)}）` };
     }
     if (latest) node.append(el('p', { className: 'card-notes', textContent: latest.text }));
-    { const o = openerFor(r); if (o && o.kind !== 'age') node.append(openerNode(r, 'card-opener')); }   // 開場白：有增資、剛做進出口這類訊號才放；成立年那種太普遍，卡片上不放
     node.onclick = () => openDetail(r.id);
     node.onkeydown = (e) => { if (e.key === 'Enter') openDetail(r.id); };
     return node;
@@ -5407,7 +5331,6 @@
         xlsxBtn,
       ].filter(Boolean)),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
-      openerNode(r, 'detail-opener'),
     ].filter(Boolean)));
 
     /*

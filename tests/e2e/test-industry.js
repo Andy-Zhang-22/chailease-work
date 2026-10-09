@@ -1,5 +1,5 @@
 // 產業名單分頁（車輛相關業者、食品工廠、環保列管、營造業）：第三排有這一頁、讀資料、預設篩選、卡片（類別、剛出現、新工地）、
-// 加入客戶名單帶電話與行業、開場白、來源漏斗、合併頁同一個統編合成一家
+// 加入客戶名單帶電話與行業、來源漏斗、合併頁同一個統編合成一家
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -51,20 +51,16 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await pg.waitForTimeout(1200);
  const rec=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='名祿運通有限公司'); return r?{phone:r.phoneRaw,founded:r.founded,capital:r.capital,industry:r.industry,notes:r.notesRaw,source:r.source}:null; });
  chk(rec && rec.phone==='02-2960-0000' && rec.founded==='2019' && rec.capital==='12,000' && rec.industry==='其他汽車貨運' && /^產業名單：汽車貨運業、小客車租賃業，2026-11 新出現/.test(rec.notes) && /^產業名單-2026-12-05-1家\.csv$/.test(rec.source), `加進來的：${JSON.stringify(rec)}`);
- const op=(await pg.locator('#drawerBody .detail-opener').textContent().catch(()=>'')).replace(/\s+/g,' ');
- chk(/運輸／租車/.test(op), `開場白：${op}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  // 合併頁：這一頁的公司進得去，訊號有「車輛業者」「營造業（有工地）、剛有新工地」
  const mix=await pg.evaluate(async()=>{ const m=await window.mixCandidates(); return m.filter(x=>!x.mine && x.facts.some(f=>f.key==='in')).map(x=>`${x.name}|${x.signals.join('、')}`); });
  chk(mix.length===3 && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
- // 營造業加進來：備註寫新工地、開場白講新工地
+ // 營造業加進來：備註寫新工地
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForTimeout(300);
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#industry-cards .card')].find(x=>x.textContent.includes('鼎築')); c.querySelector('.industry-add-one').click(); });
  await pg.waitForTimeout(1200);
  const rec2=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='鼎築營造有限公司'); return r?r.notesRaw:''; });
  chk(/^產業名單：營造業，2026-11 新工地/.test(rec2), `營造業的備註：${rec2}`);
- const op2=(await pg.locator('#drawerBody .detail-opener').textContent().catch(()=>'')).replace(/\s+/g,' ');
- chk(/新工地/.test(op2), `營造業的開場白：${op2}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  // 來源漏斗（摘要檔的數字）認得這個來源
  chk(Object.keys(await pg.evaluate(()=>window.funnelStats().byOrigin)).includes('產業名單'), '來源漏斗列「產業名單」');

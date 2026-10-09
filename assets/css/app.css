@@ -203,8 +203,6 @@ button, input, select { font: inherit; color: inherit; }
 .card-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .card-name { font-weight: 650; font-size: 15.5px; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 13px; color: var(--muted); }
-.card-opener, .detail-opener { margin: 6px 0 0; font-size: 13px; color: var(--primary); line-height: 1.5; }
-.detail-opener { font-size: 14px; margin-top: 8px; }
 .card-notes {
   margin-top: 6px; font-size: 13px; color: var(--muted);
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
