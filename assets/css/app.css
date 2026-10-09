@@ -1037,13 +1037,6 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .twin-steps { margin: 6px 0 10px; padding-left: 20px; line-height: 1.6; }
 .twin-url { width: 100%; margin: 4px 0; }
 
-/* 今日撥打戰略 */
-.badge-twin { border-color: var(--primary); color: var(--primary); }
-.twin-plan { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--primary); border-radius: 4px; line-height: 1.6; }
-.twin-plan-head { font-weight: 600; }
-.twin-plan-reason { color: var(--muted); }
-.plan-paste { width: 100%; margin: 8px 0; font: inherit; }
-
 /* 動產擔保分頁：卡片下面列這家的每一件 */
 .chattel-cases { margin: 6px 0 2px; }
 .chattel-cases-head { font-size: 12.5px; margin-bottom: 2px; }
