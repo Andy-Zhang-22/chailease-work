@@ -62,14 +62,14 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.locator('#mix-fPhone .chip:has-text("有手機")').click(); await pg.waitForTimeout(200);
  // 點來源名稱到那一頁
  await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(500);
- chk(await pg.locator('#paneFactory').isVisible() && await pg.locator('#mixtabs .subtab[data-tab="factory"]').evaluate(e=>e.classList.contains('is-active')), '點來源名稱跳到那一頁');
- await pg.click('#mixtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(500);
+ chk(await pg.locator('#paneFactory').isVisible() && await pg.locator('#subtabs .subtab[data-tab="factory"]').evaluate(e=>e.classList.contains('is-active')), '點來源名稱跳到那一頁');
+ await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(500);
  // 加入名單：之後留在原地、改標「已在名單」
  await pg.locator('#mix-cards .mix-card:has-text("宇駿") .mix-add-one').click(); await pg.waitForTimeout(1500);
  const added=await pg.evaluate(()=>window.customerViews().some(v=>v.company==='宇駿貿易有限公司'));
  chk(added, '加入客戶名單');
  if (await pg.locator('#drawer').isVisible()) { await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200); }
- await pg.click('#mixtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
+ await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
  const yj=pg.locator('#mix-cards .mix-card:has-text("宇駿")');
  chk((await yj.count())===1 && (await yj.locator('.badge-mine').count())===1 && (await yj.locator('.mix-add-one').count())===0, `加完留在原地、標已在名單：${(await names()).join('|')}`);
  // 跟我的名單比對：只看名單裡沒有的
@@ -82,14 +82,14 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(await pg.locator('#drawer').isVisible() && /丙三工業/.test(h2) && (await pg.evaluate(()=>window.customerViews().filter(v=>/丙三/.test(v.company)).length))===1, `點已在名單打開名單上那一筆、沒有重複加（${h2}）`);
  if (await pg.locator('#drawer').isVisible()) { await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200); }
  // 電話後面有複製鈕
- await pg.click('#mixtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
+ await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
  const cc=pg.locator('#mix-cards .mix-card:has-text("名祿")');
  chk((await cc.locator('.phone-search .copy-dot').count())===1, '合併頁電話後面有複製鈕');
  // 底下各份名單的更新頻率
  await pg.waitForTimeout(500);
  const st=(await pg.textContent('#mix-status')).replace(/\s+/g,' ');
  chk(/各份名單的更新/.test(st) && /剛開始請人 每月 10 日（2026\/10\/02 更新/.test(st) && /新設工廠 每月 20 日/.test(st) && /登記清冊 每月 8 日/.test(st), `更新頻率：${st.slice(0,200)}`);
- chk(/^\d+$/.test((await pg.textContent('#countMix')).trim()), '第二排「新名單」帶家數');
+ chk(/^\d+$/.test((await pg.textContent('#countMix')).trim()), '「全部（合併）」帶家數');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

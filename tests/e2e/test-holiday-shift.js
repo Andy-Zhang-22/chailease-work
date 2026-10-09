@@ -48,10 +48,12 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  const m=await pg.evaluate(()=>[window.addMonths('2026-10-01',3), window.addMonths('2026-08-31',1), window.addMonths('2026-01-31',1), window.addMonths('2026-11-30',3)]);
  chk(JSON.stringify(m)==='["2027-01-01","2026-09-30","2026-02-28","2027-02-28"]', `幾個月後的同一天、沒有那一天就取月底：${JSON.stringify(m)}`);
 
- // 「今天」不順延：人就是在今天按的
- await pg.click('#drawerBody button:has-text("今天")'); await pg.waitForTimeout(400);
+ // 快捷鍵只剩四個（版本 314）；「明天」9/25 是中秋、9/28 教師節，順延到 9/29
+ const quick=await pg.$$eval('#drawerBody .card-actions .btn-tiny',a=>a.map(x=>x.textContent).filter(t=>/^(今天|明天|.*天後|.*週後|.*月後)$/.test(t)));
+ chk(quick.join('|')==='明天|一週後|一個月後|三個月後', `快捷鍵四個：${quick.join('|')}`);
+ await pg.click('#drawerBody button:has-text("明天")'); await pg.waitForTimeout(400);
  const v2=await pg.inputValue('#drawerBody input[type="date"]');
- chk(v2==='2026-09-24', `「今天」照原樣：${v2}`);
+ chk(v2==='2026-09-29', `9/24 按「明天」→ 中秋連假，順延到 9/29：${v2}`);
 
  // 自己用日期框挑到假日，一樣順延（使用者要求：反正那天打不到人）
  await pg.fill('#drawerBody input[type="date"]','2026-10-10');

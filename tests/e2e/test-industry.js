@@ -27,7 +27,7 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await ctx.route('**/leads/industry/industry.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9623/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- chk((await pg.$$eval('#mixtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('產業名單')), '新名單第三排有「產業名單」');
+ chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('產業名單')), '新名單第三排有「產業名單」');
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForSelector('#industry-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#industry-sub')).replace(/\s+/g,' ');
  chk(/新北市 4 家/.test(sub) && /營造工地 1/.test(sub) && /起算 2026\/10/.test(sub), `標題：${sub}`);
@@ -66,9 +66,8 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  const op2=(await pg.locator('#drawerBody .detail-opener').textContent().catch(()=>'')).replace(/\s+/g,' ');
  chk(/新工地/.test(op2), `營造業的開場白：${op2}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
- // 統計的來源漏斗認得這個來源
- await pg.evaluate(()=>window.switchTab('stats')); await pg.waitForTimeout(400);
- chk(/產業名單/.test(await pg.textContent('#paneStats .funnel')), '來源漏斗列「產業名單」');
+ // 來源漏斗（摘要檔的數字）認得這個來源
+ chk(Object.keys(await pg.evaluate(()=>window.funnelStats().byOrigin)).includes('產業名單'), '來源漏斗列「產業名單」');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

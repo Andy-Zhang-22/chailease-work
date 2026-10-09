@@ -50,7 +50,7 @@ const SEED=[mk('1','甲精密有限公司'),mk('2','乙貿易股份有限公司'
  await pg.locator('#cards .card:has-text("甲精密") .card-name').click(); await pg.waitForSelector('#drawerBody .twin-plan');
  const tp=(await pg.textContent('#drawerBody .twin-plan')).replace(/\s+/g,' ');
  chk(/🧭 分身建議（今天第 1 打）/.test(tp) && /年底擴廠、成立 8 年，最符合輪廓/.test(tp) && /開場白：王老闆您好，我是中租新莊分公司的， 聽說貴公司年底要擴廠/.test(tp), `詳細頁的理由與開場白（兩行都在）：${tp}`);
- chk(await pg.locator('#menu [data-act="twin-plan"]').count()===1, '選單也有「今日撥打戰略」');
+ chk((await pg.locator('#menu [data-act="twin-plan"]').count())===0 && (await pg.locator('#remindBar button:has-text("🧭 戰略")').count())===1, '戰略只從名單上方的 🧭 進（選單那顆拿掉了）');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
