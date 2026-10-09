@@ -31,16 +31,23 @@ const APP=JSON.parse(fs.readFileSync(path.join(ROOT,'version.json'),'utf8')).ver
  const ok2=(await pg.locator('[data-act="check-update"]').count())===0 && await pg.evaluate(()=>document.querySelector('#updateBar').hidden);
  if(!ok2)bad++; console.log(`${ok2?'PASS':'FAIL'} 選單沒有檢查更新那顆、已是最新版時沒有提示條`);
 
- // 3. 伺服器有新版：切回分頁會自動重新檢查、跳提示條
+ // 3. 伺服器有新版、正在做事（視窗開著）：切回分頁會自動重新檢查，跳提示條讓人自己按
  serverVersion='99999999-9';
- await pg.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true});
-   document.dispatchEvent(new Event('visibilitychange'));});
- await pg.waitForTimeout(200);
- await pg.evaluate(()=>{Object.defineProperty(document,'hidden',{value:false,configurable:true});
-   document.dispatchEvent(new Event('visibilitychange'));});
- await pg.waitForTimeout(1200);
- const ok5=await pg.evaluate(()=>!document.querySelector('#updateBar').hidden);
- if(!ok5)bad++; console.log(`${ok5?'PASS':'FAIL'} 切回分頁會自動重新檢查`);
+ await pg.keyboard.press('Escape'); await pg.evaluate(()=>document.querySelector('.way[data-act="new-customer"]').click()); await pg.waitForSelector('#kvPaste');
+ const flip=async()=>{ await pg.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true}); document.dispatchEvent(new Event('visibilitychange'));});
+   await pg.waitForTimeout(200);
+   await pg.evaluate(()=>{Object.defineProperty(document,'hidden',{value:false,configurable:true}); document.dispatchEvent(new Event('visibilitychange'));});
+   await pg.waitForTimeout(1200); };
+ await flip();
+ const ok3=await pg.evaluate(()=>!document.querySelector('#updateBar').hidden) && !/v=99999999-9/.test(pg.url());
+ if(!ok3)bad++; console.log(`${ok3?'PASS':'FAIL'} 正在做事：切回分頁會自動重新檢查、跳提示條，不自己換版`);
+
+ // 4. 沒在做事：直接換新版，不問（版本 315）
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ await flip();
+ await pg.waitForTimeout(800);
+ const ok4=/v=99999999-9/.test(pg.url());
+ if(!ok4)bad++; console.log(`${ok4?'PASS':'FAIL'} 沒在做事：切回分頁自動換新版（${pg.url()}）`);
 
  console.log('ERRORS:', errs.length?errs:'none');
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

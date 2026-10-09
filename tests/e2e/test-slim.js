@@ -34,9 +34,9 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await withTel.locator('.card-name').click(); await pg.waitForSelector('#drawerBody h2');
  chk((await pg.locator('#drawerBody .phone-search a').count())===4, '詳細頁有 Google／地圖／104／1111');
- chk(await pg.isVisible('#drawerBody button:has-text("刪除這筆")') && await pg.isVisible('#drawerBody button:has-text("編輯資料")') && !(await pg.isVisible('#drawerBody button:has-text("承作檢核")')), '刪除這筆、編輯資料在外面，承作檢核收著');
- await pg.click('#drawerBody .detail-acts-more');
- chk(await pg.isVisible('#drawerBody button:has-text("承作檢核")') && await pg.isVisible('#drawerBody button:has-text("匯出 Excel")'), '按「⋯」冒出承作檢核、匯出 Excel');
+ chk(await pg.isVisible('#drawerBody button:has-text("刪除這筆")') && await pg.isVisible('#drawerBody button:has-text("編輯資料")') && await pg.isVisible('#drawerBody button:has-text("匯出 Excel")'), '刪除這筆、編輯資料、匯出 Excel 都在外面');
+ const gone=await pg.evaluate(()=>['承作檢核','拜訪準備'].filter(t=>[...document.querySelectorAll('#drawerBody button')].some(b=>b.textContent.trim()===t)).concat(document.querySelector('#drawerBody .twin-btn')?['🤖']:[], document.querySelector('#drawerBody .detail-acts-more')?['⋯']:[]));
+ chk(gone.length===0 && (await pg.locator('#drawerBody .chance-btn').count())===2, `承作檢核、拜訪準備、🤖、⋯ 拿掉了，有機會／無機會留著：${gone.join('、')||'無'}`);
  chk(!(await pg.evaluate(()=>document.querySelector('#drawerBody .remind-section').open)), '回撥提醒預設收起');
  chk((await pg.locator('#drawerBody button:has-text("讓 AI 整理")').count())===0 && (await pg.locator('#drawerBody button:has-text("訊息草稿")').count())===0, '「讓 AI 整理」「訊息草稿」拿掉了');
  await pg.click('#drawerBody .remind-section > summary'); await pg.click('#drawerBody button:has-text("1 小時後")'); await pg.waitForTimeout(600);

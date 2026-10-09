@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261009-314">
+<link rel="stylesheet" href="assets/css/app.css?v=20261009-317">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261009-314"></script>
+<script src="assets/js/lock.js?v=20261009-317"></script>
 </head>
 <body data-theme="auto">
 
@@ -67,7 +67,7 @@
         </div>
         <div class="menu-group">
           <div class="menu-cap">備份與其他</div>
-          <button data-act="sync-setup">雲端同步設定</button>
+          <button data-act="sync-setup">設定：雲端同步、Google 金鑰</button>
           <button data-act="backups">備份（找回某天、下載／還原）</button>
           <button data-act="wipe" class="danger">清除所有資料</button>
         </div>
@@ -296,6 +296,15 @@
       <button id="btnSyncSignOut" class="btn">登出 Google</button>
     </div>
     <p id="syncStatus" class="muted"></p>
+    <!-- Google 地圖金鑰（版本 315）：填了每日新名單沒電話的會自動補；只存這台裝置，不進同步檔 -->
+    <div class="filter-group">
+      <label for="placesKeyInput">Google 地圖金鑰（新名單沒電話的自動補；只存這台裝置）</label>
+      <input id="placesKeyInput" type="text" placeholder="AIza…" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="card-actions">
+      <button id="btnSavePlacesKey" class="btn btn-tiny">儲存金鑰</button>
+      <button id="btnPlacesHelp" class="btn btn-tiny">怎麼拿金鑰、要多少錢</button>
+    </div>
     <details class="sync-help">
       <summary>還沒有用戶端 ID？點這裡看設定步驟</summary>
       <ol>
@@ -346,27 +355,27 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261009-314"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261009-314"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261009-317"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261009-317"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261009-314"></script>
-<script src="assets/js/normalize.js?v=20261009-314"></script>
-<script src="assets/js/holidays.js?v=20261009-314"></script>
-<script src="assets/js/registry.js?v=20261009-314"></script>
-<script src="assets/js/ocr.js?v=20261009-314"></script>
-<script src="assets/js/rules.js?v=20261009-314"></script>
-<script src="assets/js/store.js?v=20261009-314"></script>
-<script src="assets/js/sync.js?v=20261009-314"></script>
-<script src="assets/js/leads.js?v=20261009-314"></script>
-<script src="assets/js/chattel.js?v=20261009-314"></script>
-<script src="assets/js/listed.js?v=20261009-314"></script>
-<script src="assets/js/biz.js?v=20261009-314"></script>
-<script src="assets/js/trade.js?v=20261009-314"></script>
-<script src="assets/js/nhi.js?v=20261009-314"></script>
-<script src="assets/js/einv.js?v=20261009-314"></script>
-<script src="assets/js/factory.js?v=20261009-314"></script>
-<script src="assets/js/industry.js?v=20261009-314"></script>
-<script src="assets/js/mix.js?v=20261009-314"></script>
-<script src="assets/js/app.js?v=20261009-314"></script>
+<script src="assets/js/pdf-table.js?v=20261009-317"></script>
+<script src="assets/js/normalize.js?v=20261009-317"></script>
+<script src="assets/js/holidays.js?v=20261009-317"></script>
+<script src="assets/js/registry.js?v=20261009-317"></script>
+<script src="assets/js/ocr.js?v=20261009-317"></script>
+<script src="assets/js/rules.js?v=20261009-317"></script>
+<script src="assets/js/store.js?v=20261009-317"></script>
+<script src="assets/js/sync.js?v=20261009-317"></script>
+<script src="assets/js/leads.js?v=20261009-317"></script>
+<script src="assets/js/chattel.js?v=20261009-317"></script>
+<script src="assets/js/listed.js?v=20261009-317"></script>
+<script src="assets/js/biz.js?v=20261009-317"></script>
+<script src="assets/js/trade.js?v=20261009-317"></script>
+<script src="assets/js/nhi.js?v=20261009-317"></script>
+<script src="assets/js/einv.js?v=20261009-317"></script>
+<script src="assets/js/factory.js?v=20261009-317"></script>
+<script src="assets/js/industry.js?v=20261009-317"></script>
+<script src="assets/js/mix.js?v=20261009-317"></script>
+<script src="assets/js/app.js?v=20261009-317"></script>
 </body>
 </html>

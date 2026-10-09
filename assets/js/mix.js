@@ -39,6 +39,15 @@
   let loading = null;
   let status = [];
   const f = { src: new Set(), sig: new Set(), cond: new Set(), phone: new Set(), mine: new Set(), q: '' };
+  // 記住上次的篩選（版本 315；使用次數顯示三天篩了 37 次，多半是每次打開都在重設同一組）
+  const FILTER_KEY = 'mix-filters-v1';
+  const saveF = () => { try { localStorage.setItem(FILTER_KEY, JSON.stringify({ src: [...f.src], sig: [...f.sig], cond: [...f.cond], phone: [...f.phone], mine: [...f.mine], q: f.q })); } catch (e) { /* 無痕 */ } };
+  const loadF = () => {
+    let o = null; try { o = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null'); } catch (e) { o = null; }
+    if (!o || typeof o !== 'object') return;
+    ['src', 'sig', 'cond', 'phone', 'mine'].forEach((k) => { f[k] = new Set(Array.isArray(o[k]) ? o[k] : []); });
+    f.q = typeof o.q === 'string' ? o.q : '';
+  };
   const mmdd = (iso) => { const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})/); return m ? `${+m[1]}/${+m[2]}` : ''; };
   const mineKey = (it) => (!it.mine ? 'out' : it.mine.declined ? 'declined' : 'in');
   const MINE = [['out', '名單裡沒有'], ['in', '已在我的名單裡'], ['declined', '名單上禁止推廣']];
@@ -153,6 +162,7 @@
     if (!root || !items) return;
     drawChips();
     current = items.filter((it) => passes(it, null));
+    saveF();
     const host = $('#mix-cards');
     host.textContent = '';
     current.slice(0, limit).forEach((it) => host.append(card(it)));
@@ -196,17 +206,20 @@
       forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
     const filters = el('details', { className: 'leads-filters', id: 'mix-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
-      group('來源', el('div', { className: 'chips', id: 'mix-fSrc' })),
-      group('訊號', el('div', { className: 'chips', id: 'mix-fSig' })),
-      group('電話', el('div', { className: 'chips', id: 'mix-fPhone' })),
-      group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond' })),
-      group('跟我的名單比對', el('div', { className: 'chips', id: 'mix-fMine' })),
+      // data-group：使用統計只記「篩選（哪一組）」，不記籤上的字，才看得出哪一組該改預設
+      group('來源', el('div', { className: 'chips', id: 'mix-fSrc', 'data-group': '來源' })),
+      group('訊號', el('div', { className: 'chips', id: 'mix-fSig', 'data-group': '訊號' })),
+      group('電話', el('div', { className: 'chips', id: 'mix-fPhone', 'data-group': '電話' })),
+      group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond', 'data-group': '條件' })),
+      group('跟我的名單比對', el('div', { className: 'chips', id: 'mix-fMine', 'data-group': '比對' })),
       group('關鍵字', el('input', { id: 'mix-q', type: 'search', placeholder: '名稱、統編、地址、電話、訊號', autocomplete: 'off' }), 'mix-q'),
       el('div', { className: 'leads-row' }, [
         el('button', { className: 'btn btn-tiny', id: 'mix-reset', type: 'button', textContent: '清除篩選' }),
         el('button', { className: 'btn btn-tiny', id: 'mix-hidden', type: 'button', hidden: true })]),
     ]);
     filters.open = (() => { try { return localStorage.getItem('leads-filters-open') === '1'; } catch (e) { return false; } })();
+    loadF();
+    filters.querySelector('#mix-q').value = f.q;
     root.append(
       filters,
       el('div', { className: 'leads-head' }, [el('div', { className: 'leads-count', id: 'mix-count', textContent: '—' })]),
