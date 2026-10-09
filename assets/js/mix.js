@@ -206,11 +206,12 @@
       forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
     const filters = el('details', { className: 'leads-filters', id: 'mix-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
-      group('來源', el('div', { className: 'chips', id: 'mix-fSrc' })),
-      group('訊號', el('div', { className: 'chips', id: 'mix-fSig' })),
-      group('電話', el('div', { className: 'chips', id: 'mix-fPhone' })),
-      group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond' })),
-      group('跟我的名單比對', el('div', { className: 'chips', id: 'mix-fMine' })),
+      // data-group：使用統計只記「篩選（哪一組）」，不記籤上的字，才看得出哪一組該改預設
+      group('來源', el('div', { className: 'chips', id: 'mix-fSrc', 'data-group': '來源' })),
+      group('訊號', el('div', { className: 'chips', id: 'mix-fSig', 'data-group': '訊號' })),
+      group('電話', el('div', { className: 'chips', id: 'mix-fPhone', 'data-group': '電話' })),
+      group('條件（都要符合）', el('div', { className: 'chips', id: 'mix-fCond', 'data-group': '條件' })),
+      group('跟我的名單比對', el('div', { className: 'chips', id: 'mix-fMine', 'data-group': '比對' })),
       group('關鍵字', el('input', { id: 'mix-q', type: 'search', placeholder: '名稱、統編、地址、電話、訊號', autocomplete: 'off' }), 'mix-q'),
       el('div', { className: 'leads-row' }, [
         el('button', { className: 'btn btn-tiny', id: 'mix-reset', type: 'button', textContent: '清除篩選' }),

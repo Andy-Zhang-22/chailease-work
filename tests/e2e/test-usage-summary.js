@@ -22,10 +22,10 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.click('.tab[data-tab="cal"]'); await pg.waitForTimeout(300);
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(200);
  await pg.click('#cards .card-name'); await pg.waitForSelector('#drawerBody h2');
- await pg.click('#drawerBody .detail-acts-more'); await pg.click('#drawerBody .detail-acts-more').catch(()=>{});
+ await pg.click('#drawerBody button:has-text("編輯資料")'); await pg.waitForSelector('#editor h2'); await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  const u=await pg.evaluate(()=>JSON.parse(localStorage.getItem('usage-counts')||'{}'));
  const m=Object.values(u)[0]||{}; const keys=Object.keys(m);
- chk(m['分頁:cal']===1 && m['分頁:all']>=1 && m['詳細頁:更多']===1, `記到按鈕：${keys.join('、')}`);
+ chk(m['分頁:cal']===1 && m['分頁:all']>=1 && m['詳細頁:編輯資料']===1, `記到按鈕：${keys.join('、')}`);
  chk(!keys.some(k=>/甲範例|中正路|0001/.test(k)), '公司名稱、地址、電話不記');
  chk(await pg.evaluate(()=>window.usageKey(Object.assign(document.createElement('button'),{textContent:'乙範例實業有限公司'})))==='', '按鈕上是公司名稱的不記');
  // 「」裡的人名、冒號後面的公司名也不記（以前漏掉：查負責人「某某」名下的公司、✓ 🚗：某某自行車）

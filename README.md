@@ -4215,3 +4215,15 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
 ### 測試
 - 新：`test-dead-number.js`（空號、存完自動關閉、金鑰欄與提示）。
 - 改：`test-mix`（重新整理後篩選還在）、`test-version-ui`（做事中跳提示條、沒在做事直接換版）。
+
+## 詳細頁拿掉沒人按的三顆（版本 316）
+
+使用者：「照你說的做，有機會跟無機會還是留著」。三天的使用次數裡，詳細頁的拜訪準備、🤖 問 Claude、承作檢核都是 0 次。
+
+- 拿掉：拜訪準備（`openVisitBrief` 與列印樣式）、🤖 問 Claude（`askTwin`；分身照樣從選單設定、🧭 戰略、今日覆盤走）、承作檢核（`openDealCheck`；`rules.js` 的 `checkDeal` 判斷邏輯留著）。
+- 「⋯」沒東西可收就一起拿掉：詳細頁的動作列只剩 有機會／無機會、編輯資料、刪除這筆、匯出 Excel。
+- 合併頁的篩選籤加 `data-group`：使用統計只記「篩選（哪一組）」，10/21 的報告就看得出哪一組該改預設。
+- 左側篩選的 17 組先不動，等 10/21 的資料。
+
+### 測試
+- 刪：`test-twin-more`、`test-deal-check`。改：`test-twin`（從選單進設定）、`test-slim`、`test-usage-summary`。

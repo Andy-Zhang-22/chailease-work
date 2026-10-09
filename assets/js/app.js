@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261009-315';
+  const APP_VERSION = '20261009-316';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3761,18 +3761,6 @@
     window.open(twinUrl() || CLAUDE_NEW, '_blank', 'noopener');
     toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
   }
-  /*
-   * 拜訪準備問分身（使用者：「都做」；訊息草稿後來拿掉了）。資料一樣用 twinPrompt（不帶電話、負責人、KEYMAN），只換第一行要分身做的事。
-   */
-  const twinAsk = (r, ask) => [ask, ...twinPrompt(r).split('\n').slice(1)].join('\n');
-  const visitPrompt = (r) => twinAsk(r, '請照專案說明，我要去拜訪這家，幫我準備：1. 這次要談的重點（兩三點）2. 對方可能的需求與我可以提的方案（週轉金、投資額度、設備）3. 要先準備的資料 4. 要問老闆的問題（五題內）5. 可能遇到的拒絕與一兩句應對。簡短、條列。');
-  window.visitPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? visitPrompt(v) : ''; };   // 測試用
-  async function askTwin(r) {
-    // 手機用不到專案網址；電腦沒設網址才先跳設定
-    if (!isPhone() && !twinUrl()) { openTwinSetup(() => askTwin(r)); return; }
-    sendToTwin(twinPrompt(r), '這家的資料');
-  }
-
   /* ---------------- 今日撥打戰略（分身排順序、寫開場白） ---------------- */
 
   /*
@@ -5430,26 +5418,12 @@
     const body = $('#drawerBody');
     body.textContent = '';
 
+    // 版本 316 拿掉拜訪準備、🤖 問 Claude、承作檢核（使用次數 0；有機會／無機會使用者要留）；「⋯」沒東西可收就一起拿掉
     const editBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '編輯資料' });
     editBtn.onclick = () => openEditor(r.id);
-    const dealBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '承作檢核' });
-    dealBtn.onclick = () => openDealCheck(r.id);
-    // 拜訪準備：出門前一頁看完這家，見 openVisitBrief
-    const briefBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '拜訪準備' });
-    briefBtn.onclick = () => openVisitBrief(r.id);
-    // 問分身：把這家整理好交給使用者自己的 Claude 分身專案（見 openTwinSetup）
-    // 只放 🤖（使用者：「問分身的按鈕都改成🤖圖案，滑鼠滑到時出現提示字問claude」）
-    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
-    twinBtn.onclick = () => askTwin(r);
     // 單筆匯出：要把一家的資料交出去時，不必整份匯出再自己刪剩一列
     const xlsxBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '匯出 Excel' });
     xlsxBtn.onclick = () => exportOneXlsx(r.id);
-    // 承作檢核、匯出 Excel 不常用，收在「⋯」後面，點了才冒出來（畫面瘦身；刪除這筆使用者要留在外面）。
-    // 編輯資料本來也收著，使用次數顯示按「⋯」幾乎都是為了它，版本 314 拿到外面
-    const moreActs = [dealBtn, xlsxBtn];
-    moreActs.forEach((b) => { b.hidden = true; });
-    const moreBtn = el('button', { className: 'btn btn-tiny detail-acts-more', type: 'button', textContent: '⋯', title: '更多：承作檢核、匯出 Excel', 'aria-label': '更多' });
-    moreBtn.onclick = () => { moreBtn.hidden = true; moreActs.forEach((b) => { b.hidden = false; }); };
     // 公司名稱旁一顆複製：查商工登記、找 104、貼進系統都要打公司名，打字容易錯
     const copyName = copyDot(r.company, `複製公司名稱 ${r.company}`, `已複製：${r.company}`,
       '這個瀏覽器不讓網頁複製，請長按公司名稱手動複製');
@@ -5494,12 +5468,9 @@
         r.edited ? el('span', { className: 'badge badge-edited', textContent: '已修改' }) : '',
         chanceBtn('yes'),
         chanceBtn('no'),
-        briefBtn,
-        twinBtn,
         editBtn,
         deleteBtn(r),
-        moreBtn,
-        ...moreActs,
+        xlsxBtn,
       ].filter(Boolean)),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
       openerNode(r, 'detail-opener'),
@@ -6267,237 +6238,6 @@
     return qs;
   }
 
-  /**
-   * 拜訪準備：出門前把這家看一遍的一頁紙。
-   *
-   * 詳細頁什麼都有，但那是拿來打電話跟記錄的，捲三屏才看得完。出門前要的是
-   * 反過來：登記動態、往來、上次聊到哪、這次要問什麼，一頁看完就能進去談。
-   * 手機上開著看，或列印帶著；「複製文字」是給貼到 LINE 或行事曆備註用的，
-   * 所以畫面跟純文字版是同一份資料一起組的，不會一邊有一邊沒有。
-   */
-  function openVisitBrief(recordId) {
-    const raw = state.records.find((x) => x.id === recordId);
-    if (!raw) return;
-    const r = allViews().find((x) => x.id === recordId) || view(raw);
-    const N = window.Normalize;
-    const R = window.Rules;
-    const host = $('#editorBody');
-    host.textContent = '';
-    const members = groupMembers(r);
-    const bundle = notesBundle(r);
-    const today = todayISO();
-    const lines = [];
-    const line = (t) => lines.push(t);
-
-    const box = el('div', { className: 'brief' });
-    box.append(el('h2', { textContent: `拜訪準備：${r.company}` }));
-    box.append(el('p', { className: 'muted', textContent: `${dateLabel(today)} 產生　·　資料來自名單、商工登記與訪談內容` }));
-    line(`【拜訪準備】${r.company}（${dateLabel(today)}）`);
-
-    // 動作列：列印、複製、導航、記錄
-    const actions = el('div', { className: 'brief-actions' });
-    const printBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '列印／存成 PDF' });
-    printBtn.onclick = () => {
-      document.body.classList.add('print-brief');
-      const done = () => document.body.classList.remove('print-brief');
-      window.addEventListener('afterprint', done, { once: true });
-      window.print();
-      setTimeout(done, 60000);   // 有些手機瀏覽器不發 afterprint；這個 class 只影響列印，多留一會兒無妨
-    };
-    const copyBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製文字' });
-    copyBtn.onclick = async () => {
-      const ok = await copyText(lines.join('\n'));
-      toast(ok ? '已複製整頁文字，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
-    };
-    const twinBtn = el('button', { className: 'btn btn-tiny twin-btn', type: 'button', textContent: '🤖', title: '問 Claude', 'aria-label': '問 Claude' });
-    twinBtn.onclick = () => {
-      if (!isPhone() && !twinUrl()) { openTwinSetup(() => openVisitBrief(recordId)); return; }
-      sendToTwin(visitPrompt(r), '這家的資料');
-    };
-    actions.append(printBtn, copyBtn, twinBtn);
-    if (r.addressActual) {
-      actions.append(el('a', {
-        className: 'btn btn-tiny', target: '_blank', rel: 'noopener', textContent: '導航到實際地址',
-        href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(r.addressActual)}`,
-      }));
-    }
-    const logBtn = el('button', { className: 'btn btn-tiny btn-primary', type: 'button', textContent: '記錄拜訪結果' });
-    logBtn.onclick = () => { $('#editor').hidden = true; openDetail(r.id, { visit: true }); };
-    actions.append(logBtn);
-    box.append(actions);
-
-    if (r.blocked) {
-      box.append(el('div', { className: 'blocked-warning' }, [
-        el('strong', { textContent: `⛔ 這家標了禁止推廣${r.blockedAt ? `（${dateLabel(r.blockedAt)}）` : ''}` }),
-        el('p', { textContent: r.blockedReason ? `原因：「${r.blockedReason}」` : '是在通話結果裡被標記為禁止推廣的，原因沒填。個資法上「不要再打」的名單要留得住原因與日期，建議在通話紀錄補一句。' }),
-      ]));
-      line('⛔ 禁止推廣');
-    }
-
-    // 基本資料
-    const dl = el('dl', { className: 'detail-grid brief-grid' });
-    const row = (k, v, node) => {
-      if (!v && !node) return;
-      dl.append(el('dt', { textContent: k }), node ? el('dd', {}, [node]) : el('dd', { textContent: v }));
-      line(`${k}：${v}`);
-    };
-    const years = (() => {
-      const m = String(r.founded || '').match(/\d{2,4}/);
-      if (!m) return null;
-      let y = +m[0];
-      if (y < 200) y += 1911;   // 名單上偶爾寫民國年
-      const n = +today.slice(0, 4) - y;
-      return n >= 0 && n < 150 ? n : null;
-    })();
-    box.append(el('h3', { textContent: '基本資料' }));
-    line('');
-    line('■ 基本資料');
-    row('統一編號', r.taxId);
-    row('負責人', r.owner);
-    row('KEYMAN', r.keyman ? `${r.keyman}${r.keymanFrom === 'owner' ? '（訪談看不出 KEYMAN，先填負責人）' : r.keymanFrom === 'notes' ? `（${r.keymanInfo.reason}）` : ''}` : '');
-    row('產業別', r.industry);
-    row('成立年', r.founded ? `${r.founded}${years !== null ? `（${years} 年）` : ''}` : '');
-    row('資本總額', r.capital ? `${r.capital} 仟元${r.scale ? `（${r.scale}）` : ''}` : '');
-    row('實收資本額', r.capitalPaid ? `${r.capitalPaid} 仟元` : '');
-    if (r.phones.length) {
-      const tel = el('div', { className: 'card-actions brief-tels' });
-      telLinks(r).forEach((a) => tel.append(a));
-      row('電話', r.phones.map((p) => p.display).filter(Boolean).join('、') + (r.phonesFrom ? `（同老闆的「${r.phonesFrom}」的）` : ''), tel);
-    } else if (r.phoneRaw) {
-      row('電話', r.phoneRaw);
-    }
-    const addrNode = (value) => el('a', {
-      href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`,
-      target: '_blank', rel: 'noopener', textContent: value,
-    });
-    if (r.addressActual) row('實際地址', r.addressActual, addrNode(r.addressActual));
-    if (r.addressRegistered && r.addressRegistered !== r.addressActual) row('登記地址', r.addressRegistered, addrNode(r.addressRegistered));
-    if (r.branch && r.branch.label) row('行銷區域', r.branch.label);
-    if (r.territory === '範圍外') row('服務區域', '範圍外——依【一般組】行銷規範第(三)項應採協銷辦理');
-    row('有沒有機會', r.chance ? `${CHANCE_LABEL[r.chance]}${r.chanceFrom ? `（跟著同老闆的「${r.chanceFrom}」）` : ''}` : '');
-    row('下次聯絡', r.nextDate ? dateLabel(r.nextDate) : '');
-    box.append(dl);
-
-    // 登記動態
-    box.append(el('h3', { textContent: '登記動態' }));
-    line('');
-    line('■ 登記動態');
-    {
-      const p = el('div', { className: 'brief-reg' });
-      const head = `最近異動日期：${r.regChanged || '—'}`;
-      p.append(el('div', { textContent: head }));
-      line(head);
-      if (r.regChanges && r.regChanges.length) {
-        const ol = el('ol', { className: 'reg-history' });
-        r.regChanges.forEach((c) => {
-          const title = `${dateLabel(c.date)}　${(c.kinds || []).map((k) => REG_KIND_LABEL[k]).join('、')}`;
-          const li = el('li', {}, [el('b', { textContent: title })]);
-          line(`- ${title}`);
-          Object.entries(c.changes || {}).forEach(([key, ch]) => {
-            const label = (REGISTRY_FIELDS.find(([k]) => k === key) || [, key])[1];
-            const t = `${label}：${ch.from || '（空）'} → ${ch.to}`;
-            li.append(el('div', { className: 'muted', textContent: t }));
-            line(`　${t}`);
-          });
-          ol.append(li);
-        });
-        p.append(ol);
-      } else {
-        const t = r.regError ? `商工登記查不到這家（${r.regError}）` : r.regAt ? '查過商工登記，沒有變更' : '還沒查過商工登記';
-        p.append(el('div', { className: 'muted', textContent: t }));
-        line(t);
-      }
-      box.append(p);
-    }
-
-    // 往來與拜訪
-    box.append(el('h3', { textContent: '往來情形' }));
-    line('');
-    line('■ 往來情形');
-    {
-      const dealing = `${N.DEALING_LABEL[r.dealingKind]}${r.dealing.snippet ? `：「${r.dealing.snippet}」` : ''}`;
-      box.append(el('p', { className: `dealing-verdict dealing-${r.dealingKind}` }, [
-        el('strong', { textContent: N.DEALING_LABEL[r.dealingKind] }),
-        r.dealing.snippet ? el('span', { className: 'muted', textContent: `「…${r.dealing.snippet}…」` }) : '',
-      ].filter(Boolean)));
-      line(dealing);
-      ['internal', 'peer', 'bank'].forEach((kind) => {
-        if (!r.relations[kind].length) return;
-        const t = `${N.RELATION_LABEL[kind]}：${[...new Set(r.relations[kind].map((x) => x.name))].join('、')}`;
-        box.append(el('p', { className: 'brief-relation', textContent: t }));
-        line(t);
-      });
-      const visit = r.visitKind === 'yes'
-        ? `有拜訪過${r.visit.date ? `（${dateLabel(r.visit.date)}）` : ''}${r.visit.snippet ? `：「${r.visit.snippet}」` : ''}`
-        : '還沒拜訪過';
-      box.append(el('p', { className: `dealing-verdict visit-${r.visitKind}` }, [el('strong', { textContent: visit })]));
-      line(visit);
-    }
-
-    // 同老闆的公司
-    if (members.length) {
-      box.append(el('h3', { textContent: `同老闆的公司（${members.length} 家）` }));
-      line('');
-      line('■ 同老闆的公司');
-      const ul = el('ul', { className: 'group-members' });
-      members.forEach((m) => {
-        const bits = [m.nextDate && `下次 ${dateLabel(m.nextDate)}`, N.outcomeLabel(m.outcome), m.dealingKind === 'active' ? '中租往來' : ''].filter(Boolean).join('　');
-        ul.append(el('li', {}, [document.createTextNode(m.company), el('small', { className: 'muted', textContent: bits ? `　${bits}` : '' })]));
-        line(`- ${m.company}${bits ? `（${bits}）` : ''}`);
-      });
-      box.append(ul);
-    }
-
-    // 最近談了什麼：自己記的、檔案帶的、同組的，一起排，取最近三則
-    const talks = bundle.logs
-      .map((l) => ({ date: l.date, text: l.text || `（${N.outcomeLabel(l.outcome)}）`, company: l.company, mine: true }))
-      .concat(r.timeline || [])
-      .concat(bundle.peers.flatMap((id) => {
-        const x = state.records.find((y) => y.id === id);
-        return x ? N.parseNotes(x.notesRaw || '').map((e) => ({ ...e, company: x.company })) : [];
-      }))
-      .map((e, i) => ({ ...e, i }))
-      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.i - b.i)
-      .slice(0, 3);
-    box.append(el('h3', { textContent: '最近談了什麼' }));
-    line('');
-    line('■ 最近談了什麼');
-    if (talks.length) {
-      const ul = el('ul', { className: 'brief-talks' });
-      talks.forEach((e) => {
-        const when = `${e.date ? dateLabel(e.date) : (e.dateRaw || '日期未標示')}${e.mine ? ' · 我的紀錄' : ''}${e.company ? ` · ${e.company}` : ''}`;
-        const text = String(e.text || '').replace(/\s+/g, ' ').trim();
-        const short = text.length > 160 ? `${text.slice(0, 160)}…` : text;
-        ul.append(el('li', {}, [el('time', { textContent: when }), el('span', { textContent: short })]));
-        line(`- ${when}：${short}`);
-      });
-      box.append(ul);
-    } else {
-      box.append(el('p', { className: 'muted', textContent: '還沒有任何談話紀錄，這是第一次接觸。' }));
-      line('（還沒有任何談話紀錄）');
-    }
-
-    // 這次要問
-    const latest = N.latestNote(bundle.text);
-    const balance = R && R.parseBalance ? (R.parseBalance((latest && latest.text) || '') || R.parseBalance(bundle.text)) : null;
-    const qs = visitQuestions(r, { follow: N.findFollowUp(bundle.text, today), balance, years });
-    box.append(el('h3', { textContent: `這次要問（${qs.length}）` }));
-    line('');
-    line('■ 這次要問');
-    const ol = el('ol', { className: 'brief-questions' });
-    qs.forEach((q, i) => {
-      const cb = el('input', { type: 'checkbox' });
-      const label = el('label', {}, [cb, el('span', {}, [document.createTextNode(q.text), q.why ? el('small', { textContent: q.why }) : ''].filter(Boolean))]);
-      ol.append(el('li', {}, [label]));
-      line(`${i + 1}. ${q.text}${q.why ? `（${q.why}）` : ''}`);
-    });
-    box.append(ol);
-    box.append(el('p', { className: 'muted', textContent: '問題是從名單、商工登記與訪談內容推出來的，帶著看就好，不用照念。回來後按「記錄拜訪結果」。' }));
-
-    host.append(box);
-    $('#editor').hidden = false;
-  }
-
   function closeOverlays() {
     $('#drawer').hidden = true;
     $('#importer').hidden = true;
@@ -6613,145 +6353,6 @@
     };
   }
 
-
-  /*
-   * 承作檢核：輸入案件架構，跟這家客戶的名單資料、訪談內容（含網站上記的通話）
-   * 一起丟給規則判斷，列出衝突與調整建議。判斷邏輯在 rules.js 的 checkDeal，
-   * 這裡只負責收輸入、把訪談判讀出來的事實攤開給人覆核。
-   */
-  function openDealCheck(recordId) {
-    const raw = state.records.find((x) => x.id === recordId);
-    if (!raw) return;
-    const r = allViews().find((x) => x.id === recordId) || view(raw);
-    const R = window.Rules;
-    const N = window.Normalize;
-    const host = $('#editorBody');
-    host.textContent = '';
-    host.append(el('h2', { textContent: `承作檢核：${r.company}` }));
-    host.append(el('p', { className: 'muted', textContent: '輸入這個案子的架構，網站會拿名單資料（登記地址、資本額）跟訪談內容（往來單位、本餘）對照規則，指出衝突並給調整建議。金額一律仟元。' }));
-
-    // 訪談：網站上記的通話 + 名單原本的內容，跟往來情形判讀用同一份
-    const allNotes = notesBundle(r).text;
-    const relations = N.detectRelations(allNotes);
-    const latest = N.latestNote(allNotes);
-    const balanceGuess = R.parseBalance((latest && latest.text) || '') || R.parseBalance(allNotes);
-    const reg = N.parseAddress(r.addressRegistered);
-    const act = N.parseAddress(r.addressActual);
-    const branch = R.branchOf(reg.city, reg.district);
-    const actualBranch = R.branchOf(act.city, act.district);
-
-    const branches = [...new Set(R.BRANCH_AREAS.map((b) => b.branch))];
-    const mk = (tag, props) => el(tag, props);
-    const sel = (options, value) => {
-      const s = mk('select');
-      options.forEach((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; s.append(el('option', { value: String(v), textContent: l })); });
-      if (value !== undefined) s.value = String(value);
-      return s;
-    };
-    const fieldOf = (label, control, hint) => el('label', { className: 'rule-field' }, [el('span', { textContent: label }), control, hint ? el('small', { textContent: hint }) : null].filter(Boolean));
-    const num = (input) => Number(String(input.value).replace(/[^\d.-]/g, '')) || 0;
-
-    const myBranch = sel(branches, registryPref('my-branch') || '新莊');
-    const myUnit = sel(['一般組', '微企處', '大企部'], registryPref('my-unit') || '一般組');
-    const caseType = sel(['一般案件', '存貨擔保融資', 'OSF'], '一般案件');
-    const amount = mk('input', { type: 'text', inputMode: 'numeric', placeholder: '例如 5,000' });
-    const months = mk('input', { type: 'number', min: '1', placeholder: '例如 36' });
-    const freq = sel([[1, '月繳'], [3, '季繳'], [6, '半年繳'], [12, '年繳']], 1);
-    const method = sel(['本息平均攤還', '本金平均攤還', '頭小尾大', '不規則還款'], '本息平均攤還');
-    const spread = mk('input', { type: 'text', inputMode: 'decimal', placeholder: '例如 9.5' });
-    const yieldRate = mk('input', { type: 'text', inputMode: 'decimal', placeholder: '例如 11' });
-    const balance = mk('input', { type: 'text', inputMode: 'numeric', value: balanceGuess ? String(balanceGuess) : '', placeholder: '訪談沒寫就留空' });
-    const handover = sel(['不適用', '主動移交', '被動移交'], '不適用');
-    const schedule = mk('textarea', { rows: 3, placeholder: '頭小尾大／不規則時填：每期償還本金，用逗號或換行分開（單位仟元）' });
-    const collateralBox = el('div', { className: 'chips' });
-    const chosen = new Set(['純信用（無擔保品）']);
-    ['純信用（無擔保品）', ...R.EXCLUDING, ...R.CONTROLLED_COLLATERAL].forEach((name) => {
-      const chip = el('button', { className: 'chip', type: 'button', textContent: name });
-      chip.setAttribute('aria-pressed', chosen.has(name) ? 'true' : 'false');
-      chip.onclick = () => {
-        if (name === '純信用（無擔保品）') { chosen.clear(); chosen.add(name); }
-        else { chosen.delete('純信用（無擔保品）'); chosen.has(name) ? chosen.delete(name) : chosen.add(name); if (!chosen.size) chosen.add('純信用（無擔保品）'); }
-        [...collateralBox.children].forEach((c) => c.setAttribute('aria-pressed', chosen.has(c.textContent) ? 'true' : 'false'));
-        run();
-      };
-      collateralBox.append(chip);
-    });
-
-    host.append(el('div', { className: 'rule-form deal-form' }, [
-      fieldOf('我的分公司', myBranch, '會記住，也跟著雲端同步'),
-      fieldOf('我的單位', myUnit),
-      fieldOf('案件類型', caseType),
-      fieldOf('本案金額（仟元）', amount),
-      fieldOf('期數（月）', months),
-      fieldOf('繳款頻率', freq),
-      fieldOf('還款方式', method),
-      fieldOf('本案 Spread（%）', spread),
-      fieldOf('實質收益率（%）', yieldRate),
-      fieldOf('客戶既有本餘（仟元）', balance, balanceGuess ? `從訪談內容抓到「本餘」約 ${balanceGuess.toLocaleString('zh-TW')} 仟元，可修改` : '訪談內容沒寫到本餘'),
-      fieldOf('移交方式', handover),
-    ]));
-    host.append(fieldOf('擔保品（可複選）', collateralBox));
-    const schedField = fieldOf('還款計畫（每期償還本金）', schedule);
-    host.append(schedField);
-
-    const result = el('div', { className: 'rule-result deal-result' });
-    host.append(result);
-
-    function run() {
-      registryPref('my-branch', myBranch.value);
-      registryPref('my-unit', myUnit.value);
-      schedField.hidden = !['頭小尾大', '不規則還款'].includes(method.value);
-      const out = R.checkDeal({
-        company: r.company, capital: num({ value: r.capital }),
-        branch, actualBranch, myBranch: myBranch.value, myUnit: myUnit.value,
-        dealing: r.dealing, relations,
-        balance: num(balance), balanceSource: balanceGuess && num(balance) === balanceGuess ? `訪談：「${(latest && latest.text || '').slice(0, 60)}」` : '手動填入',
-        amount: num(amount), months: Number(months.value) || 0, periodMonths: Number(freq.value) || 1,
-        method: method.value, collaterals: [...chosen], schedule: R.parseSchedule(schedule.value),
-        spread: spread.value.trim() === '' ? '' : num(spread),
-        yieldRate: yieldRate.value.trim() === '' ? '' : num(yieldRate),
-        caseType: caseType.value, handoverType: handover.value === '不適用' ? '' : handover.value,
-      });
-      result.textContent = '';
-      const CLS = { ok: 'is-ok', warn: 'is-warn', block: 'is-fail' };
-      result.append(el('p', { className: `rule-verdict ${CLS[out.verdict]} deal-summary`, textContent: out.summary }));
-
-      const facts = el('dl', { className: 'deal-facts' });
-      out.facts.forEach((f) => {
-        facts.append(el('dt', { textContent: f.label }));
-        const dd = el('dd', { textContent: f.value });
-        if (f.source) dd.append(el('div', { className: 'muted', textContent: f.source }));
-        facts.append(dd);
-      });
-      result.append(el('h3', { textContent: '從名單與訪談內容判讀到的' }), facts);
-
-      const order = { block: 0, warn: 1, ok: 2 };
-      const sorted = [...out.findings].sort((a, b) => order[a.level] - order[b.level]);
-      result.append(el('h3', { textContent: '跟規則對照' }));
-      sorted.forEach((f) => {
-        const p = el('p', { className: `rule-verdict ${CLS[f.level]}`, textContent: `${f.level === 'block' ? '衝突：' : f.level === 'warn' ? '注意：' : '符合：'}${f.text}` });
-        if (f.rule) p.append(el('span', { className: 'muted deal-rule', textContent: `　〔${f.rule}〕` }));
-        result.append(p);
-      });
-      if (out.suggestions.length) {
-        result.append(el('h3', { textContent: '調整建議' }));
-        result.append(el('ol', { className: 'deal-suggestions' }, out.suggestions.map((t) => el('li', { textContent: t }))));
-      }
-      if (out.principal && out.principal.checkpoints.length) {
-        const t = el('table', { className: 'rule-table' });
-        t.append(el('thead', {}, [el('tr', {}, ['檢核點', '月', '應累計償還', '計畫償還', '結果'].map((h) => el('th', { textContent: h })))]));
-        t.append(el('tbody', {}, out.principal.checkpoints.map((c) => el('tr', {}, [
-          String(c.index), String(c.month), R.fmt(c.required), R.fmt(c.actual),
-          c.status === 'pass' ? '達標' : c.status === 'waived' ? '餘額≤10% 免檢' : `差 ${R.fmt(c.shortfall)}`,
-        ].map((v) => el('td', { textContent: v }))))));
-        result.append(t);
-      }
-    }
-    [amount, months, spread, yieldRate, balance, schedule].forEach((i) => { i.oninput = run; });
-    [myBranch, myUnit, caseType, freq, method, handover].forEach((i) => { i.onchange = run; });
-    run();
-    $('#editor').hidden = false;
-  }
 
   /** 編輯既有客戶：存成覆蓋層，重新匯入 PDF 不會被蓋掉，也會跟著雲端同步。 */
   function openEditor(recordId) {
