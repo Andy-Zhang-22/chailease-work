@@ -219,6 +219,8 @@
         // noPhone：「找不到電話，先收起來」——之後公開資料查到電話會提醒（見 app.js phoneBackDaily）
         // deadTels：「空號」收起來的，記下打不通的號碼，公開資料查到同一支不算查到
         const why = opts && opts.noPhone ? { noPhone: true, ...(Array.isArray(opts.deadTels) && opts.deadTels.length ? { deadTels: opts.deadTels } : {}) } : {};
+        // reason／src／industry（版本 326）：刪的原因（nophone／target／customer／other）、這家是哪一份名單來的、產業別，挑新名單時餵回排序
+        if (opts && opts.reason) { why.reason = String(opts.reason); if (opts.src) why.src = String(opts.src); if (opts.industry) why.industry = String(opts.industry); }
         for (const key of window.Normalize.companyKeys(before)) {
           await api.addTombstone('companies', key, { company: before.company, taxId: before.taxId || '', ...why });
         }

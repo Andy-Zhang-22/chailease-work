@@ -42,7 +42,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
  // 刪掉乙
  await pg.locator('.card:has-text("乙精密") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody button:has-text("刪除這筆")');
- await ask(pg,'刪掉');
+ await ask(pg,'其他原因');
  await pg.waitForTimeout(900);
  chk(native.length===0, `刪除沒有用到瀏覽器原生對話框（${native.length} 次）`);
  chk(!(await names(pg)).includes('乙精密股份有限公司'), '乙已經刪掉');
@@ -61,7 +61,7 @@ const dup=async(pg)=>{ const box=pg.locator('#editorBody h2:has-text("有重複�
 
  // 換成沒有統編的名單，靠公司名也要擋得住
  await pg.locator('.card:has-text("甲工程") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
- await pg.click('#drawerBody button:has-text("刪除這筆")'); await ask(pg,'刪掉'); await pg.waitForTimeout(900);
+ await pg.click('#drawerBody button:has-text("刪除這筆")'); await ask(pg,'其他原因'); await pg.waitForTimeout(900);
  await pg.click('#btnImport'); await pg.waitForTimeout(400);
  await load(pg,十月無統編,'十一月名單.csv'); await pg.waitForTimeout(3000);
  await dup(pg);
