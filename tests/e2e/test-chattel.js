@@ -43,7 +43,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
 
  // 分頁在，切過去會抓清冊
- chk(await pg.locator('.subtab[data-tab=\"chattel\"]').count()===1, '找名單底下有「動產擔保名單」');
+ chk(await pg.locator('.subtab[data-tab=\"chattel\"]').count()===0, '找名單底下沒有「動產擔保」按鈕了（版本 327 收進合併頁）');
  await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.waitForTimeout(400);
  const sub=await pg.textContent('#chattel-sub');
  chk(/資料截到 2026\/07/.test(sub) && /2026\/09\/26/.test(sub), `副標寫資料截到哪、何時抓的：${sub}`);
@@ -59,7 +59,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  await pg.selectOption('#chattel-sort','amount'); await pg.waitForTimeout(200);
  n=await names();
  chk(n.join('|')==='禾泰精密工業有限公司|昱昌汽車貨運股份有限公司|巨鎰金屬製品有限公司|泓宇塑膠射出有限公司', `預設 6 個月內、照擔保金額高到低排、中租自家與 50 萬的小案子藏起來：${n.join('|')}`);
- chk((await pg.textContent('#countChattel'))==='4', `分頁上的數字＝列出來的家數：${await pg.textContent('#countChattel')}`);
+ // 分頁按鈕上的數字（#countChattel）版本 327 隨按鈕拿掉了
 
  // 卡片內容
  const first=pg.locator('#chattel-cards .card').first();

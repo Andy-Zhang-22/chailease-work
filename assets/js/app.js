@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-326';
+  const APP_VERSION = '20261010-327';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -8787,8 +8787,10 @@ export default {
    * 規則從右上選單進，分頁列不亮。（版本 314 拿掉統計、剛開電子發票的獨立頁，原本的第三排併成一排；上市櫃留著排最後）
    */
   const SOURCE_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'factory', 'industry', 'listed'];
+  // 版本 327：第二排只剩合併、商行、上市櫃三個按鈕；其他六頁沒有按鈕（?tab= 與測試還開得到），「找名單」只記得這三個
+  const SHOWN_SOURCE_TABS = ['mix', 'biz', 'listed'];
   function switchTab(tab) {
-    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
+    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SHOWN_SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
     state.tab = tab;
     state.limit = PAGE_SIZE;
@@ -8797,7 +8799,7 @@ export default {
     [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', !!top && b.dataset.tab === top));
     $('#subtabs').hidden = !isSource;
     [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
-    if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
+    if (SHOWN_SOURCE_TABS.includes(tab)) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
     if (isSource && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
     render();
     syncSearchBox();

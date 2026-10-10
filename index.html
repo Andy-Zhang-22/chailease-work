@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261010-326">
+<link rel="stylesheet" href="assets/css/app.css?v=20261010-327">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261010-326"></script>
+<script src="assets/js/lock.js?v=20261010-327"></script>
 </head>
 <body data-theme="auto">
 
@@ -86,18 +86,14 @@
   <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
 </nav>
 <!--
-  找名單底下只有一排：合併頁＋各來源＋上市櫃。版本 314 拿掉剛開電子發票的獨立頁（那份名單還在合併頁與每日新名單裡），
-  原本「新名單／上市櫃」那一排就併進來了；上市櫃留著（使用者：「上市櫃的分頁留著」），排最後。
+  找名單底下只有一排：全部（合併）＋商行／企業社＋上市櫃。
+  版本 327 把登記清冊、動產擔保、出進口廠商、剛開始請人、新設工廠、產業名單六個分頁按鈕收掉（一週各只用 1～7 次，合併頁 34 次）：
+  那六份名單還在合併頁（同一家依統編合成一張卡）、每日新名單、客戶新動態裡，各頁的程式留著給合併頁與後台用，?tab= 網址照舊開得到。
+  商行、上市櫃規則不同，維持獨立（使用者：「上市櫃的分頁留著」）。
 -->
 <nav class="subtabs" id="subtabs" hidden>
   <button class="subtab" data-tab="mix">全部（合併） <span class="pill" id="countMix"></span></button>
-  <button class="subtab" data-tab="leads">登記清冊 <span class="pill" id="countLeads"></span></button>
-  <button class="subtab" data-tab="chattel">動產擔保 <span class="pill" id="countChattel"></span></button>
   <button class="subtab" data-tab="biz">商行／企業社 <span class="pill" id="countBiz"></span></button>
-  <button class="subtab" data-tab="trade">出進口廠商 <span class="pill" id="countTrade"></span></button>
-  <button class="subtab" data-tab="nhi">剛開始請人 <span class="pill" id="countNhi"></span></button>
-  <button class="subtab" data-tab="factory">新設工廠 <span class="pill" id="countFactory"></span></button>
-  <button class="subtab" data-tab="industry">產業名單 <span class="pill" id="countIndustry"></span></button>
   <button class="subtab" data-tab="listed">上市櫃 <span class="pill" id="countListed"></span></button>
 </nav>
 
@@ -357,27 +353,27 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261010-326"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261010-326"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261010-327"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261010-327"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261010-326"></script>
-<script src="assets/js/normalize.js?v=20261010-326"></script>
-<script src="assets/js/holidays.js?v=20261010-326"></script>
-<script src="assets/js/registry.js?v=20261010-326"></script>
-<script src="assets/js/ocr.js?v=20261010-326"></script>
-<script src="assets/js/rules.js?v=20261010-326"></script>
-<script src="assets/js/store.js?v=20261010-326"></script>
-<script src="assets/js/sync.js?v=20261010-326"></script>
-<script src="assets/js/leads.js?v=20261010-326"></script>
-<script src="assets/js/chattel.js?v=20261010-326"></script>
-<script src="assets/js/listed.js?v=20261010-326"></script>
-<script src="assets/js/biz.js?v=20261010-326"></script>
-<script src="assets/js/trade.js?v=20261010-326"></script>
-<script src="assets/js/nhi.js?v=20261010-326"></script>
-<script src="assets/js/einv.js?v=20261010-326"></script>
-<script src="assets/js/factory.js?v=20261010-326"></script>
-<script src="assets/js/industry.js?v=20261010-326"></script>
-<script src="assets/js/mix.js?v=20261010-326"></script>
-<script src="assets/js/app.js?v=20261010-326"></script>
+<script src="assets/js/pdf-table.js?v=20261010-327"></script>
+<script src="assets/js/normalize.js?v=20261010-327"></script>
+<script src="assets/js/holidays.js?v=20261010-327"></script>
+<script src="assets/js/registry.js?v=20261010-327"></script>
+<script src="assets/js/ocr.js?v=20261010-327"></script>
+<script src="assets/js/rules.js?v=20261010-327"></script>
+<script src="assets/js/store.js?v=20261010-327"></script>
+<script src="assets/js/sync.js?v=20261010-327"></script>
+<script src="assets/js/leads.js?v=20261010-327"></script>
+<script src="assets/js/chattel.js?v=20261010-327"></script>
+<script src="assets/js/listed.js?v=20261010-327"></script>
+<script src="assets/js/biz.js?v=20261010-327"></script>
+<script src="assets/js/trade.js?v=20261010-327"></script>
+<script src="assets/js/nhi.js?v=20261010-327"></script>
+<script src="assets/js/einv.js?v=20261010-327"></script>
+<script src="assets/js/factory.js?v=20261010-327"></script>
+<script src="assets/js/industry.js?v=20261010-327"></script>
+<script src="assets/js/mix.js?v=20261010-327"></script>
+<script src="assets/js/app.js?v=20261010-327"></script>
 </body>
 </html>

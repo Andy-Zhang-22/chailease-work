@@ -66,10 +66,9 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='true' && JSON.stringify((await names()).sort())===JSON.stringify(['丙三工業有限公司','名祿實業有限公司']), `重新整理後篩選還在：${(await names()).join('|')}`);
  await pg.click('#mix-reset'); await pg.waitForTimeout(300);
  chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='false' && (await names()).length===4, '清除篩選就清掉');
- // 點來源名稱到那一頁
- await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(500);
- chk(await pg.locator('#paneFactory').isVisible() && await pg.locator('#subtabs .subtab[data-tab="factory"]').evaluate(e=>e.classList.contains('is-active')), '點來源名稱跳到那一頁');
- await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(500);
+ // 來源名稱只是文字（版本 327：那幾頁的按鈕收掉了，點了不跳頁）
+ await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(300);
+ chk(await pg.locator('#paneMix').isVisible() && (await c.locator('button.mix-src').count())===0, '來源名稱是文字，點了留在合併頁');
  // 加入名單：之後留在原地、改標「已在名單」
  await pg.locator('#mix-cards .mix-card:has-text("宇駿") .mix-add-one').click(); await pg.waitForTimeout(1500);
  const added=await pg.evaluate(()=>window.customerViews().some(v=>v.company==='宇駿貿易有限公司'));

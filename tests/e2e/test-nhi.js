@@ -30,7 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9503/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開始請人')), '找名單底下有「剛開始請人」');
+ chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('剛開始請人'))===false, '找名單底下沒有「剛開始請人」按鈕了（版本 327 收進合併頁）');
  await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#nhi-sub')).replace(/\s+/g,' ');
  chk(/新北市最近 6 個月新成立的投保單位 4 家（對到電話 2）/.test(sub) && /資料到 2026\/09/.test(sub), `標題：${sub}`);
