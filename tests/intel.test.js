@@ -8,8 +8,9 @@ const { ROOT } = require('./load');
 test('parseIntel：挖出最後一段 JSON、分數夾在 0～3、沒訊號就清空摘要、來源只留網址', async () => {
   const m = await import(path.join(ROOT, 'tools', 'intel.mjs'));
   const r = m.parseIntel('我查了幾個來源。\n{"expansion": true, "score": 2, "summary": "104 正在徵 8 名作業員（2026/09）", "sources": ["https://www.104.com.tw/x", "not a url"]}');
-  assert.deepEqual(r, { expansion: true, score: 2, summary: '104 正在徵 8 名作業員（2026/09）', sources: ['https://www.104.com.tw/x'] });
-  assert.deepEqual(m.parseIntel('{"expansion": false, "score": 0, "summary": "查不到", "sources": []}'), { expansion: false, score: 0, summary: '', sources: [] });
+  assert.deepEqual(r, { expansion: true, score: 2, summary: '104 正在徵 8 名作業員（2026/09）', sources: ['https://www.104.com.tw/x'], phone: '' });
+  assert.deepEqual(m.parseIntel('{"expansion": false, "score": 0, "summary": "查不到", "sources": [], "phone": "02-2299-1234 分機 12"}'), { expansion: false, score: 0, summary: '', sources: [], phone: '02-2299-1234  12' }, '沒訊號也可能有電話');
+  assert.equal(m.parseIntel('{"expansion": false, "score": 0, "phone": "沒有"}').phone, '', '不是電話的不收');
   assert.equal(m.parseIntel('{"expansion": true, "score": 9, "summary": "x"}').score, 3, '分數上限 3');
   assert.equal(m.parseIntel('{"expansion": true, "score": 0, "summary": "x"}').expansion, false, 'expansion 但分數 0 ＝沒有');
   assert.equal(m.parseIntel('沒有 JSON'), null);

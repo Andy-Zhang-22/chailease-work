@@ -18,7 +18,7 @@ const SYSTEM = [
   '徵才（104、1111、官網）、新廠或新廠房、新設備、搬遷擴大、政府採購得標、增資、新產品或新市場、營收成長、展店、併購。',
   '只採信查得到來源的事；同名公司要用統編或地址確認是同一家，確認不了就當沒有。查不到就老實說沒有。',
   '最後只回一段 JSON，不要其他文字：',
-  '{"expansion": true或false, "score": 0到3（0 沒有、1 弱、2 明確、3 很強），"summary": "一句話、繁體中文、30 字內、寫具體事實與來源名稱，例如「104 正在徵 8 名作業員（2026/09）」", "sources": ["網址", ...]}',
+  '{"expansion": true或false, "score": 0到3（0 沒有、1 弱、2 明確、3 很強），"summary": "一句話、繁體中文、30 字內、寫具體事實與來源名稱，例如「104 正在徵 8 名作業員（2026/09）」", "sources": ["網址", ...], "phone": "官網或徵才頁上這家公司的電話（台灣格式，例如 02-2299-1234），沒看到就空字串"}',
 ].join('\n');
 
 /** 從回覆文字裡把最後一段 JSON 挖出來；挖不到或格式不對回 null */
@@ -38,6 +38,8 @@ export function parseIntel(text) {
         expansion, score: expansion ? score : 0,
         summary: expansion ? String(o.summary || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',
         sources: Array.isArray(o.sources) ? o.sources.filter((u) => /^https?:\/\//.test(String(u))).map(String).slice(0, 5) : [],
+        // 官網、徵才頁上看到的電話（跟訊號無關，沒訊號也可能有）：只留數字、連字號、括號、加號、分機，台灣格式才收
+        phone: (() => { const t = String(o.phone || '').replace(/[^\d+()#\-－ ]/g, '').trim(); return /\d{7,}/.test(t.replace(/\D/g, '')) ? t.slice(0, 24) : ''; })(),
       };
     } catch (e) { if (i === 0) break; }
   }

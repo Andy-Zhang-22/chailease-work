@@ -1781,7 +1781,7 @@
     const edits = { ...(st.edits || {}), phoneRaw: p.phone };
     await saveState(r.id, {
       edits, editsAt: Date.now(),
-      phoneSource: { name: p.name, address: p.address, maps: p.maps, website: p.website, at: Date.now() },
+      phoneSource: { name: p.name, address: p.address, maps: p.maps, website: p.website, at: Date.now(), ...(p.kind ? { kind: p.kind } : {}) },
     });
   }
 
@@ -3372,40 +3372,13 @@
       const googleHits = new Map();   // 公司名稱 → Google 查到的那家，匯入後直接填（placesLookup 有快取，不會再付一次）
       const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
       const enough = Math.max(need * 2, 4);
-      if (feedNeedPhone()) {
-        let budget = GATE_LOOKUPS;
-        const confirm = async (name, address, known) => {
-          if (known) return true;
-          if (!placesKey() || budget <= 0) return false;
-          budget -= 1;
-          const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
-          try {
-            const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
-            if (best && best.level === 'sure') { googleHits.set(name, best); return true; }
-          } catch (err) {
-            console.error('挑名單前找電話', name, err);
-            if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
-          }
-          return false;
-        };
-        const okMerged = [];
-        for (const c of merged) {
-          if (okMerged.length >= enough) break;
-          if (await confirm(c.name, addrOf(c), c.phone)) okMerged.push(c); else skippedNoPhone += 1;
-        }
-        const okBz = [];
-        for (const r of bz) {
-          if (okBz.length >= enough) break;
-          const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null;
-          if (await confirm(r.name, r.address || '', !!(bf && bf.phone))) okBz.push(r); else skippedNoPhone += 1;
-        }
-        merged = okMerged; bz = okBz;
-      }
       /*
        * 網路查擴張訊號（版本 322；使用者：「挑出名單後，也在網路上搜尋到有擴張訊號的資訊再給我名單，這樣相對精準」）。
+       * 使用者定的順序：1 挑名單 → 2 網路上確認擴張訊號 → 3 找電話 → 4 給他。所以這段在電話關卡「前面」。
        * 只有後台（feed-drive.mjs 用 Playwright 掛進來的 window.backendResearch，背後是 Claude＋網路搜尋）才有；
        * 候選前面夠用的那段（額度兩倍）每家查一次，查到擴張訊號的排前面——是排序不是門檻，訊號那句寫進訪談內容，
-       * 來源網址存進追蹤狀態（詳細頁看得到）。送出去的只有公司名、統編、地址。
+       * 來源網址存進追蹤狀態（詳細頁看得到）。官網、104 上查到的電話一起回來，下面找電話那關直接用，省 Google 地圖的額度。
+       * 送出去的只有公司名、統編、地址。
        */
       const intel = new Map();
       let research = null;
@@ -3423,6 +3396,38 @@
           bz = bz.map((r, i) => [r, i]).sort((a, b) => score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
           research = { asked: items.length, withSignals: [...intel.values()].filter((v) => v.expansion).length };
         } catch (err) { console.error('網路查擴張訊號', err); research = { asked: items.length, withSignals: 0, error: String(err && err.message ? err.message : err) }; }
+      }
+      if (feedNeedPhone()) {
+        let budget = GATE_LOOKUPS;
+        const confirm = async (name, address, known, key) => {
+          if (known) return true;
+          // 2 → 3：上網查訊號時順便在官網、104 看到的電話，直接用（匯入後跟 Google 查到的一樣填進去，來源標「網路」）
+          const it = key ? intel.get(key) : null;
+          if (it && it.phone && window.Normalize.extractPhones(it.phone).length) { googleHits.set(name, { phone: it.phone, name, address: address || '', maps: '', website: (it.sources || [])[0] || '', kind: 'web' }); return true; }
+          if (!placesKey() || budget <= 0) return false;
+          budget -= 1;
+          const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
+          try {
+            const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
+            if (best && best.level === 'sure') { googleHits.set(name, best); return true; }
+          } catch (err) {
+            console.error('挑名單前找電話', name, err);
+            if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
+          }
+          return false;
+        };
+        const okMerged = [];
+        for (const c of merged) {
+          if (okMerged.length >= enough) break;
+          if (await confirm(c.name, addrOf(c), c.phone, c.key)) okMerged.push(c); else skippedNoPhone += 1;
+        }
+        const okBz = [];
+        for (const r of bz) {
+          if (okBz.length >= enough) break;
+          const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null;
+          if (await confirm(r.name, r.address || '', !!(bf && bf.phone), bizKey(r))) okBz.push(r); else skippedNoPhone += 1;
+        }
+        merged = okMerged; bz = okBz;
       }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
@@ -5481,6 +5486,11 @@
     }
     if (r.phoneSource && r.phoneSource.kind === 'trade' && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source', textContent: `電話來自貿易署出進口廠商登記${r.phoneSource.issued ? `（核發 ${r.phoneSource.issued}）` : ''}` }));
+    } else if (r.phoneSource && r.phoneSource.kind === 'web' && r.phones.length) {
+      body.append(el('p', { className: 'muted phone-source' }, [
+        document.createTextNode('電話是上網查擴張訊號時在官網／徵才頁看到的'),
+        r.phoneSource.website ? el('a', { href: r.phoneSource.website, target: '_blank', rel: 'noopener', textContent: '　來源' }) : '',
+      ].filter(Boolean)));
     } else if (r.phoneSource && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source' }, [
         document.createTextNode(`電話來自 Google 地圖：${r.phoneSource.name}（${r.phoneSource.address}）`),
