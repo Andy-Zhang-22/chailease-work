@@ -3389,20 +3389,35 @@
       let research = null;
       const rulesOkM = (c) => !!c.capOk && c.branchRank === 0;
       const rulesOkB = (r) => { const f = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; return !!(f && f.capOk && f.branchRank === 0); };
+      /*
+       * 使用者：「這 15 通要符合網路有明確的擴張訊號，如果在網路上沒有符合擴張訊號就挑其他名單給我」：
+       * 一批一批查（一批＝額度），算「明確訊號（分數 2 以上）又大概有電話（公開資料有、或官網上看到）」的夠不夠額度，
+       * 不夠就查下一批，最多查到額度的 4 倍（RESEARCH_CAP）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
+       */
+      const strongKey = (k) => { const v = intel.get(k); return !!(v && v.expansion && (v.score || 0) >= 2); };
       if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
         const taxOf = (k) => (/^\d{8}$/.test(k) ? k : '');
-        const items = [
-          ...merged.filter(rulesOkM).slice(0, enough).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c) })),
-          ...bz.filter(rulesOkB).slice(0, enough).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '' })),
+        const queue = [
+          ...merged.filter(rulesOkM).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c), known: !!c.phone })),
+          ...bz.filter(rulesOkB).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '', known: !!(window.Biz.dailyFacts ? (window.Biz.dailyFacts(r) || {}).phone : false) })),
         ];
+        const cap = Math.max(need * 4, 20);
+        let asked = 0;
+        const likely = () => queue.researched.filter((it) => strongKey(it.key) && (it.known || (intel.get(it.key).phone && window.Normalize.extractPhones(intel.get(it.key).phone).length))).length;
+        queue.researched = [];
         try {
-          const got = items.length ? (await window.backendResearch(items)) || {} : {};
-          Object.entries(got).forEach(([k, v]) => { if (v) intel.set(k, v); });
-          const score = (k) => { const v = intel.get(k); return v && v.expansion ? (v.score || 1) : 0; };
-          merged = merged.map((c, i) => [c, i]).sort((a, b) => Number(rulesOkM(b[0])) - Number(rulesOkM(a[0])) || score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
-          bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
-          research = { asked: items.length, withSignals: [...intel.values()].filter((v) => v.expansion).length };
-        } catch (err) { console.error('網路查擴張訊號', err); research = { asked: items.length, withSignals: 0, error: String(err && err.message ? err.message : err) }; }
+          while (queue.length && asked < cap && likely() < need) {
+            const batch = queue.splice(0, Math.max(1, Math.min(need, cap - asked)));
+            const got = (await window.backendResearch(batch.map(({ key, name, taxId, address }) => ({ key, name, taxId, address })))) || {};
+            asked += batch.length;
+            Object.entries(got).forEach(([k, v]) => { if (v) intel.set(k, v); });
+            queue.researched.push(...batch);
+          }
+        } catch (err) { console.error('網路查擴張訊號', err); research = { asked, withSignals: 0, strong: 0, error: String(err && err.message ? err.message : err) }; }
+        const score = (k) => { const v = intel.get(k); return v && v.expansion ? (v.score || 1) : 0; };
+        merged = merged.map((c, i) => [c, i]).sort((a, b) => Number(rulesOkM(b[0])) - Number(rulesOkM(a[0])) || Number(strongKey(b[0].key)) - Number(strongKey(a[0].key)) || score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
+        bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || Number(strongKey(bizKey(b[0]))) - Number(strongKey(bizKey(a[0]))) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
+        if (!research) research = { asked, withSignals: [...intel.values()].filter((v) => v.expansion).length, strong: [...intel.values()].filter((v) => v.expansion && (v.score || 0) >= 2).length };
       }
       if (feedNeedPhone()) {
         let budget = GATE_LOOKUPS;
@@ -3442,8 +3457,15 @@
       let bizTake = Math.min(bz.length, take[2]);
       const mixTake = Math.min(merged.length, need - bizTake);
       bizTake = Math.min(bz.length, need - mixTake);
-      const picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
+      // 有上網查的話：明確訊號的先挑（每頁保底也只在這群裡算），不夠才用其他的補滿額度
+      let picks;
+      if (research) {
+        const strongM = merged.filter((c) => strongKey(c.key));
+        picks = pickMerged(strongM, mixTake, SRC.map((x) => x.key));
+        if (picks.length < mixTake) { const used = new Set(picks.map((p) => p.c.key)); picks.push(...pickMerged(merged.filter((c) => !used.has(c.key)), mixTake - picks.length, [])); }
+      } else picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
       const pickB = bz.slice(0, bizTake);
+      if (research) research.pickedStrong = picks.filter(({ c }) => strongKey(c.key)).length + pickB.filter((r) => strongKey(bizKey(r))).length;
       if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話（Google 地圖也查不到），今天沒補` : '六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return { picked: 0, skippedNoPhone, have, quota: newQuota(), day }; }
       // 每家用哪一頁的資料匯入：保底挑到的用那一頁，其他照動保 → 登記清冊 → 出進口 → 請人 → 電子發票；「符合：」改寫成合併後的訊號
       const bySrc = new Map(SRC.map((x) => [x.key, []]));

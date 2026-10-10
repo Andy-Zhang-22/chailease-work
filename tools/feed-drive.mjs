@@ -135,7 +135,7 @@ async function main() {
       line = `${today} 後台挑了 ${res.picked} 家（${src}${res.biz ? `；商行／企業社 ${res.biz}` : ''}），排在 ${res.day}`
         + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}${res.skippedNoPhone ? `；沒電話的跳過 ${res.skippedNoPhone} 家` : ''}`
         + `${ph.trade ? `；出進口電話表對到 ${ph.trade.found}/${ph.trade.tried}` : ''}${ph.google ? `，Google 地圖找到 ${ph.google.found}/${ph.google.tried}` : ''}`
-        + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.withSignals} 家有擴張訊號${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}` : ''}`;
+        + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
 
