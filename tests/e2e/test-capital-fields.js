@@ -5,7 +5,7 @@ const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9197);
-const mk=(id,company,taxId,capital)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'',capital,phoneRaw:'02-2718-1252',phones:[{digits:'0227181252',ext:'',note:''}],owner:'余成棋',keyman:'',industry:'',address:'臺北市松山區復興北路427巷26號1樓',city:'',district:'',notesRaw:'',timeline:[],outcome:'new',nextDate:'',lastDate:'',addedDate:'2026-09-01'});
+const mk=(id,company,taxId,capital)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'',capital,phoneRaw:'02-2222-1234',phones:[{digits:'0222221234',ext:'',note:''}],owner:'余成棋',keyman:'',industry:'',address:'臺北市松山區復興北路427巷26號1樓',city:'',district:'',notesRaw:'',timeline:[],outcome:'new',nextDate:'',lastDate:'',addedDate:'2026-09-01'});
 // 名單本來帶的是實收資本額 491,600 仟元（跟使用者的檔案一樣）
 const SEED=[mk('1','大中鋼鐵股份有限公司','57001161','491,600'), mk('2','小公司','22222222','3,000')];
 const REG={ '57001161':{Business_Accounting_NO:'57001161',Company_Name:'大中鋼鐵股份有限公司',Company_Status:'01',Responsible_Name:'余成棋',

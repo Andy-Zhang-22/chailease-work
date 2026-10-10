@@ -4129,7 +4129,7 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
 - 系統原本只認台灣格式，三處要改：
   - **國際電話**（`extractPhones`）：
     - 「+66-2-381-8780」「+66(0)25419775」「泰國: +66… / 台灣: +886…」照國碼撥（dial 是「+國碼號碼」，國碼後面的 (0) 去掉），冒號前的字當備註。
-    - 原本泰國的「(02)3229334」會被當成台北 02，按下去撥到台灣。所以名錄的電話整理時一律轉成 +66 格式。
+    - 原本泰國的「(02)2345678」會被當成台北 02，按下去撥到台灣。所以名錄的電話整理時一律轉成 +66 格式。
   - **國家欄不是台灣的列**（`toRecords`）：照表頭位置直接讀，不套台灣格式的驗證。原本英文公司名、外國地址、外國人名過不了驗證，產業別被塞進公司名、地址整格丟掉。英文公司名保留空白。
   - **商工登記不查外國公司**（`registryBatch`）：台灣查不到，免得每天記一筆「查不到」。
 - 測試：`normalize.test.js` 加國際電話與外國列的單元測試。
@@ -4470,7 +4470,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
     但 version.json 跟 HEAD 一樣 → 擋；`APP_VERSION`、`?v=`、version.json 三處不一致 → 擋；版號有換但 README 沒有「（版本 N）」→ 擋。
     過了就跳一句「個資、版號都檢查過了」。
   - 假電話的規則（`looksFake`）：去掉區碼後四個一樣、四個連號、三三一樣、四組疊字。掃了目前 repo（leads/ 以外）：
-    7 個測試檔有這規則認不出是假的號碼，先留著（只擋新增的行，舊的不影響）；要改成明顯假號碼再說。
+    7 個測試檔有這規則認不出是假的號碼，使用者選「改成假號碼」：全部換成 2222、1234 這種明顯假的，測試照過。
 - 載入方式：repo 根目錄 `.claude-plugin/marketplace.json` 把 repo 本身當 marketplace，`.claude/settings.json` 用
   `extraKnownMarketplaces`＋`enabledPlugins` 啟用，每個 session 開始時自動載。這個 session 寫的時候使用者沒開熱載入，下個 session 才生效。
 - 測試：`claude plugin validate`、`claude plugin test`（4 個測試：假號碼規則、Write 擋／放行、Edit、Bash 不是 commit 不檢查）、`tsc` 型別檢查都過。

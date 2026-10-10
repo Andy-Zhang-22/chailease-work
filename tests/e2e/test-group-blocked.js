@@ -7,7 +7,7 @@ const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.j
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9514);
 const TODAY='2026-10-05';
-const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2011',capital:'30,000',phoneRaw:'02-2602-7170',phones:[{digits:'0226027170',ext:'',note:''}],owner:'方志堯',keyman:'',industry:'',address:'新北市林口區文化二路1段399號10樓',city:'新北市',district:'林口區',notesRaw:'',timeline:[],outcome:'new',nextDate:next,lastDate:'',addedDate:'2026-10-01'});
+const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2011',capital:'30,000',phoneRaw:'02-2345-6789',phones:[{digits:'0223456789',ext:'',note:''}],owner:'方志堯',keyman:'',industry:'',address:'新北市林口區文化二路1段399號10樓',city:'新北市',district:'林口區',notesRaw:'',timeline:[],outcome:'new',nextDate:next,lastDate:'',addedDate:'2026-10-01'});
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
