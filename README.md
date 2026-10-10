@@ -4355,6 +4355,6 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   `awaitPhones` 等補電話；`window.dailyFeed`／`window.runSync`／`window.phoneBackGoogle` 給後台與測試用。
   `phonesOfExcluded` 也看 `phone-back-google`（空號收起來的那支一樣不算）。`phone-back-google` 進 SYNCED_PREFS。
 - tools/drive-lib.mjs：雲端硬碟的權杖、找檔、釘版本、上傳從 registry-drive.mjs 搬出來共用。
-- 測試：新 `test-feed-backend.js`（摘要、排滿、放假、Google 再查一次只提醒）；`test-daily-feed.js` 假日那段改成等到資料進來為止
-  （固定等 1.5 秒偶爾不夠，跟改版無關）。版號 20261010-321。
+- 測試：新 `test-feed-backend.js`（摘要、排滿、放假、Google 再查一次只提醒）；`test-daily-feed.js` 假日那段改成輪詢等到資料進來為止
+  （原本固定等 1.5 秒，機器人推上來的動保成立年檔變大後「再補」超過 1.5 秒，CI 跟本機都紅了，跟改版無關）。版號 20261010-321。
 
