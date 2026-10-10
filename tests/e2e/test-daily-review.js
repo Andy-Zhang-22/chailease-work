@@ -53,9 +53,7 @@ const SEED=[mk('1','星辰精密有限公司'),mk('2','晨光貿易有限公司'
  await pg.click('#editorBody button:has-text("複製")>>nth=0'); await pg.waitForTimeout(200);
  const c1=await pg.evaluate(()=>window.__copied[window.__copied.length-1]||'');
  chk(/2026\/10\/05 覆盤/.test(c1) && /・星辰精密有限公司　老闆有興趣/.test(c1) && /10\/06 排了 3 家/.test(c1), `複製的純文字：${c1.slice(0,200)}`);
- await pg.click('#editorBody button:has-text("複製給 Claude 整理")'); await pg.waitForTimeout(200);
- const c2=await pg.evaluate(()=>window.__copied[window.__copied.length-1]||''); const op=await pg.evaluate(()=>window.__opened);
- chk(/請用繁體中文幫我/.test(c2) && /■ 星辰精密有限公司（接通；成立 2018、資本額 30,000 仟元、金屬加工）/.test(c2) && /要買 CNC 設備約 800 萬/.test(c2) && !/0222223331|02-2222-3331|王O明/.test(c2) && op[0]==='https://claude.ai/new', `給 Claude 的：完整內容、不附電話與負責人、開 Claude：${op} ${c2.slice(0,160)}`);
+ chk((await pg.locator('#editorBody button:has-text("複製給 Claude 整理")').count())===0, '沒有「複製給 Claude 整理」了（版本 325）');
  // 點公司名打開詳細頁；實收資本額直接顯示
  await pg.click('#editorBody .review-points .link-btn:has-text("星辰")'); await pg.waitForSelector('#drawerBody h2');
  const order=await pg.evaluate(()=>[...document.querySelectorAll('#drawerBody > dl.detail-grid > dt')].map(x=>x.textContent.trim()));

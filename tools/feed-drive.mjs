@@ -156,7 +156,7 @@ async function main() {
       out(`找不到電話的：Google 地圖查了 ${pb.tried} 家、查到 ${pb.found} 家；以前查到還留著的 ${pb.kept} 家、公開資料有的 ${pb.skipped} 家`);
     }
 
-    // 5. 寫回：把這次的結果留一句在同步檔的設定（網站「每天打得完幾家」會顯示），釘住雲端目前的版本，再同步一次
+    // 5. 寫回：把這次的結果留一句在同步檔的設定（網站名單最上面那條「今天的新名單」下面會顯示，三天內的才顯示），釘住雲端目前的版本，再同步一次
     if (MODE === 'write') {
       const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}`;
       await page.evaluate((s) => window.Store.setSetting('feed-drive-summary', s), stamp);

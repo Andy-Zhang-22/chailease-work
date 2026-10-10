@@ -483,6 +483,7 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 /* 回撥提醒 */
 .feed-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
 .feed-bar .feed-text { color: var(--muted); }
+.feed-bar .feed-backend { flex-basis: 100%; font-size: 12px; }
 .badge-cold { background: #e8f1fb; color: #2b5a8a; }
 .share-row { flex-wrap: wrap; align-items: center; }
 .share-name { font-size: 12px; margin-left: 6px; }

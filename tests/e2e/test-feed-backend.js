@@ -154,6 +154,14 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  chk((await pg.evaluate(()=>window.dailyFeed())).off===true, 'dailyFeed()：自動挑關著回 off');
  await pg.evaluate(()=>{ localStorage.removeItem('daily-feed-auto'); localStorage.setItem('daily-feed-on','2026-10-05'); });
  chk((await pg.evaluate(()=>window.dailyFeed())).done===true, 'dailyFeed()：今天挑過回 done');
+ // ===== 版本 324 =====
+ // 後台留的那句顯示在名單最上面那條「今天的新名單」下面（三天內的才顯示；舊的不顯示）
+ await pg.evaluate(async()=>{ await window.Store.setSetting('feed-drive-summary','10-05 05:40 後台挑了 3 家（登記清冊 3），排在 2026-10-05；網路查了 3 家，1 家有明確擴張訊號'); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk(/後台 10-05 05:40 後台挑了 3 家/.test(await pg.textContent('#feedBar .feed-backend').catch(()=>'')), `名單最上面那條有後台摘要：${await pg.textContent('#feedBar')}`);
+ await pg.evaluate(async()=>{ await window.Store.setSetting('feed-drive-summary','09-20 05:40 後台挑了 3 家'); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk((await pg.locator('#feedBar .feed-backend').count())===0, '兩週前的後台摘要不顯示');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
