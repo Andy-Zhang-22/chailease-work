@@ -8,6 +8,10 @@
 # 需要：
 #   Actions 變數 GCP_WIF_PROVIDER＋GCP_SERVICE_ACCOUNT（跟商工登記更新同一組）
 #   Secrets PLACES_API_KEY：Google 地圖的金鑰（跟網站設定裡填的同一把；有「網站限制」也可以，請求會帶網站的 Referer）
+#   Claude（版本 322）兩種擇一，都沒設就不上網查訊號、其他照舊：
+#     Secrets ANTHROPIC_API_KEY（使用者目前用這個）
+#     或 Workload Identity 聯合（不放金鑰）：Actions 變數 ANTHROPIC_FEDERATION_RULE_ID、ANTHROPIC_ORGANIZATION_ID、ANTHROPIC_SERVICE_ACCOUNT_ID
+#       （Claude 主控台「Workload identity」建的規則；規則對準 main 分支，所以只有排程查得到）
 # 模式：report＝整套照跑但不寫回（只看筆數）；write＝寫回。排程用 write；手動執行可以選。
 name: 每日新名單（雲端硬碟名單）
 
@@ -50,7 +54,7 @@ jobs:
 
       # 網站本身不需要任何套件，只有跑無頭瀏覽器要
       - name: 裝 Playwright 與 Chromium
-        run: npm i --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+        run: npm i --no-save playwright@1.63.0 @anthropic-ai/sdk && npx playwright install --with-deps chromium
 
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
@@ -63,9 +67,23 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/drive
           create_credentials_file: false
 
+      # Claude 的身分聯合：跟 GitHub 要一次性的 OIDC token 寫進檔案，SDK 自己拿去換短效權杖（規則對準 main 分支）
+      - name: 跟 GitHub 要 OIDC token 給 Claude（有設 ANTHROPIC_FEDERATION_RULE_ID 才跑）
+        if: vars.ANTHROPIC_FEDERATION_RULE_ID != ''
+        run: |
+          curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value > "$RUNNER_TEMP/anthropic-jwt"
+
       - name: 開網站挑今天的新名單、補電話、寫回雲端硬碟
         env:
           TZ: Asia/Taipei
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          ANTHROPIC_IDENTITY_TOKEN_FILE: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID != '' && format('{0}/anthropic-jwt', runner.temp) || '' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GDRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
           GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}

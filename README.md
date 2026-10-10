@@ -4358,3 +4358,33 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 測試：新 `test-feed-backend.js`（摘要、排滿、放假、Google 再查一次只提醒）；`test-daily-feed.js` 假日那段改成輪詢等到資料進來為止
   （原本固定等 1.5 秒，機器人推上來的動保成立年檔變大後「再補」超過 1.5 秒，CI 跟本機都紅了，跟改版無關）。版號 20261010-321。
 
+## 挑每日新名單前，先上網查擴張訊號（版本 322）
+
+使用者開了 Claude API 的主控台（有 100 美元額度），問「我可以怎麼利用在我這系統上」；建議三件，使用者：
+「做 A，但我希望你挑出名單後，也在網路上搜尋到有擴張訊號的資訊再給我名單，這樣相對精準」。
+
+- `tools/intel.mjs`：用 `@anthropic-ai/sdk` 叫 Claude（`claude-opus-5-5`、effort low、`web_search_20260209` 最多 4 次、
+  `fallbacks: "default"`）查一家公司最近一年的擴張訊號（徵才、新廠新設備、搬遷擴大、得標、增資、新產品新市場、營收成長），
+  回 `{ expansion, score 0～3, summary 一句、sources 網址 }`；`parseIntel` 從回覆挖最後一段 JSON（單元測試 `intel.test.js`）。
+  同名公司要用統編或地址確認，確認不了當沒有。`pause_turn` 就原樣送回去接著跑。一次 3 家並行。
+- 身分用 **Workload Identity 聯合**，repo 裡沒有任何 sk-ant 金鑰（使用者：「我想要身份聯合的方式來做」「不然我怕會有洩漏金鑰的風險」）：
+  Claude 主控台「Workload identity → Connect workload → GitHub Actions」建發行者（github-actions、discovery）、服務帳號（developer）、
+  規則（subject 對準 `repo:Andy-Zhang-22/chailease-work:ref:refs/heads/main`、audience `https://api.anthropic.com`、scope `workspace:developer`、
+  權杖壽命 3600 秒）；規則、組織、服務帳號的 ID 放 Actions 變數 `ANTHROPIC_FEDERATION_RULE_ID`／`ANTHROPIC_ORGANIZATION_ID`／`ANTHROPIC_SERVICE_ACCOUNT_ID`
+  （不是秘密）。workflow 跟 GitHub 要一次性的 OIDC token 寫進 `$RUNNER_TEMP/anthropic-jwt`，SDK 看 `ANTHROPIC_IDENTITY_TOKEN_FILE` 自己換短效權杖。
+  規則只認 main 分支，所以只有排程（在 main 上跑）查得到。使用者最後還是先用金鑰（Secrets `ANTHROPIC_API_KEY`，「我用這個做好了」），
+  兩種都收：有金鑰用金鑰、設了聯合變數就用聯合；想換聯合把 Secret 刪掉、變數填上即可。
+- 後台 `feed-drive.mjs`：有聯合變數（或金鑰）才用 Playwright 的 `exposeFunction` 把 `window.backendResearch` 掛進網站。
+  順序照使用者定的「1 挑名單 → 2 網路上確認是否有擴張訊號 → 3 找出電話 → 4 提供給我」（使用者問「這件事有做嗎」時原本是先找電話再上網查，改過來）：
+  網站的 `dailyFeed` 在找電話那關「之前」把候選前面夠用的那段（額度兩倍）交過去查，查到的排前面，那句用「，網路：…」接在訪談內容的
+  「每日新名單，符合：…」後面（登記清冊那頁只留「；」前面那段，所以用「，」接），來源網址存進追蹤狀態 `intel`。
+  上網時在官網、徵才頁看到的電話（`phone`）找電話那關直接用，不用再問 Google 地圖；匯入後跟 Google 查到的一樣填進去，`phoneSource.kind = 'web'`，
+  詳細頁寫「電話是上網查擴張訊號時在官網／徵才頁看到的」＋來源連結。
+  訊號跟使用者原本的規則怎麼合（「最後是有效的名單要滿足我的規則」→ 選 A，規則優先、訊號其次）：符合規則＝資本額 500～6,000 萬且我的分公司
+  （利率不敏感本來就是排序裡的訊號）。只拿符合規則的去上網查；排序「符合規則的在前 → 有訊號的在前 → 原本名次」；符合規則的不夠額度才用
+  不符合的補（排序不是門檻，額度一定補滿）。測試加一家資本額 1.5 億的：不拿去查、額度滿了輪不到。
+- 畫面：卡片標「🌐 網路有擴張訊號」，詳細頁一行「🌐 日期 網路查到：…　來源 1」。沒金鑰、或 Claude 那邊失敗，挑名單照舊。
+- 送出去的只有公司名、統編、地址；不送電話、負責人、備註。Actions 紀錄只印筆數（查了幾家、幾家有訊號、幾家失敗）。
+- 費用：一家約 2～4 次搜尋加一萬多個 token，約 NT$2～3；額度 10 家一天查 20 家約 NT$50，100 美元約兩個月。
+- 探路：一次性 `probe-intel.yml` 在 Actions 上拿一家上市公司試一筆：13 秒回來，判定有擴張訊號（分數 3、兩個來源），接得通；看完刪了。版號 20261010-322。
+
