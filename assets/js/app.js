@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-324';
+  const APP_VERSION = '20261010-325';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -664,11 +664,7 @@
       onlyToday.onclick = () => { applyDueQuick('today'); state.limit = PAGE_SIZE; render(); };
       tools.append(onlyToday);
     }
-    if ('Notification' in window && Notification.permission === 'default') {
-      const btn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '開通知', title: '時間到了讓瀏覽器跳通知。網站開著才會提醒；手機請先把網站加到主畫面。' });
-      btn.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { /* 使用者拒絕 */ } renderRemindBar(); };
-      tools.append(btn);
-    }
+    // 「開通知」按鈕版本 325 拿掉（一週用 1 次）；以前已經允許通知的裝置照樣會跳
     head.append(tools);
     bar.append(head);
 
@@ -3822,7 +3818,7 @@
   /*
    * 使用者：「幫我總結我今天在系統上做了什麼事的每日覆盤，比如我聯絡了幾間客戶、對談重點」、
    * 「訪談的內容摘要可以幫我也重點出來嗎」。不用另外付費：系統照規則從訪談內容抓重點
-   * （第一句、金額、日期、「下一步：」），真正的摘要按「複製給 Claude 整理」貼到 Claude 網站。
+   * （第一句、金額、日期、「下一步：」）。「複製給 Claude 整理」版本 325 拿掉了（使用次數 1）。
    */
   const isoOfMs = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   /** 一則訪談內容的重點：第一句（40 字內），加上第一句沒講到的金額、日期，和「下一步：」那行 */
@@ -3886,22 +3882,6 @@
     out.push(`${dateLabel(d.next).slice(5)} 排了 ${d.tomorrow} 家`);
     return out.join('\n');
   }
-  /** 給 Claude 的那段：完整訪談內容＋要它做的事；不附電話、負責人 */
-  function reviewPrompt(d) {
-    const head = [`以下是我（租賃業務，打電話開發企業客戶）${dateLabel(d.day)} 的電話推廣紀錄。請用繁體中文幫我：`,
-      '1. 用三、四句話總結今天的成果', '2. 每家接通的客戶整理成一行重點（需求、金額、時間點、對方態度）',
-      '3. 列出接下來要追的事（哪家、什麼時候、做什麼）', '4. 給我明天的建議', '',
-      `【數字】聯絡 ${d.companies.length} 家、打了 ${d.calls} 通：接通 ${d.reached.length}、未接 ${d.missed.length}、禁止推廣 ${d.blocked.length}；新標有機會 ${d.chance.length} 家；約到拜訪 ${d.meetings.length} 家`, '', '【每家紀錄】'];
-    const OUT = { contacted: '接通', noanswer: '未接', blocked: '禁止推廣' };
-    const body = [...d.reached, ...d.blocked].map((c) => {
-      const v = c.v;
-      const info = [v.founded ? `成立 ${v.founded}` : '', v.capital ? `資本額 ${v.capital} 仟元` : '', v.industry || ''].filter(Boolean).join('、');
-      return [`■ ${v.company}（${OUT[c.outcome] || c.outcome}${info ? `；${info}` : ''}）`, ...c.texts.map((x) => `  ${maskPhones(x).replace(/\n/g, ' ')}`)].join('\n');
-    });
-    if (d.missed.length) body.push(`■ 未接：${d.missed.map((c) => c.v.company).join('、')}`);
-    return [...head, ...body, '', '（訪談內容裡的電話號碼已遮掉）'].join('\n');
-  }
-
   /* ---------------- Claude 分身 ---------------- */
 
   /*
@@ -4061,10 +4041,8 @@
       if (!d.companies.length) box.append(el('p', { className: 'muted', textContent: '這天沒有通話紀錄。' }));
       host.append(box);
       const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(reviewText(d)); toast('覆盤已複製，可以貼到 LINE 或筆記'); } });
-      const ask = el('button', { className: 'btn btn-primary', type: 'button', textContent: '複製給 Claude 整理', title: '把今天每家的完整訪談內容複製起來、打開 Claude 網站，貼上送出就好（不附電話）',
-        onclick: () => sendToTwin(reviewPrompt(d), '今天的紀錄') });
-      host.append(el('div', { className: 'card-actions' }, [copy, d.companies.length ? ask : '']));
-      host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）；要真正讀懂的摘要按「複製給 Claude 整理」，用你現有的 Claude 訂閱，不另外收費。' }));
+      host.append(el('div', { className: 'card-actions' }, [copy]));   // 「複製給 Claude 整理」版本 325 拿掉（一週用 1 次）
+      host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）。' }));
     };
     draw(day || todayISO());
     $('#editor').hidden = false;

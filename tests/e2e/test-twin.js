@@ -1,5 +1,5 @@
 // Claude 分身（使用者：「有辦法生成一個跟我一樣的企金業務在系統上嗎」→ AI 分身、「系統這邊也幫我做」）
-// 選單設定網址（只收 claude.ai）、複製說明書；今日覆盤的「複製給 Claude 整理」開分身。
+// 選單設定網址（只收 claude.ai）、複製說明書。今日覆盤的「複製給 Claude 整理」版本 325 拿掉了（使用次數 1）。
 // 詳細頁的「🤖 問 Claude」版本 316 拿掉了（使用次數 0），覆盤照樣走分身（今日撥打戰略版本 319 也拿掉了）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
@@ -40,12 +40,9 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await pg.fill('#editorBody .twin-url','https://claude.ai/project/abc123'); await pg.click('#editorBody button:has-text("存起來")'); await pg.waitForTimeout(300);
  chk((await pg.evaluate(()=>localStorage.getItem('claude-twin-url')))==='https://claude.ai/project/abc123', '網址存起來');
  await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
- // 今日覆盤開分身：資料不帶電話、負責人，訪談裡的電話遮掉
+ // 今日覆盤沒有「複製給 Claude 整理」了
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="review"]'); await pg.waitForSelector('#editorBody .review');
- await pg.click('#editorBody button:has-text("複製給 Claude 整理")'); await pg.waitForTimeout(150);
- const p=await last();
- chk((await pg.evaluate(()=>window.__opened))[0]==='https://claude.ai/project/abc123', '今日覆盤的「複製給 Claude 整理」開分身');
- chk(/星辰精密有限公司/.test(p) && /要買 CNC 約 800 萬/.test(p) && !/0912|345-678|02-2222-3331|王O明/.test(p), '帶訪談內容、電話遮掉、不帶負責人');
+ chk((await pg.locator('#editorBody button:has-text("複製給 Claude 整理")').count())===0, '今日覆盤沒有「複製給 Claude 整理」（版本 325 拿掉）');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
