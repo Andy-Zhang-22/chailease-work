@@ -89,9 +89,8 @@ async function main() {
       try {
         localStorage.setItem('driveClientId', 'backend');   // DriveSync.isConfigured() 看這個
         localStorage.setItem('device-id', 'backend');
-        localStorage.setItem('daily-feed-auto', '0');       // 不要網站一開就自己挑，等同步完由這支叫
-        localStorage.setItem('auto-rebalance', '0');        // 重排、商工登記更新不在這裡做
-        localStorage.setItem('registry-auto', '0');
+        // 後台模式（版本 323）：網站一開不要自己跑每日那串，全部由這支照順序叫；使用者的設定同步下來照樣算數
+        localStorage.setItem('backend-run', '1');
         if (key) localStorage.setItem('places-api-key', key); else localStorage.removeItem('places-api-key');
       } catch (e) { /* 不會發生 */ }
     }, { tok: token, key: PLACES_KEY });
@@ -121,11 +120,16 @@ async function main() {
     const n = await page.evaluate(async () => (await window.Store.allRecords()).length);
     out(`同步完成：名單 ${n} 筆`);
 
-    // 3. 挑今天的新名單（跟網站一模一樣的那條），等補電話跑完
-    const res = await page.evaluate(() => window.dailyFeed({ force: true, awaitPhones: true }));
+    // 3. 挑今天的新名單（跟網站一模一樣的那條，照使用者的設定：自動挑關著就不挑、今天挑過就不重挑），等補電話跑完
+    const res = await page.evaluate(() => window.dailyFeed({ awaitPhones: true }));
     const today = taipeiDate().toISOString().slice(0, 10);
     let line;
-    if (!res) line = `${today} 後台沒有挑（網站的每日新名單沒跑：可能還沒有名單、或清冊沒載到）`;
+    if (!res) line = `${today} 後台沒有挑（網站的每日新名單沒跑）`;
+    else if (res.off) line = `${today} 網站設定裡「自動挑新名單」是關的，沒挑`;
+    else if (res.done) line = `${today} 今天已經挑過了（另一台裝置或上一輪），沒重挑`;
+    else if (res.notSynced) line = `${today} 今天還沒同步成功，沒挑`;
+    else if (res.empty) line = `${today} 名單是空的，沒挑`;
+    else if (res.notReady || res.busy) line = `${today} 清冊沒載好或正在挑，沒挑`;
     else if (res.holiday) line = `${today} 放假，今天不挑`;
     else if (res.full) line = `${today} 今天的 ${res.quota} 家新名單已經排滿（已有 ${res.have} 家），沒挑`;
     else if (!res.picked) line = `${today} 候選裡沒有可以補的${res.skippedNoPhone ? `（${res.skippedNoPhone} 家沒電話、Google 地圖也查不到）` : ''}`;
@@ -138,6 +142,13 @@ async function main() {
         + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
+
+    // 3b. 照上限重排（使用者點頭的第 4 項）：照網站的設定（關著就不排、今天排過就不重排），超過上限的把最不急的往後挪
+    const moved = await page.evaluate(() => window.autoRebalance());
+    out(moved ? `照上限重排：往後挪了 ${moved} 家` : '照上限重排：不用動（沒超過上限、關著、或今天排過了）');
+    // 3c. 客戶新動態（使用者點頭的第 2 項）：每家客戶去各份公開資料看三個月內有沒有出現
+    const sig = await page.evaluate(() => window.customerSignals());
+    out(`客戶新動態：比對 ${sig.checked} 家，${sig.withSignals} 家最近有新動態（這次改了 ${sig.changed} 家）`);
 
     // 4. 每月一次：找不到電話的再查 Google
     if (doNoPhone) {
