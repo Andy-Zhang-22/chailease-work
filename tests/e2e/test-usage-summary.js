@@ -32,6 +32,8 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  const k2=await pg.evaluate(()=>[window.usageKey(Object.assign(document.createElement('button'),{textContent:'🔍 查負責人「王大明」名下的公司'})), window.usageKey(Object.assign(document.createElement('button'),{textContent:'✓ 🚗 : 丙範例自行車業'}))]);
  chk(!/王大明|丙範例/.test(k2.join('|')) && /查負責人/.test(k2[0]), `名字拿掉再記：${k2.join('、')}`);
  chk(await pg.evaluate(()=>window.usageKeyOk('視窗:🔍 查負責人「王大明」名下的公')===false && window.usageKeyOk('詳細頁:刪除這筆')===true), '以前記到名字的鍵，寫摘要時濾掉');
+ // 版本 324：摘要檔裡出現過「…企業」「…裝修」結尾的公司名（不是企業社、沒有「有限公司」），也不記；「連結其他公司」這種按鈕照記
+ chk(await pg.evaluate(()=>window.usageKey(Object.assign(document.createElement('button'),{textContent:'丁範例室內裝修規劃企業'}))==='' && window.usageKeyOk('詳細頁:戊範例企業')===false && window.usageKeyOk('詳細頁:連結其他公司')===true), '「…企業」結尾的公司名不記');
 
  // 同步成功 → 寫摘要檔（假的雲端硬碟）
  await pg.evaluate(()=>{ const D=window.DriveSync; D.isConfigured=()=>true; D.sync=async()=>({gained:{records:0,logs:0}}); D.writeSummary=async(name,obj)=>{ window.__summaries.push({name,obj}); return 'id'; }; });

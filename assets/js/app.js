@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-323';
+  const APP_VERSION = '20261010-324';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -475,6 +475,18 @@
         toast(`${due.length} 家挪到 ${dateLabel(next)} 了，今天休息`);
       };
       bar.append(defer);
+    }
+    /*
+     * 後台每天清晨跑完留的一句（版本 324；使用者：「把後台的三行摘要直接顯示在首頁頂端，你早上一開就知道今天有多少名單」）：
+     * 原本收在「每天打得完幾家」視窗裡，搬到這條下面。三天前的就不顯示（後台沒跑也看得出來）。
+     */
+    const stamp = registryPref('feed-drive-summary');
+    const m = /^(\d{2})-(\d{2}) /.exec(stamp || '');
+    if (m) {
+      const y = Number(today.slice(0, 4));
+      const iso = `${y}-${m[1]}-${m[2]}`;
+      const days = Math.round((Date.parse(today) - Date.parse(iso > today ? `${y - 1}-${m[1]}-${m[2]}` : iso)) / 86400000);
+      if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: `後台 ${stamp}` }));
     }
     bar.hidden = false;
   }
@@ -3729,8 +3741,6 @@
         el('span', { className: 'muted', textContent: '完全新的名單一天' }), quotaInput,
         el('span', { className: 'muted', textContent: '家（另外算，不佔主力的額度）' }),
       ]));
-      // 後台每天清晨挑的結果（feed-drive.mjs 寫進同步檔的設定；版本 321）
-      if (registryPref('feed-drive-summary')) host.append(el('p', { className: 'muted feed-drive-summary', textContent: `後台：${registryPref('feed-drive-summary')}` }));
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
         const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
@@ -8285,7 +8295,7 @@ export default {
   const USAGE_KEY = 'usage-counts';
   const DEVICE_KEY = 'device-id';
   const usageLoad = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}') || {}; } catch (e) { return {}; } };
-  const NAMEISH_RE = /有限公司|股份|企業社|商行|工作室|實業|工業|科技|國際|貿易|[路街巷弄號段]|@|\d{3,}/;
+  const NAMEISH_RE = /有限公司|股份|企業|商行|工作室|實業|工業|科技|國際|貿易|裝修|工程行|[路街巷弄號段]|@|\d{3,}/;   // 版本 324：摘要檔裡出現過「…企業」結尾的公司名，補上
   function usageArea(b) {
     if (b.closest('#menu')) return '選單';
     if (b.closest('#drawer')) return '詳細頁';

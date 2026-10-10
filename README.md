@@ -4339,7 +4339,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
    （瀏覽器測試 `test-sync-race.js` 同一招）；localStorage 設 `driveClientId`，網站就當作已經設好雲端同步。
 2. 叫網站的 `runSync` 把雲端的名單拉下來；再叫 `dailyFeed({ force: true, awaitPhones: true })` 挑今天的、
    等「出進口電話表 → Google 地圖補電話」跑完；最後再 `runSync` 寫回。寫回前用 Drive API 釘住目前版本（可退回）。
-3. 網站的設定 `daily-feed-on`＝今天會一起同步，使用者開網站就不會再挑一次；「每天打得完幾家」視窗多一行「後台：…」（設定 `feed-drive-summary`）。
+3. 網站的設定 `daily-feed-on`＝今天會一起同步，使用者開網站就不會再挑一次；名單最上面那條「今天的新名單」下面多一行「後台：…」（設定 `feed-drive-summary`）。
 4. Google 金鑰放 Secrets `PLACES_API_KEY`（跟網站設定裡的同一把）。金鑰有「網站限制」的話，送 `places.googleapis.com` 的請求
    把 Referer 改成網站網址（`SITE_URL`，預設照 GITHUB_REPOSITORY 推 GitHub Pages 的網址）。
 5. report 模式：整套照跑，但送雲端硬碟的「上傳」一律攔下來假裝成功，一個字都不會寫回，只看筆數。
@@ -4411,3 +4411,16 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 測試：`registry-drive.test.js` 加登記現況與報告那段；`test-feed-backend.js` 加客戶新動態、登記現況、後台旗標（網站一開不自己挑、off／done）。
   版號 20261010-323。
 
+
+## 改用 Sonnet、後台摘要放首頁、使用次數（版本 324）
+
+使用者問「這系統你還有什麼推薦做的」→ 列五項 →「2、3」（2 刪除清單、3 簡化）。
+
+- **Claude 改用 Sonnet**（`tools/intel.mjs` 的 `MODEL` → `claude-sonnet-5-5`）：一樣有網路搜尋，費用約四分之一，
+  100 美元可以撐三個多月。其他（effort low、最多 4 次搜尋、一批一批查到 15 家明確訊號）都不變。訊號品質如果變差再換回來。
+- **後台摘要放首頁**：後台每天清晨留的那一句（設定 `feed-drive-summary`）原本收在「每天打得完幾家」視窗裡，
+  搬到名單最上面那條「今天的新名單」下面，早上一開就看得到；三天前的不顯示（後台沒跑也看得出來）。視窗裡那行拿掉。
+- **使用次數**：三台裝置的摘要檔（只有次數）合起來看，10 月一週的數字給使用者當刪除清單的依據（結論寫在對話，不寫這裡）。
+  順便補一個洞：摘要檔裡出現過一個「…企業」結尾的公司名（`NAMEISH_RE` 只認「企業社」），補上「企業、裝修、工程行」；
+  以前記到的那個鍵寫摘要時會被 `usageKeyOk` 濾掉。摘要檔只在使用者自己的雲端硬碟，沒有外流。
+- 測試：`test-feed-backend.js` 加首頁那行（三天內顯示、舊的不顯示）；`test-usage-summary.js` 加「…企業」不記。版號 20261010-324。
