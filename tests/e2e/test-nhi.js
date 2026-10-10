@@ -1,4 +1,4 @@
-// 剛開始請人分頁（健保新成立投保單位）：讀資料、預設篩選、卡片、加入客戶名單帶電話與行業、開場白
+// 剛開始請人分頁（健保新成立投保單位）：讀資料、預設篩選、卡片、加入客戶名單帶電話與行業
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -57,8 +57,6 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const rec=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='名祿實業有限公司'); return r?{phone:r.phoneRaw,founded:r.founded,capital:r.capital,industry:r.industry,notes:r.notesRaw,source:r.source,next:r.nextDate}:null; });
  chk(rec && rec.phone==='02-2960-0000' && rec.founded==='2019' && rec.capital==='12,000' && rec.industry==='運動用品、器材批發業' && /^健保新投保 2026-09/.test(rec.notes) && /^剛開始請人-2026-10-05-1家\.csv$/.test(rec.source), `加進來的：${JSON.stringify(rec)}`);
  chk(await pg.isVisible('#drawer') && /名祿/.test(await pg.textContent('#drawerBody h2')), '單張加入直接打開那一筆');
- const op=(await pg.locator('#drawerBody .detail-opener').textContent()).replace(/\s+/g,' ');
- chk(/開始幫員工投保、在擴編/.test(op), `開場白：${op}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  chk((await pg.locator('#nhi-cards .card:has-text("名祿") .badge-mine').count())===1, '加完卡片標已在名單');
  // 來源漏斗（摘要檔的數字）認得這個來源

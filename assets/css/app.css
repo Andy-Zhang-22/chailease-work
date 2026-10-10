@@ -203,8 +203,6 @@ button, input, select { font: inherit; color: inherit; }
 .card-top { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .card-name { font-weight: 650; font-size: 15.5px; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: 13px; color: var(--muted); }
-.card-opener, .detail-opener { margin: 6px 0 0; font-size: 13px; color: var(--primary); line-height: 1.5; }
-.detail-opener { font-size: 14px; margin-top: 8px; }
 .card-notes {
   margin-top: 6px; font-size: 13px; color: var(--muted);
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
@@ -1036,13 +1034,6 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 /* Claude 分身設定 */
 .twin-steps { margin: 6px 0 10px; padding-left: 20px; line-height: 1.6; }
 .twin-url { width: 100%; margin: 4px 0; }
-
-/* 今日撥打戰略 */
-.badge-twin { border-color: var(--primary); color: var(--primary); }
-.twin-plan { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--primary); border-radius: 4px; line-height: 1.6; }
-.twin-plan-head { font-weight: 600; }
-.twin-plan-reason { color: var(--muted); }
-.plan-paste { width: 100%; margin: 8px 0; font: inherit; }
 
 /* 動產擔保分頁：卡片下面列這家的每一件 */
 .chattel-cases { margin: 6px 0 2px; }

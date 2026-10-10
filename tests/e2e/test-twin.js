@@ -1,6 +1,6 @@
 // Claude 分身（使用者：「有辦法生成一個跟我一樣的企金業務在系統上嗎」→ AI 分身、「系統這邊也幫我做」）
 // 選單設定網址（只收 claude.ai）、複製說明書；今日覆盤的「複製給 Claude 整理」開分身。
-// 詳細頁的「🤖 問 Claude」版本 316 拿掉了（使用次數 0），戰略、覆盤照樣走分身
+// 詳細頁的「🤖 問 Claude」版本 316 拿掉了（使用次數 0），覆盤照樣走分身（今日撥打戰略版本 319 也拿掉了）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
