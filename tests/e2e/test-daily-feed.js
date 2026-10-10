@@ -197,7 +197,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(hol===0, `放假那天自動不挑：${hol}`);
  const bar2=(await p2.textContent('#feedBar')).replace(/\s+/g,' ');
  chk(/今天放假（週六）/.test(bar2) && /下一個上班日 2026\/10\/12/.test(bar2), `名單頁那一條講清楚放假、再補排哪天：${bar2}`);
- await p2.click('#feedMore'); await p2.waitForTimeout(1500);
+ await p2.click('#feedMore');
+ // 固定等 1.5 秒不夠（動保的成立年檔變大就超過），輪詢等到名單進來為止，最多 15 秒
+ for (let i=0;i<60;i++){ if (await p2.evaluate(async()=>(await window.Store.allRecords()).some(r=>/^每日新名單/.test(r.source)))) break; await p2.waitForTimeout(250); }
+ await p2.waitForTimeout(400);
  const hol2=await p2.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.nextDate));
  chk(hol2.length===5 && hol2.every(d=>d==='2026-10-12'), `假日按再補：5 家都排在下一個上班日 10/12：${[...new Set(hol2)].join('|')}`);
  chk(errs2.length===0, `假日那一輪沒有 JS 錯誤：${errs2.join(' | ')}`);

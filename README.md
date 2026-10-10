@@ -4307,3 +4307,54 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   一台存查到那天、一台存登記日期的同一件事也合得起來。
 - 測試：`sync.test.js`、`registry-drive.test.js` 各加一段。版號 20261010-320。
 
+## 探路：104 徵才名單能不能在後台抓（2026/10/10）
+
+使用者：「既然你可以透過 Google 服務帳戶在背景跑商工登記，你還有什麼能做的？」→「像是去 104 找徵才名單？」→「試試看吧」。
+一次性腳本在 Actions 跑一次（只印狀態碼、欄位名、筆數、代碼），看完刪了。
+
+| 試什麼 | 結果 |
+|---|---|
+| 104 地區代碼表 `static.104.com.tw/category-tool/json/Area.json` | 拿得到（200）。新莊分公司各區都有代碼：新莊 6001002021、泰山 6001002022、林口 6001002023、蘆洲 6001002024、五股 6001002025、八里 6001002026、樹林 6001002018、三重 6001002020，新北市 6001002029 |
+| 104 行業代碼表 `Indust.json` | 拿得到。一般製造業 1002000000、批發業 1003001000，各製造業細類都有 |
+| 職缺搜尋 `www.104.com.tw/jobs/search/api/jobs`（新）與 `jobs/search/list`（舊） | **403，Cloudflare 的機器人驗證頁**（「Just a moment」）。GitHub Actions 的 IP 直接被擋，連第一頁都拿不到 |
+| 公司頁 JSON | 沒試到（搜尋就被擋） |
+
+結論：**104 不能在後台抓。** 擋的是 Cloudflare 的機器人驗證，要繞過去就是刻意規避對方的防護，違反使用條款、也隨時會斷，不做。
+台灣就業通的開放資料上次探路已確認沒有逐家職缺（見「找名單的來源」那段）。徵才訊號維持兩條：
+「剛開始請人」分頁（健保新成立投保單位，合法、每月更新）與使用者自己在 104 截圖丟進匯入區（版本「104 截圖直接變名單」）。
+
+## 每日新名單改在後台挑；找不到電話的每月再查 Google（版本 321）
+
+使用者：「既然你可以透過 Google 服務帳戶在背景跑商工登記，你還有什麼能做的？」列了四項，使用者問「這些能在後台跑嗎」→
+「1. 每日新名單＋補電話」「2. 找不到電話的公司每月再比對」做，「3. 動產擔保比對」只快開站先不做，「4. 每天備份」網站每週已備份、
+服務帳號又沒有儲存空間不能新建檔案，不做。使用者：「Ok」。
+
+### 做法：後台開無頭瀏覽器跑網站本身
+
+挑名單的邏輯（額度、八個來源的比例、假日、沒電話的先查 Google 再跳過、以前刪掉的不挑、匯入比對重複……）都在 app.js 裡，
+而且各分頁的模組綁著畫面；再寫一份給 Node 跑一定會慢慢走樣。所以 `tools/feed-drive.mjs` 不重寫，
+在 Actions 上用 Playwright 開無頭的 Chromium 打開網站本身（跟瀏覽器測試一樣把 repo 當靜態網站開在本機）：
+
+1. 塞一個假的 `google.accounts.oauth2` token client，要權杖就給 Workload Identity 聯盟換來的服務帳號權杖
+   （瀏覽器測試 `test-sync-race.js` 同一招）；localStorage 設 `driveClientId`，網站就當作已經設好雲端同步。
+2. 叫網站的 `runSync` 把雲端的名單拉下來；再叫 `dailyFeed({ force: true, awaitPhones: true })` 挑今天的、
+   等「出進口電話表 → Google 地圖補電話」跑完；最後再 `runSync` 寫回。寫回前用 Drive API 釘住目前版本（可退回）。
+3. 網站的設定 `daily-feed-on`＝今天會一起同步，使用者開網站就不會再挑一次；「每天打得完幾家」視窗多一行「後台：…」（設定 `feed-drive-summary`）。
+4. Google 金鑰放 Secrets `PLACES_API_KEY`（跟網站設定裡的同一把）。金鑰有「網站限制」的話，送 `places.googleapis.com` 的請求
+   把 Referer 改成網站網址（`SITE_URL`，預設照 GITHUB_REPOSITORY 推 GitHub Pages 的網址）。
+5. report 模式：整套照跑，但送雲端硬碟的「上傳」一律攔下來假裝成功，一個字都不會寫回，只看筆數。
+6. 每月 1 日（或手動選 yes）順便 `phoneBackGoogle()`：「找不到電話」收起來、公開資料還是沒有的公司，用 Google 地圖查一次
+   （只收名稱對得上、有電話的，一次最多 40 家）；查到的存進會同步的設定 `phone-back-google`，名單上方照樣只提醒
+   「之前找不到電話的 N 家，現在查到電話了」，「已排除的公司」那頁標 Google 對到的店名與地址，放不放回由使用者決定。
+   以前查到、還在排除名單上的留著不重查。
+
+排程 `daily-feed-drive.yml`：每天台灣 05:30（商工登記更新 05:00 之後；同一個 concurrency group，不會同時寫同一個檔），
+`timeout-minutes: 25`。紀錄只印筆數。
+
+- app.js：`dailyFeed` 回摘要 `{ picked, got, lost, skippedNoPhone, day, have, quota, bySrc, biz, phones }`（放假 `holiday`、排滿 `full`），
+  `awaitPhones` 等補電話；`window.dailyFeed`／`window.runSync`／`window.phoneBackGoogle` 給後台與測試用。
+  `phonesOfExcluded` 也看 `phone-back-google`（空號收起來的那支一樣不算）。`phone-back-google` 進 SYNCED_PREFS。
+- tools/drive-lib.mjs：雲端硬碟的權杖、找檔、釘版本、上傳從 registry-drive.mjs 搬出來共用。
+- 測試：新 `test-feed-backend.js`（摘要、排滿、放假、Google 再查一次只提醒）；`test-daily-feed.js` 假日那段改成輪詢等到資料進來為止
+  （原本固定等 1.5 秒，機器人推上來的動保成立年檔變大後「再補」超過 1.5 秒，CI 跟本機都紅了，跟改版無關）。版號 20261010-321。
+
