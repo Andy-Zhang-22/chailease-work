@@ -140,9 +140,9 @@
       d.address ? el('span', { textContent: `📍 ${d.address}` }) : '',
       d.taxId ? el('span', { textContent: `#${d.taxId}` }) : '',
     ]);
-    // 每一份名單看到的那一句；點來源名稱到那一頁
+    // 每一份名單看到的那一句（版本 327：來源名稱不再是連結，那幾頁的按鈕收掉了）
     const srcs = el('ul', { className: 'mix-srcs' }, it.facts.map((x) => el('li', {}, [
-      el('button', { className: 'link-btn mix-src', type: 'button', textContent: x.label, title: `到「${x.label}」那一頁`, onclick: () => { if (typeof global.switchTab === 'function') global.switchTab(x.tab); } }),
+      el('span', { className: 'mix-src', textContent: x.label }),
       document.createTextNode(`：${x.info || ''}`),
     ])));
     const add = el('button', { className: 'btn btn-tiny btn-primary mix-add-one', type: 'button', textContent: '加入客戶名單' });

@@ -27,7 +27,7 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await ctx.route('**/leads/industry/industry.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9623/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('產業名單')), '新名單第三排有「產業名單」');
+ chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('產業名單'))===false, '找名單底下沒有「產業名單」按鈕了（版本 327 收進合併頁）');
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForSelector('#industry-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#industry-sub')).replace(/\s+/g,' ');
  chk(/新北市 4 家/.test(sub) && /營造工地 1/.test(sub) && /起算 2026\/10/.test(sub), `標題：${sub}`);

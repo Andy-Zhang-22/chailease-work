@@ -35,7 +35,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  // 從名單刪掉晨光（卡片上的「刪除這筆」走的就是 Store.deleteRecord，會寫公司排除）
  await pg.locator('#cards .card:has-text("晨光") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
- await pg.locator('#drawerBody button:has-text("刪除這筆")').click(); await pg.waitForTimeout(300); await pg.click('.ask-overlay .btn-primary'); await pg.waitForTimeout(800);
+ await pg.locator('#drawerBody button:has-text("刪除這筆")').click(); await pg.waitForTimeout(300); await pg.click('.ask-overlay .btn:has-text("其他原因")'); await pg.waitForTimeout(800);
  chk((await pg.evaluate(async()=>(await window.Store.allRecords()).length))===0, '名單上刪掉了');
  chk(await pg.evaluate(()=>window.deletedCompany('晨光貿易有限公司','70000001')) && !(await pg.evaluate(()=>window.deletedCompany('遠帆國際開發有限公司','70000002'))), '刪掉的公司有記到（統編／名稱）');
  // 出進口分頁：晨光藏起來，遠帆照列

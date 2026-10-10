@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-325';
+  const APP_VERSION = '20261010-327';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1249,6 +1249,9 @@
     }
   }
 
+  const NO_PHONE_PICK = '找不到電話，先收起來（之後查到電話會提醒你）';
+  const DELETE_REASONS = [['target', '不是目標（行業、規模不對）'], ['customer', '已是客戶／跟中租有往來'], ['other', '其他原因，刪掉']];
+  const REASON_BADGE = { target: '不是目標', customer: '已是客戶', other: '其他原因' };
   function deleteBtn(r) {
     const btn = el('button', { className: 'btn btn-tiny danger', type: 'button', textContent: '刪除這筆' });
     btn.onclick = async () => {
@@ -1289,20 +1292,20 @@
        * 沒電話的分兩種刪法（使用者：「我刪除的電話中目前有些是在公開資訊上找不到電話的，但可能未來會找的到」）：
        * 「找不到電話」記在排除名單上，之後出進口、健保、電子發票、新設工廠的公開資料查到電話會提醒；「不要了」照舊。
        */
-      let noPhone = false;
-      if (core.every((x) => !(x.phones && x.phones.length))) {
-        const NO_PHONE = '找不到電話，先收起來（之後查到電話會提醒你）';
-        const pick = await askPick(msg, [NO_PHONE, all.length > 1 ? `不要了，全部刪掉（${all.length} 筆）` : '不要了，刪掉']);
-        if (!pick) return;
-        noPhone = pick === NO_PHONE;
-      } else {
-        const ok = await askConfirm(msg, { danger: true, okText: all.length > 1 ? `全部刪掉（${all.length} 筆）` : '刪掉' });
-        if (!ok) return;
-      }
+      /*
+       * 刪的時候記一個原因（版本 326；使用者看了「一週刪掉約 46 筆、存紀錄 27 筆，刪的原因沒留下來」→「1 做」）：
+       * 還是一下點擊（取代原本的「刪掉」確認鈕），原因連同這家是哪一份名單來的記在排除名單的墓碑上。
+       * 「不是目標」太多的來源，挑新名單時排後面（demotedOrigins，是排序不是門檻）；「找不到電話」照舊會在查到電話時提醒。
+       */
+      const noPhoneOk = core.every((x) => !(x.phones && x.phones.length));
+      const pick = await askPick(msg, [...(noPhoneOk ? [NO_PHONE_PICK] : []), ...DELETE_REASONS.map(([, t]) => t)]);
+      if (!pick) return;
+      const noPhone = pick === NO_PHONE_PICK;
+      const why = { noPhone, reason: noPhone ? 'nophone' : (DELETE_REASONS.find(([, t]) => t === pick) || ['other'])[0], src: freshOrigin(r) || '', industry: String(r.industry || '').slice(0, 40) };
 
       // 刪不掉要講出來：以前沒有 try，失敗就是一個沒人看得到的錯誤
       try {
-        for (const id of all) await window.Store.deleteRecord(id, { noPhone });
+        for (const id of all) await window.Store.deleteRecord(id, why);
         const left = await window.Store.allRecords();
         const stuck = all.filter((id) => left.some((x) => x.id === id));
         if (stuck.length) throw new Error('刪掉了但還讀得到');
@@ -1607,6 +1610,7 @@
       if (info.noPhone) e.noPhone = true;
       if (Array.isArray(info.deadTels)) e.deadTels = [...new Set([...e.deadTels, ...info.deadTels.map(taxOnly)])];   // 空號收起來的：這幾支打不通
       if (info.keep) e.keep = true;      // 按過「還是不要」：查到電話也不再提
+      if (info.reason && info.reason !== 'nophone') e.reason = info.reason;   // 刪的原因（版本 326）
       if (info.company) e.company = info.company;
       by.set(id, e);
     });
@@ -1792,6 +1796,7 @@
         row.append(el('div', { className: 'excluded-head' }, [
           el('strong', { textContent: e.company }),
           e.noPhone ? el('span', { className: 'badge', textContent: e.deadTels && e.deadTels.length ? '空號' : '找不到電話' }) : '',
+          !e.noPhone && REASON_BADGE[e.reason] ? el('span', { className: 'badge', textContent: REASON_BADGE[e.reason] }) : '',
           ph ? el('span', { className: 'badge badge-phone-back', textContent: '有電話了' }) : '',
         ]));
         row.append(el('div', { className: 'muted excluded-meta', textContent: [e.taxId ? `統編 ${e.taxId}` : '', e.at ? `${dateLabel(isoOfMs(e.at))} 排除` : ''].filter(Boolean).join('　') }));
@@ -3239,14 +3244,18 @@
       });
     });
     const out = [...byKey.values()];
+    const demo = demotedOrigins();
+    const labelOf = (k) => (MIX_SOURCES.find((x) => x.key === k) || {}).label || '';
     out.forEach((c) => {
+      // 這家看到的每一份名單都是「不是目標」太多的來源 → 排後面（版本 326）
+      c.demote = demo.size > 0 && Object.keys(c.recs).every((k) => demo.has(labelOf(k)));
       const tax = /^\d{8}$/.test(c.key) ? c.key : '';
       c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
       if (c.buy.grade <= 1) c.signals.add(`最近買設備（${c.buy.ym}）`);
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
     });
-    out.sort((a, b) => b.signals.size - a.signals.size || a.buy.grade - b.buy.grade || a.ageRank - b.ageRank
+    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || b.signals.size - a.signals.size || a.buy.grade - b.buy.grade || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || a.order - b.order);
     return out;
   }
@@ -3756,6 +3765,11 @@
           ...names.flatMap((n, i) => [el('span', { className: 'muted share-name', textContent: n }), inputs[i]]),
           hint,
         ]));
+      }
+      {
+        const demo = demotedOrigins();
+        const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家${demo.has(o) ? '（排後面）' : ''}`);
+        if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。哪個來源挑進來的有四成以上（至少 3 家）被你當不是目標刪掉，那個來源的候選就排後面（是排序不是門檻）。` }));
       }
       host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
 
@@ -8456,12 +8470,35 @@ export default {
    * 跟選單「管理已排除的公司」做的是同一件事。
    */
   let deletedKeys = new Set();
+  let delByOrigin = new Map();   // 來源 → { target, all }：最近 90 天從名單刪掉的（有記原因的，版本 326），同一家只算一次
   async function refreshDeleted() {
     try {
       const tombs = (await window.Store.getTombstones()).companies || {};
       deletedKeys = new Set(Object.keys(tombs).filter((k) => tombs[k] !== undefined && !(tombs[k] && tombs[k].lifted)));
+      const by = new Map(); const seen = new Set(); const since = Date.now() - 90 * 86400000;
+      Object.entries(tombs).forEach(([k, v]) => {
+        if (!v || typeof v !== 'object' || v.lifted || !v.src || !v.reason || (v.at || 0) < since) return;
+        const id = v.taxId ? `tax:${v.taxId}` : `name:${v.company || k}`;
+        if (seen.has(id)) return; seen.add(id);
+        const d = by.get(v.src) || { target: 0, all: 0 };
+        d.all += 1; if (v.reason === 'target') d.target += 1;
+        by.set(v.src, d);
+      });
+      delByOrigin = by;
     } catch (e) { /* 讀不到就維持上一份 */ }
   }
+  /**
+   * 刪掉時選「不是目標」太多的來源：最近 90 天那個來源挑進來的裡面（還在名單上的＋刪掉的），
+   * 「不是目標」占四成以上、至少 3 家 → 挑新名單時那個來源的候選排後面（排序不是門檻，使用者定的）。
+   */
+  function demotedOrigins() {
+    const alive = new Map();
+    allViews().forEach((v) => { const o = freshOrigin(v); if (o) alive.set(o, (alive.get(o) || 0) + 1); });
+    const out = new Set();
+    delByOrigin.forEach((d, o) => { const n = (alive.get(o) || 0) + d.all; if (d.target >= 3 && d.target / n >= 0.4) out.add(o); });
+    return out;
+  }
+  window.demotedOrigins = () => [...demotedOrigins()];   // 測試用
   window.deletedCompany = (company, taxId) => window.Normalize.companyKeys({ company, taxId }).some((k) => deletedKeys.has(k));
   window.liftCompany = async (company, taxId) => {
     const keys = window.Normalize.companyKeys({ company, taxId });
@@ -8750,8 +8787,10 @@ export default {
    * 規則從右上選單進，分頁列不亮。（版本 314 拿掉統計、剛開電子發票的獨立頁，原本的第三排併成一排；上市櫃留著排最後）
    */
   const SOURCE_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'factory', 'industry', 'listed'];
+  // 版本 327：第二排只剩合併、商行、上市櫃三個按鈕；其他六頁沒有按鈕（?tab= 與測試還開得到），「找名單」只記得這三個
+  const SHOWN_SOURCE_TABS = ['mix', 'biz', 'listed'];
   function switchTab(tab) {
-    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SOURCE_TABS.includes(last) ? last : 'mix'; }
+    if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SHOWN_SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;
     state.tab = tab;
     state.limit = PAGE_SIZE;
@@ -8760,7 +8799,7 @@ export default {
     [...$('#tabs').children].forEach((b) => b.classList.toggle('is-active', !!top && b.dataset.tab === top));
     $('#subtabs').hidden = !isSource;
     [...$('#subtabs').children].forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
-    if (isSource) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
+    if (SHOWN_SOURCE_TABS.includes(tab)) { try { localStorage.setItem('sources-last', tab); } catch (e) { /* 無痕 */ } }
     if (isSource && window.ensureSourcesLoaded) window.ensureSourcesLoaded();   // 卡片上的「🔗 也在」要其他頁的資料
     render();
     syncSearchBox();

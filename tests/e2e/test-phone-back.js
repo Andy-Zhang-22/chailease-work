@@ -33,12 +33,18 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
    const opts=await pg.$$eval('.ask-overlay .ask-list .btn',bs=>bs.map(b=>b.textContent));
    await pg.click(`.ask-overlay .ask-list .btn:has-text("${pick}")`); await pg.waitForTimeout(900); return opts; };
  const opts=await del('甲範例','找不到電話');
- chk(opts.length===2 && /找不到電話，先收起來/.test(opts[0]) && /不要了/.test(opts[1]), `沒電話的刪除有兩種：${opts.join('｜')}`);
- await del('乙範例','不要了');
+ chk(opts.length===4 && /找不到電話，先收起來/.test(opts[0]) && /不是目標/.test(opts[1]) && /已是客戶/.test(opts[2]) && /其他原因/.test(opts[3]), `沒電話的刪除有四種（版本 326）：${opts.join('｜')}`);
+ await del('乙範例','不是目標');
  await del('丙範例','找不到電話');
- await del('丁範例','不要了');
+ await del('丁範例','其他原因');
  const tombs=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies);
  chk(tombs['tax:11111111'].noPhone===true && !tombs['tax:22222222'].noPhone, '墓碑記著哪家是「找不到電話」');
+ chk(tombs['tax:11111111'].reason==='nophone' && tombs['tax:22222222'].reason==='target' && tombs['tax:44444444'].reason==='other', `墓碑記著刪的原因：${['11111111','22222222','44444444'].map(t=>tombs['tax:'+t].reason).join('、')}`);
+ // 「不是目標」太多的來源排後面：出進口廠商最近 90 天 3 家都當不是目標刪掉、名單上沒有 → 排後面；動產擔保沒有
+ await pg.evaluate(async()=>{ for(const [k,n] of [['tax:66666661','己一'],['tax:66666662','己二'],['tax:66666663','己三']]) await window.Store.addTombstone('companies',k,{company:`${n}範例有限公司`,taxId:k.slice(4),reason:'target',src:'出進口廠商'}); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ const demoted=await pg.evaluate(()=>window.demotedOrigins());
+ chk(demoted.length===1 && demoted[0]==='出進口廠商', `「不是目標」太多的來源：${demoted.join('、')}`);
  chk(await pg.isHidden('#phoneBackBar'), '還查不到電話時沒有提醒');
 
  // 下個月：公開資料有電話了 → 重新打開網站
@@ -53,7 +59,8 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await pg.click('#phoneBackBar button'); await pg.waitForSelector('#editorBody .excluded-row'); await pg.waitForTimeout(800);
  const rows=await pg.$$eval('#editorBody .excluded-row',rs=>rs.map(r=>r.textContent.replace(/\s+/g,' ')));
- chk(rows.length===4 && rows.slice(0,3).every(r=>/有電話了/.test(r)) && /丁範例/.test(rows[3]) && !/有電話了/.test(rows[3]), `以前「不要了」刪的乙沒記原因，查到電話一樣標出來：${rows.map(r=>r.slice(0,20)).join('｜')}`);
+ chk(rows.length===7 && rows.slice(0,3).every(r=>/有電話了/.test(r)) && !/有電話了/.test(rows.slice(3).join(' ')), `選「不是目標」刪的乙，查到電話一樣標出來：${rows.map(r=>r.slice(0,20)).join('｜')}`);
+ chk(rows.some(r=>/乙範例.*不是目標/.test(r)) && rows.some(r=>/丁範例.*其他原因/.test(r)), '已排除的公司標出刪的原因');
  chk(/之前找不到電話的 2 家/.test(await pg.textContent('#phoneBackBar')), '但名單上面的提醒只算「找不到電話」的那兩家');
  chk(/查到電話的 3 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '有「全部放回」');
  // 搜尋：公司名、統編、電話；全部放回只算搜尋出來的
@@ -67,7 +74,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.fill('#editorBody .excluded-q','找不到的字'); await pg.waitForTimeout(300);
  chk(/沒有符合的公司/.test(await pg.textContent('#editorBody .excluded-list')), '搜不到會講');
  await pg.fill('#editorBody .excluded-q',''); await pg.waitForTimeout(300);
- chk((await shown()).length===4, '清掉搜尋就全部回來');
+ chk((await shown()).length===7, '清掉搜尋就全部回來（含種進去的 3 家）');
  const ding=pg.locator('#editorBody .excluded-row:has-text("丁範例")');
  chk((await ding.locator('button:has-text("收回")').count())===1 && (await ding.locator('a:has-text("104")').count())===1 && (await ding.locator('button:has-text("放回名單")').count())===0, '沒查到電話的：收回＋自己再找');
 
