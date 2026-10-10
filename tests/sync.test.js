@@ -38,6 +38,21 @@ test('mergeRegChanges：聯集、同一天同種類算一次、新到舊、壞�
   assert.deepEqual(DriveSync.regHistoryOf(null), []);
 });
 
+test('變更登記的日期用登記上的最近異動日期：舊紀錄寫查到那天的，讀出來換掉；兩種寫法都認', () => {
+  const { DriveSync } = loadModules(['sync']);
+  assert.equal(DriveSync.regDateISO('115/10/08'), '2026-10-08'); assert.equal(DriveSync.regDateISO('2026/10/8'), '2026-10-08');
+  assert.equal(DriveSync.regDateISO('2026-10-08'), '2026-10-08'); assert.equal(DriveSync.regDateISO(''), ''); assert.equal(DriveSync.regDateISO('不是日期'), '');
+  const legacy = [{ date: '2026-10-10', kinds: ['address'], changes: { address: { from: '甲路1號', to: '乙路2號' }, regChanged: { from: '2026/01/21', to: '2026/10/08' } } }];
+  const out = DriveSync.regHistoryOf({ regChanges: legacy });
+  assert.equal(out[0].date, '2026-10-08', '後台 10/10 查到、登記 10/08 核准 → 顯示 10/08');
+  assert.equal(legacy[0].date, '2026-10-10', '不改原本的物件');
+  const same = [{ date: '2026-10-10', kinds: ['address'], changes: { address: { from: '甲', to: '乙' } } }];
+  assert.equal(DriveSync.regHistoryOf({ regChanges: same })[0].date, '2026-10-10', '前後值裡沒有最近異動日期的照原本');
+  // 兩台裝置：一台存查到那天、一台存登記日期，是同一件事
+  const fixed = [{ date: '2026-10-08', kinds: ['address'], changes: legacy[0].changes }];
+  assert.equal(DriveSync.mergeRegChanges(legacy, fixed).length, 1);
+});
+
 test('mergeState：整體取較新，但編輯內容、連結、提醒各看自己的時間戳', () => {
   const a = { recordId: 'r', updatedAt: 10, edits: { phone: '02' }, editsAt: 9, remindAt: '2025-10-01', remindSetAt: 8 };
   const b = { recordId: 'r', updatedAt: 20, outcome: 'contacted' };

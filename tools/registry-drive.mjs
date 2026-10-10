@@ -62,6 +62,7 @@ const listValue = (key, r) => { const v = String((r && r[key]) || '').trim(); if
 /** 名單上這筆現在的樣子＝原始資料蓋上使用者（或上次登記更新）的編輯 */
 const viewOf = (rec, st) => (st && st.edits ? { ...rec, ...st.edits } : rec);
 
+const regDateISO = (v) => { const ms = regDateMs(v); return ms ? new Date(ms).toISOString().slice(0, 10) : ''; };
 const regDateMs = (v) => { const m = String(v || '').match(/(\d{2,4})[/\-.](\d{1,2})[/\-.](\d{1,2})/); if (!m) return 0; const y = +m[1] < 1911 ? +m[1] + 1911 : +m[1]; return Date.UTC(y, +m[2] - 1, +m[3]); };
 /** 查到的核准變更日期比名單上的舊：備援來源的舊快照，整筆不套用（跟 app.js staleRegistry 同一條規則） */
 const staleRegistry = (r, data) => { const mine = regDateMs(listValue('regChanged', r)); const got = regDateMs(registryValue('regChanged', data)); return !!(mine && got && got < mine); };
@@ -116,7 +117,8 @@ function applyResults(dump, results, { now, today, mergeRegChanges, regHistoryOf
       if (kinds.length) {
         const kept = {};
         Object.entries(res.changes).forEach(([key, ch]) => { if (String(ch.from || '').trim()) kept[key] = ch; });
-        st.regChanges = mergeRegChanges([{ date: today, kinds, changes: kept }], regHistoryOf(prev));
+        // 日期寫登記上的最近異動日期，不是跑的那天（使用者：「變更日期不是 10/10，是依最近異動日期」）
+        st.regChanges = mergeRegChanges([{ date: regDateISO(res.regChanged) || today, kinds, changes: kept }], regHistoryOf(prev));
         [st.regChange] = st.regChanges;
       }
       if (Object.keys(res.changes).length) {
@@ -217,7 +219,7 @@ async function main() {
     const view = viewOf(rec, states.get(rec.id));
     const res = await Registry.lookupCompany({ taxId: String(view.taxId || '').replace(/\D/g, ''), name: view.company }, { useMirror });
     if (!res.ok) { results.push({ recordId: rec.id, company: view.company, ok: false, reason: res.reason }); fails += 1; }
-    else { results.push({ recordId: rec.id, company: view.company, ok: true, changes: diffFields(view, res.data), view, label: res.label }); fails = 0; }
+    else { results.push({ recordId: rec.id, company: view.company, ok: true, changes: diffFields(view, res.data), view, label: res.label, regChanged: registryValue('regChanged', res.data) }); fails = 0; }
     if ((i + 1) % 50 === 0) console.log(`  …${i + 1}/${list.length}`);
     // 連續查不到太多筆就是被擋了，別再耗
     if (fails >= 8 && results.every((r) => !r.ok)) { out(`✗ 前 ${fails} 筆全部連不上（${String(res.reason || '').split('\n')[0]}），來源被擋住，這次停止。`); await writeSummary(summary); process.exitCode = 1; return; }

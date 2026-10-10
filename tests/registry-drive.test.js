@@ -34,14 +34,14 @@ test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不�
     logs: [], tombstones: {}, settings: { 'registry-mirror': { v: '1', at: 1 } },
     states: [{ recordId: 'a', updatedAt: 100, edits: { keyman: '小陳' }, editsAt: 100, regChanges: [{ date: '2026-01-01', kinds: ['address'], changes: {} }] }] };
   const results = [
-    { recordId: 'a', ok: true, view: { company: '甲', capital: '10,000', owner: '王' }, changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } } },
+    { recordId: 'a', ok: true, view: { company: '甲', capital: '10,000', owner: '王' }, changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } }, regChanged: '115/09/20' },
     { recordId: 'b', ok: false, reason: '查無資料\n第二行' },
   ];
   const out = m.applyResults(dump, results, { now: 5000, today: '2026-09-29', mergeRegChanges: DriveSync.mergeRegChanges, regHistoryOf: DriveSync.regHistoryOf });
   const a = out.states.find((s) => s.recordId === 'a'); const b = out.states.find((s) => s.recordId === 'b');
   assert.deepEqual(a.edits, { keyman: '小陳', capital: '30,000', owner: '李' }, '原本的編輯留著，登記的差異蓋上去');
   assert.equal(a.editsAt, 5000); assert.equal(a.regAt, 5000); assert.equal(a.updatedAt, 5000);
-  assert.equal(a.regChanges.length, 2); assert.deepEqual(a.regChanges[0], { date: '2026-09-29', kinds: ['capitalUp', 'owner'], changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } } });
+  assert.equal(a.regChanges.length, 2); assert.deepEqual(a.regChanges[0], { date: '2026-09-20', kinds: ['capitalUp', 'owner'], changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } } }, '日期是登記的最近異動日期（115/09/20），不是跑的那天 9/29');
   assert.deepEqual(a.regChange, a.regChanges[0]);
   assert.equal(b.regAt, 5000); assert.equal(b.regError, '查無資料');
   assert.equal(out.settings['registry-auto-last'].v, '2026-09-29'); assert.match(out.settings['registry-auto-summary'].v, /更新 1 筆，1 筆查不到/);

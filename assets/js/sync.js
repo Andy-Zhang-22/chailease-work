@@ -49,10 +49,24 @@
    * 查到的那幾次整個弄丟。所以這裡取聯集，同一天同樣種類算同一次。
    */
   const REG_HISTORY_MAX = 20;
+  /** 登記上的日期（115/10/08、2026/10/08、2026-10-08）→ 2026-10-08；認不得回空字串 */
+  function regDateISO(v) {
+    const m = String(v || '').match(/(\d{2,4})[/\-.](\d{1,2})[/\-.](\d{1,2})/);
+    if (!m) return '';
+    const y = +m[1] < 1911 ? +m[1] + 1911 : +m[1];
+    return `${y}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+  }
+  /*
+   * 一次變更的日期是登記上的「最近異動日期」，不是網站或後台查到的那天
+   * （使用者：「變更日期不是 10/10，是依最近異動日期」）。
+   * 以前存的紀錄寫的是查到那天，前後值裡有最近異動日期的，讀出來就換成登記的日期。
+   */
+  const regEntryDate = (e) => regDateISO(e && e.changes && e.changes.regChanged && e.changes.regChanged.to) || (e && e.date);
   function mergeRegChanges(left, right) {
     const seen = new Set();
     const out = [];
-    const all = [...(left || []), ...(right || [])].filter((e) => e && e.date && (e.kinds || []).length);
+    const all = [...(left || []), ...(right || [])].filter((e) => e && e.date && (e.kinds || []).length)
+      .map((e) => (regEntryDate(e) === e.date ? e : { ...e, date: regEntryDate(e) }));
     // 新的先看，同一天同種類、或內容一模一樣的（兩台裝置各查到一次同一件事）只留最新那次
     all.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     all.forEach((e) => {
@@ -572,7 +586,7 @@
   }
 
   global.DriveSync = {
-    sync, mergeDumps, diffSummary, mergeTombstones, mergeState, mergeRegChanges, regHistoryOf,
+    sync, mergeDumps, diffSummary, mergeTombstones, mergeState, mergeRegChanges, regHistoryOf, regDateISO,
     isConfigured, clientId, setClientId, signOut, getToken, describeAuthError,
     FILE_NAME, SCOPE, listBackups, backupNow, restoreBackup, BACKUP_PREFIX, writeSummary, SUMMARY_PREFIX,
   };

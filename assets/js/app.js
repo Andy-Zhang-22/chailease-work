@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261009-319';
+  const APP_VERSION = '20261010-320';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -6614,7 +6614,7 @@ export default {
           // 查到不一致就更新，不分「只補空白」——查到了不寫入，等於白查
           if (next && next !== now) changes[key] = { from: now, to: next };
         });
-        const item = { rec, r, changes: all };
+        const item = { rec, r, changes: all, regChanged: registryValue('regChanged', res.data) };   // 變更登記的日期用登記上的最近異動日期
         checked.push(item);
         const diff = Object.keys(changes).length ? { rec, r, changes, status: res.data.status } : null;
         if (diff) diffs.push(diff);
@@ -6666,7 +6666,6 @@ export default {
    */
   async function recordRegistryChecks(checked, failures) {
     const now = Date.now();
-    const date = todayISO();
     // 查不到的也記下來（時間與原因），詳細頁才分得出「還沒查」和「查了查不到」
     for (const f of failures || []) {
       if (!f.rec) continue;
@@ -6678,7 +6677,8 @@ export default {
       if (kinds.length) {
         const kept = {};
         Object.entries(c.changes).forEach(([key, ch]) => { if (String(ch.from || '').trim()) kept[key] = ch; });
-        const entry = { date, kinds, changes: kept };
+        // 日期寫登記上的最近異動日期，不是今天（使用者：「變更日期不是 10/10，是依最近異動日期」）；登記沒給才寫今天
+        const entry = { date: window.DriveSync.regDateISO(c.regChanged) || todayISO(), kinds, changes: kept };
         /*
          * 往上加，不是覆蓋：這次查到變更地址，不代表上次查到的增資沒發生過。
          * 同一天同樣種類算同一次（手動重跑一輪不會多出一筆）。
