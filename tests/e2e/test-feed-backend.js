@@ -57,7 +57,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  const one=await pg.evaluate(()=>window.dailyFeed({force:true,awaitPhones:true}));
  const fedOne=await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單/.test(v.source)).map(v=>v.company));
  chk(one && one.picked===1 && fedOne.length===1 && fedOne[0]==='乙二機械股份有限公司', `額度 1：網路有擴張訊號的乙二排前面：${fedOne.join('|')}，摘要 ${JSON.stringify(one && one.research)}`);
- chk(researched.length===1 && researched[0].length===3 && researched[0].every(x=>/\|\d{8}\|新北市/.test(x)) && !researched[0].some(x=>/丁四/.test(x)), `先上網查（找電話之前）、只查符合規則的三家（資本額 1.5 億的丁四不查）、帶統編與地址：${JSON.stringify(researched)}`);
+ const flat=researched.flat();
+ chk(flat.length===3 && flat.every(x=>/\|\d{8}\|新北市/.test(x)) && !flat.some(x=>/丁四/.test(x)), `先上網查（找電話之前）、一批一批查到夠為止、只查符合規則的三家（資本額 1.5 億的丁四不查）：${JSON.stringify(researched)}`);
+ chk(one && one.research && one.research.strong===1 && one.research.pickedStrong===1, `挑進來的那家有明確訊號：${JSON.stringify(one && one.research)}`);
  const noteB=await pg.evaluate(async()=>((await window.Store.allRecords()).find(r=>r.company==='乙二機械股份有限公司')||{}).notesRaw||'');
  chk(/網路：104 正在徵 8 名作業員（2026\/09）/.test(noteB), `訊號那句寫進訪談內容：${noteB}`);
  const stB=await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='乙二機械股份有限公司'); return (await window.Store.allStates()).find(s=>s.recordId===v.id).intel; });
