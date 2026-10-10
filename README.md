@@ -4358,3 +4358,21 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 測試：新 `test-feed-backend.js`（摘要、排滿、放假、Google 再查一次只提醒）；`test-daily-feed.js` 假日那段改成輪詢等到資料進來為止
   （原本固定等 1.5 秒，機器人推上來的動保成立年檔變大後「再補」超過 1.5 秒，CI 跟本機都紅了，跟改版無關）。版號 20261010-321。
 
+## 挑每日新名單前，先上網查擴張訊號（版本 322）
+
+使用者開了 Claude API 的主控台（有 100 美元額度），問「我可以怎麼利用在我這系統上」；建議三件，使用者：
+「做 A，但我希望你挑出名單後，也在網路上搜尋到有擴張訊號的資訊再給我名單，這樣相對精準」。
+
+- `tools/intel.mjs`：用 `@anthropic-ai/sdk` 叫 Claude（`claude-opus-5-5`、effort low、`web_search_20260209` 最多 4 次、
+  `fallbacks: "default"`）查一家公司最近一年的擴張訊號（徵才、新廠新設備、搬遷擴大、得標、增資、新產品新市場、營收成長），
+  回 `{ expansion, score 0～3, summary 一句、sources 網址 }`；`parseIntel` 從回覆挖最後一段 JSON（單元測試 `intel.test.js`）。
+  同名公司要用統編或地址確認，確認不了當沒有。`pause_turn` 就原樣送回去接著跑。一次 3 家並行。
+- 後台 `feed-drive.mjs`：有 Secrets `ANTHROPIC_API_KEY` 才用 Playwright 的 `exposeFunction` 把 `window.backendResearch` 掛進網站；
+  網站的 `dailyFeed` 在電話關卡之後、分配額度之前，把候選前面夠用的那段（額度兩倍、有電話的）交過去查，
+  查到的排前面（**是排序不是門檻**，不夠的照原本順序補），那句用「，網路：…」接在訪談內容的「每日新名單，符合：…」後面
+  （登記清冊那頁只留「；」前面那段，所以用「，」接），來源網址存進追蹤狀態 `intel`。
+- 畫面：卡片標「🌐 網路有擴張訊號」，詳細頁一行「🌐 日期 網路查到：…　來源 1」。沒金鑰、或 Claude 那邊失敗，挑名單照舊。
+- 送出去的只有公司名、統編、地址；不送電話、負責人、備註。Actions 紀錄只印筆數（查了幾家、幾家有訊號、幾家失敗）。
+- 費用：一家約 2～4 次搜尋加一萬多個 token，約 NT$2～3；額度 10 家一天查 20 家約 NT$50，100 美元約兩個月。
+- 探路：`probe-intel.yml` 在 Actions 上拿一家上市公司試一筆確認接得通，看完刪。版號 20261010-322。
+

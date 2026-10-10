@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-321';
+  const APP_VERSION = '20261010-322';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -901,6 +901,7 @@
       starred: !!(mine && mine.starred),
       chance: (mine && mine.chance) || '',
       chanceAt: (mine && mine.chanceAt) || 0,
+      intel: (mine && mine.intel) || null,   // 後台用網路查到的擴張訊號（版本 322）
       edited: !!edits,
       group: groupMap().get(record.id) || '',
     };
@@ -3369,9 +3370,10 @@
        */
       let skippedNoPhone = 0;
       const googleHits = new Map();   // 公司名稱 → Google 查到的那家，匯入後直接填（placesLookup 有快取，不會再付一次）
+      const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
+      const enough = Math.max(need * 2, 4);
       if (feedNeedPhone()) {
         let budget = GATE_LOOKUPS;
-        const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
         const confirm = async (name, address, known) => {
           if (known) return true;
           if (!placesKey() || budget <= 0) return false;
@@ -3386,7 +3388,6 @@
           }
           return false;
         };
-        const enough = Math.max(need * 2, 4);
         const okMerged = [];
         for (const c of merged) {
           if (okMerged.length >= enough) break;
@@ -3399,6 +3400,29 @@
           if (await confirm(r.name, r.address || '', !!(bf && bf.phone))) okBz.push(r); else skippedNoPhone += 1;
         }
         merged = okMerged; bz = okBz;
+      }
+      /*
+       * 網路查擴張訊號（版本 322；使用者：「挑出名單後，也在網路上搜尋到有擴張訊號的資訊再給我名單，這樣相對精準」）。
+       * 只有後台（feed-drive.mjs 用 Playwright 掛進來的 window.backendResearch，背後是 Claude＋網路搜尋）才有；
+       * 候選前面夠用的那段（額度兩倍）每家查一次，查到擴張訊號的排前面——是排序不是門檻，訊號那句寫進訪談內容，
+       * 來源網址存進追蹤狀態（詳細頁看得到）。送出去的只有公司名、統編、地址。
+       */
+      const intel = new Map();
+      let research = null;
+      if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
+        const taxOf = (k) => (/^\d{8}$/.test(k) ? k : '');
+        const items = [
+          ...merged.slice(0, enough).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c) })),
+          ...bz.slice(0, enough).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '' })),
+        ];
+        try {
+          const got = (await window.backendResearch(items)) || {};
+          Object.entries(got).forEach(([k, v]) => { if (v) intel.set(k, v); });
+          const score = (k) => { const v = intel.get(k); return v && v.expansion ? (v.score || 1) : 0; };
+          merged = merged.map((c, i) => [c, i]).sort((a, b) => score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
+          bz = bz.map((r, i) => [r, i]).sort((a, b) => score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
+          research = { asked: items.length, withSignals: [...intel.values()].filter((v) => v.expansion).length };
+        } catch (err) { console.error('網路查擴張訊號', err); research = { asked: items.length, withSignals: 0, error: String(err && err.message ? err.message : err) }; }
       }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
@@ -3420,8 +3444,12 @@
         // 訪談紀錄只留重點（使用者：「在訪談紀錄那的文字有點太多，能盡量給我重點就好嘛」）：其他條件、也在哪幾份、保底不寫
         void extra; void also; void via;
         r._why = sig.length ? `符合：${sig.join('、')}` : '沒有擴張或同業訊號，補位';
+        // 用「，」接：登記清冊那頁寫訪談內容只留「；」前面那段，網路查到的要留下來
+        const it = intel.get(c.key);
+        if (it && it.expansion && it.summary) r._why += `，網路：${it.summary}`;
         bySrc.get(k).push(r);
       });
+      pickB.forEach((r) => { const it = intel.get(bizKey(r)); if (it && it.expansion && it.summary) r._why = `${r._why ? `${r._why}，` : ''}網路：${it.summary}`; });
       const parts = [];
       SRC.forEach((x) => { const list = bySrc.get(x.key); if (list.length) parts.push(x.mod.toStandardCsv(list, list.map(() => day))); });
       if (pickB.length) parts.push(window.Biz.toStandardCsv(pickB, pickB.map(() => day)));
@@ -3441,6 +3469,13 @@
         }
         await reload(); render(); scheduleSync();
       }
+      if (intel.size) {
+        for (const v of allViews().filter((x) => x.source === name)) {
+          const it = intel.get(String(v.taxId || '').replace(/\D/g, '')) || intel.get(String(v.company || '').replace(/\s/g, ''));
+          if (it) { try { await saveState(v.id, { intel: { at: Date.now(), expansion: !!it.expansion, score: it.score || 0, summary: it.summary || '', sources: (it.sources || []).slice(0, 5) } }); } catch (err) { console.error('存網路查到的訊號', err); } }
+        }
+        await reload(); render(); scheduleSync();
+      }
       // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖（後台用 awaitPhones 等它跑完）
       const phonesDone = (async () => {
         const done = {};
@@ -3455,7 +3490,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length,
+      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;
@@ -4429,6 +4464,7 @@
       r.pinDate ? el('span', { className: 'badge badge-pin', textContent: `📌 固定 ${dateLabel(r.nextDate).slice(5)}`, title: '這天一定要打：重排、挪日、移到下週都不會動到' }) : '',
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
+      r.intel && r.intel.expansion ? el('span', { className: 'badge badge-intel', textContent: '🌐 網路有擴張訊號', title: r.intel.summary }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
@@ -5436,6 +5472,13 @@
       body.append(el('p', { className: 'muted', textContent: `電話：${r.phoneRaw}` }));
     }
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
+    // 後台挑名單時用網路查到的擴張訊號（版本 322）：那一句＋來源網址
+    if (r.intel) {
+      body.append(el('p', { className: 'muted intel-line' }, [
+        document.createTextNode(`🌐 ${dateLabel(isoOfMs(r.intel.at))} 網路查到：${r.intel.expansion && r.intel.summary ? r.intel.summary : '沒有擴張訊號'}`),
+        ...(r.intel.sources || []).map((u, i) => el('a', { href: u, target: '_blank', rel: 'noopener', textContent: `　來源 ${i + 1}` })),
+      ]));
+    }
     if (r.phoneSource && r.phoneSource.kind === 'trade' && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source', textContent: `電話來自貿易署出進口廠商登記${r.phoneSource.issued ? `（核發 ${r.phoneSource.issued}）` : ''}` }));
     } else if (r.phoneSource && r.phones.length) {
