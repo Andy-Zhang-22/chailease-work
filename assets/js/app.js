@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-320';
+  const APP_VERSION = '20261010-321';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1551,15 +1551,20 @@
     }
     return null;
   }
+  /** 後台每月用 Google 地圖查到的（phoneBackGoogle，存在會同步的設定 phone-back-google）：id → { tel, name, address, … } */
+  const googlePhoneBack = () => { try { return new Map((JSON.parse(registryPref('phone-back-google') || '[]') || []).map((h) => [h.id, h])); } catch (e) { return new Map(); } };
   async function phonesOfExcluded(list) {
     const out = new Map();
-    const want = list.filter((e) => e.taxId && !e.keep);
+    const gmap = googlePhoneBack();
+    const want = list.filter((e) => !e.keep && (e.taxId || gmap.has(e.id)));
     if (!want.length) return out;
-    await loadPhoneSources();
+    if (want.some((e) => e.taxId)) await loadPhoneSources();
     for (const e of want) {
-      const p = await publicPhoneOf(e.taxId);
-      // 空號收起來的：公開資料給的還是那支打不通的，不算查到
-      if (p && !(e.deadTels || []).includes(taxOnly(p.tel))) out.set(e.id, p);
+      const dead = (t) => (e.deadTels || []).includes(taxOnly(t));   // 空號收起來的：給的還是那支打不通的，不算查到
+      const p = e.taxId ? await publicPhoneOf(e.taxId) : null;
+      if (p && !dead(p.tel)) { out.set(e.id, p); continue; }
+      const g = gmap.get(e.id);
+      if (g && g.tel && !dead(g.tel)) out.set(e.id, { tel: g.tel, from: `Google 地圖：${g.name || ''}${g.address ? `，${g.address}` : ''}` });
     }
     return out;
   }
@@ -1568,7 +1573,8 @@
   async function phoneBackDaily(opts = {}) {
     const today = todayISO();
     if (!opts.force && phoneBack && phoneBack.day === today) return phoneBack.hits;
-    const list = (await excludedCompanies()).filter((e) => e.noPhone && e.taxId);
+    const gmap = googlePhoneBack();
+    const list = (await excludedCompanies()).filter((e) => e.noPhone && (e.taxId || gmap.has(e.id)));
     const phones = await phonesOfExcluded(list);
     phoneBack = { day: today, hits: list.filter((e) => phones.has(e.id)).map((e) => ({ id: e.id, taxId: e.taxId, company: e.company, ...phones.get(e.id) })) };
     savePhoneBack();
@@ -1576,6 +1582,40 @@
     return phoneBack.hits;
   }
   window.phoneBackDaily = phoneBackDaily;   // 測試用
+
+  /*
+   * 每月一次、後台（feed-drive.mjs）叫的：「找不到電話」收起來的那幾家，公開資料還是沒有的，用 Google 地圖再查一次
+   * （版本 321；使用者點頭的「找不到電話的公司每月再比對」）。只收名稱對得上、有電話的；查到的存進會同步的設定
+   * phone-back-google，各台裝置的名單上方一樣只提醒，放不放回由使用者在「已排除的公司」決定。
+   * 以前查到、還在排除名單上的留著不重查；一次最多查 limit 家，在 Google 的免費額度內。
+   */
+  async function phoneBackGoogle(opts = {}) {
+    const limit = opts.limit || 40;
+    if (!placesKey()) return { tried: 0, found: 0, kept: 0, skipped: 0 };
+    const all = (await excludedCompanies()).filter((e) => e.noPhone && !e.keep);
+    const prev = googlePhoneBack();
+    const pub = await phonesOfExcluded(all.filter((e) => e.taxId && !prev.has(e.id)));   // 公開資料有的不用花 Google 的額度
+    const hits = all.filter((e) => prev.has(e.id)).map((e) => prev.get(e.id));
+    const todo = all.filter((e) => !pub.has(e.id) && !prev.has(e.id)).slice(0, limit);
+    let found = 0;
+    for (const e of todo) {
+      try {
+        const { best } = await placesLookup({ company: e.company, address: '' });
+        if (best && best.level === 'sure' && best.phone && !(e.deadTels || []).includes(taxOnly(best.phone))) {
+          hits.push({ id: e.id, taxId: e.taxId, company: e.company, tel: best.phone, name: best.name, address: best.address, at: Date.now() });
+          found += 1;
+        }
+      } catch (err) {
+        console.error('Google 地圖找電話', e.company, err);
+        if (/金鑰|API|HTTP 4/.test(String(err && err.message))) break;
+      }
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    registryPref('phone-back-google', hits.length ? JSON.stringify(hits) : '');
+    await phoneBackDaily({ force: true });
+    return { tried: todo.length, found, kept: hits.length - found, skipped: pub.size };
+  }
+  window.phoneBackGoogle = phoneBackGoogle;   // 後台、測試用
 
   function renderPhoneBackBar() {
     const bar = $('#phoneBackBar');
@@ -3247,12 +3287,17 @@
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
    * opts.more：再補一批（額度那麼多家），不管今天已經幾家——使用者：「當天我名單用完後，我會再要求你再補給我」。
    */
+  /**
+   * @returns 挑的結果摘要（後台 feed-drive.mjs 印筆數用；畫面上照樣用 toast）：
+   *   { picked, got, lost, skippedNoPhone, day, have, quota, bySrc, biz, name, phones? }；放假 { holiday }；排滿 { full }
+   * opts.awaitPhones：等「出進口電話表 → Google 地圖補電話」跑完再回（平常是背景跑，不擋提示）
+   */
   async function dailyFeed(opts) {
-    const { force = false, more = false } = opts || {};
+    const { force = false, more = false, awaitPhones = false } = opts || {};
     if (feeding) return;
     if (!force && !more && !dailyFeedOn()) return;
     const today = todayISO();
-    if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return;
+    if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return { picked: 0, holiday: true, day: today };
     if (!force && !more && registryPref('daily-feed-on') === today) return;
     if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
     if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
@@ -3277,7 +3322,7 @@
       const day = (window.Holidays && !window.Holidays.isWorkday(today)) ? window.Holidays.nextWorkday(today).iso : today;
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
-      if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return; }
+      if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return { picked: 0, full: true, have, quota: newQuota(), day }; }
       const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
@@ -3363,7 +3408,7 @@
       bizTake = Math.min(bz.length, need - mixTake);
       const picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
       const pickB = bz.slice(0, bizTake);
-      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話（Google 地圖也查不到），今天沒補` : '六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return; }
+      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話（Google 地圖也查不到），今天沒補` : '六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return { picked: 0, skippedNoPhone, have, quota: newQuota(), day }; }
       // 每家用哪一頁的資料匯入：保底挑到的用那一頁，其他照動保 → 登記清冊 → 出進口 → 請人 → 電子發票；「符合：」改寫成合併後的訊號
       const bySrc = new Map(SRC.map((x) => [x.key, []]));
       picks.forEach(({ c, via }) => {
@@ -3396,7 +3441,13 @@
         }
         await reload(); render(); scheduleSync();
       }
-      tradePhones(name).catch((e) => console.error('出進口廠商補電話失敗', e)).then(() => autoPhones(name)).catch((e) => console.error('每日新名單自動找電話失敗', e));   // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖
+      // 背景跑，不擋提示：先對貿易署的電話表，剩下的才去 Google 地圖（後台用 awaitPhones 等它跑完）
+      const phonesDone = (async () => {
+        const done = {};
+        try { done.trade = await tradePhones(name); } catch (e) { console.error('出進口廠商補電話失敗', e); }
+        try { done.google = await autoPhones(name); } catch (e) { console.error('每日新名單自動找電話失敗', e); }
+        return done;
+      })();
       // 匯入時靠名稱比對到已在名單的會被略過（名單上那筆沒統編就只能比名稱），挑了 15 進來 11 要講清楚
       const picked = picks.length + pickB.length;
       const got = state.records.filter((r) => r.source === name).length;
@@ -3404,6 +3455,10 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
+      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length,
+        bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
+      if (awaitPhones) summary.phones = await phonesDone;
+      return summary;
     } catch (err) {
       console.error('每日新名單失敗', err);
       toast(`今天的新名單沒挑成：${err && err.message ? err.message : err}`);
@@ -3525,6 +3580,8 @@
         el('span', { className: 'muted', textContent: '完全新的名單一天' }), quotaInput,
         el('span', { className: 'muted', textContent: '家（另外算，不佔主力的額度）' }),
       ]));
+      // 後台每天清晨挑的結果（feed-drive.mjs 寫進同步檔的設定；版本 321）
+      if (registryPref('feed-drive-summary')) host.append(el('p', { className: 'muted feed-drive-summary', textContent: `後台：${registryPref('feed-drive-summary')}` }));
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
         const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
@@ -6561,6 +6618,8 @@ export default {
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
     'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
+    // 後台每月用 Google 地圖幫「找不到電話」的再查一次的結果：各台裝置都要看得到
+    'phone-back-google',
     // 每天自動照上限重排：開關、今天跑過了沒
     'auto-rebalance', 'auto-rebalance-on',
     // Claude 分身專案的網址：電腦設好，手機也能直接開
@@ -8393,6 +8452,8 @@ export default {
      * 只給它讀 allViews（有快取）與 openDetail，名單的邏輯還是全在這裡。
      */
     window.customerViews = () => allViews();
+    window.dailyFeed = dailyFeed;   // 後台（feed-drive.mjs 用無頭瀏覽器開網站挑新名單）、測試用
+    window.runSync = runSync;
     window.openCustomer = (id) => openDetail(id);
     window.openCustomerLog = (id) => openDetail(id, { log: true });   // 各來源分頁「已在名單　📝 記錄」
     // 統編或名稱（台／臺、空白不計，跟匯入比對重複同一套）找名單上那一家：找名單的分頁加一家時其實早就在名單上，就打開這一筆
