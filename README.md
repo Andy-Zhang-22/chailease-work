@@ -4474,3 +4474,17 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 載入方式：repo 根目錄 `.claude-plugin/marketplace.json` 把 repo 本身當 marketplace，`.claude/settings.json` 用
   `extraKnownMarketplaces`＋`enabledPlugins` 啟用，每個 session 開始時自動載。這個 session 寫的時候使用者沒開熱載入，下個 session 才生效。
 - 測試：`claude plugin validate`、`claude plugin test`（4 個測試：假號碼規則、Write 擋／放行、Edit、Bash 不是 commit 不檢查）、`tsc` 型別檢查都過。
+
+## 主力客戶每月上網查擴張訊號（版本 328）
+
+使用者：「Claude api 金鑰還能應用在系統的哪裡？」→ 建議「主力客戶每月上網查一次擴張訊號」→「主力客戶那個做」。
+
+- `customerIntel({ max })`（app.js）：主力名單（`source` 不是每日新名單）、有統編、沒標禁止推廣的，30 天內查過的跳過；
+  有機會的先、最近聯絡過的先；一次最多 `max` 家，15 家一批交給 `window.backendResearch`（跟新名單同一條 Claude＋網路搜尋）。
+  結果存進追蹤狀態 `intel`（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行「🌐 日期 網路查到：…　來源」。
+- 「客戶新動態」那條（`renderSignalBar`）把三個月內查到訊號的主力客戶也算進去，清單那行寫「網路：…」；每日新名單不算（卡片本來就掛 🌐）。
+- 後台 `feed-drive.mjs` 多一個 `--recheck auto|yes|no`：每月 1 日（或手動 yes）叫 `customerIntel({ max: 120 })`，印查了幾家、幾家有訊號、跳過幾家、還有幾家下個月輪到。
+  workflow 多輸入 `recheck`，timeout 25 → 40 分鐘。沒設 Claude 就跳過。
+- 費用：Sonnet 一家約 NT$0.7，一個月 120 家約 NT$80；名單約 780 家，大約半年輪一遍（有機會的每月都排前面）。
+- 送出去的只有公司名、統編、地址。Actions 紀錄只印筆數。
+- 測試：`test-feed-backend.js` 加主力客戶一那段（只查主力、存 intel、卡片 🌐、新動態清單、詳細頁、30 天內跳過）。版號 20261010-328。

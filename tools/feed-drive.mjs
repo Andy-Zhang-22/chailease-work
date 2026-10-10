@@ -16,7 +16,8 @@
  * report 模式：整套照跑，但送去雲端硬碟的「上傳」都被攔下來假裝成功，什麼都不會寫回（只看筆數對不對）。
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
- * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no]
+ * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no]
+ *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
  *   需要：GDRIVE_ACCESS_TOKEN（或 GDRIVE_SERVICE_ACCOUNT）、PLACES_API_KEY；本機測試可設 PW_CHROMIUM 指定瀏覽器。
  *   Claude（版本 322）：有 Workload Identity 聯合的環境變數（ANTHROPIC_FEDERATION_RULE_ID…，workflow 設）或 ANTHROPIC_API_KEY，
  *   就在挑名單前用 Claude＋網路搜尋查候選的擴張訊號（tools/intel.mjs），查到的排前面。
@@ -36,6 +37,7 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
 const MODE = opt('mode', 'report') === 'write' ? 'write' : 'report';
 const NOPHONE = opt('nophone', 'auto');
+const RECHECK = opt('recheck', 'auto');
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 // Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
@@ -75,6 +77,7 @@ async function main() {
   const file = await findFile(token);
   if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${saEmail || '（見設定）'}（要給「編輯者」權限）`);
   const doNoPhone = NOPHONE === 'yes' || (NOPHONE === 'auto' && taipeiDate().getUTCDate() === 1);
+  const doRecheck = RECHECK === 'yes' || (RECHECK === 'auto' && taipeiDate().getUTCDate() === 1);
   out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（候選先上網查擴張訊號）` : '，沒設 Claude（不上網查訊號）'}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
 
   const { chromium } = require('playwright');
@@ -154,6 +157,14 @@ async function main() {
     if (doNoPhone) {
       const pb = await page.evaluate(() => window.phoneBackGoogle());
       out(`找不到電話的：Google 地圖查了 ${pb.tried} 家、查到 ${pb.found} 家；以前查到還留著的 ${pb.kept} 家、公開資料有的 ${pb.skipped} 家`);
+    }
+    // 4b. 每月一次：主力客戶上網查擴張訊號（版本 328；要有 Claude）
+    if (doRecheck) {
+      if (!CLAUDE_ON) out('主力客戶查訊號：沒設 Claude，跳過');
+      else {
+        const ci = await page.evaluate(() => window.customerIntel({ max: 120 }));
+        out(`主力客戶查訊號：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；30 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
+      }
     }
 
     // 5. 寫回：把這次的結果留一句在同步檔的設定（網站名單最上面那條「今天的新名單」下面會顯示，三天內的才顯示），釘住雲端目前的版本，再同步一次

@@ -3,7 +3,7 @@
 # 使用者：「每日新名單＋補電話：挑今天的新名單、查 Google 地圖電話、沒電話的跳過，5 點做完寫進同步檔」→「Ok」。
 # 做法：Actions 上開無頭的 Chromium 打開網站本身，用服務帳號的權杖同步使用者雲端硬碟的名單，
 # 叫網站自己的 dailyFeed 挑今天的新名單、補電話，再同步回去。跟使用者手機上跑的是同一份程式。
-# 每月 1 日順便把「找不到電話」收起來的公司用 Google 地圖再查一次（只提醒，不放回）。
+# 每月 1 日順便把「找不到電話」收起來的公司用 Google 地圖再查一次（只提醒，不放回），並把主力客戶拿去上網查擴張訊號（版本 328）。
 #
 # 需要：
 #   Actions 變數 GCP_WIF_PROVIDER＋GCP_SERVICE_ACCOUNT（跟商工登記更新同一組）
@@ -32,6 +32,12 @@ on:
         default: 'auto'
         type: choice
         options: [auto, 'yes', 'no']
+      recheck:
+        description: '主力客戶上網查擴張訊號：auto＝每月 1 日；yes＝這次查；no＝不查（一個月最多 120 家）'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, 'yes', 'no']
 
 permissions:
   contents: read
@@ -44,7 +50,7 @@ concurrency:
 jobs:
   feed:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40   # 每月 1 日多查主力客戶 120 家，約 10 分鐘
     steps:
       - uses: actions/checkout@v4
 
@@ -90,4 +96,5 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           MODE: ${{ inputs.mode || 'write' }}
           NOPHONE: ${{ inputs.nophone || 'auto' }}
-        run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE"
+          RECHECK: ${{ inputs.recheck || 'auto' }}
+        run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK"

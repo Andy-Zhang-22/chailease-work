@@ -54,7 +54,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  const researched=[];
  await pg.exposeFunction('backendResearch', async(items)=>{ researched.push(items.map(i=>`${i.name}|${i.taxId}|${i.address}`)); const out={}; items.forEach(i=>{ out[i.key]= i.taxId==='22222222'?{expansion:true,score:2,summary:'104 正在徵 8 名作業員（2026/09）',sources:['https://www.104.com.tw/x'],phone:''}
    : i.taxId==='33333333'?{expansion:false,score:0,summary:'',sources:['https://example.com/c'],phone:'02-2299-3333'}
-   : i.taxId==='44444444'?{expansion:true,score:3,summary:'（不該被問到）',sources:[],phone:'02-0000-4444'}:{expansion:false,score:0,summary:'',sources:[],phone:''}; }); return out; });
+   : i.taxId==='44444444'?{expansion:true,score:3,summary:'（不該被問到）',sources:[],phone:'02-0000-4444'}
+   : i.taxId==='99999991'?{expansion:true,score:2,summary:'官網：2026/09 新廠動工',sources:['https://example.com/m'],phone:''}:{expansion:false,score:0,summary:'',sources:[],phone:''}; }); return out; });
  await pg.goto('http://localhost:9635/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
@@ -146,6 +147,22 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  const tomb2=await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='主力客戶一有限公司'); return v.blocked; });
  chk(tomb2===false, '沒自動標禁止推廣');
+ // ===== 版本 328 =====
+ // 主力客戶每月上網查擴張訊號：只查主力名單（每日新名單不算）、有統編、沒禁止推廣的 → 主力客戶一；存進 intel、卡片掛 🌐、新動態那條有「網路：…」；30 天內查過的下次跳過
+ const before328=researched.length;
+ const ci=await pg.evaluate(()=>window.customerIntel());
+ chk(ci && ci.asked===1 && ci.withSignals===1 && ci.strong===1 && ci.skipped===0, `customerIntel：只查主力客戶一：${JSON.stringify(ci)}`);
+ chk(researched.length===before328+1 && researched[before328].length===1 && /主力客戶一有限公司\|99999991\|/.test(researched[before328][0]), `送出去的是公司名、統編、地址：${researched[before328]}`);
+ await pg.waitForTimeout(500);
+ chk((await pg.locator('#cards .card:has-text("主力客戶一") .badge-intel').count())===1, '卡片掛「🌐 網路有擴張訊號」');
+ await pg.click('#signalBar button'); await pg.waitForTimeout(300);
+ chk(/網路：官網：2026\/09 新廠動工/.test(await pg.textContent('#editorBody')), `新動態清單有網路那句：${(await pg.textContent('#editorBody')).replace(/\s+/g,' ').slice(0,160)}`);
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ await pg.locator('#cards .card:has-text("主力客戶一") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ chk(/🌐 .*網路查到：官網：2026\/09 新廠動工/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), '詳細頁一行網路查到');
+ await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
+ const ci2=await pg.evaluate(()=>window.customerIntel());
+ chk(ci2 && ci2.asked===0 && ci2.skipped===1, `30 天內查過的跳過：${JSON.stringify(ci2)}`);
  // 後台模式旗標：網站一開不自己挑（daily-feed-auto 沒關也一樣），等後台叫；自動挑關著時 dailyFeed() 回 off、挑過回 done
  await pg.evaluate(()=>{ localStorage.setItem('backend-run','1'); localStorage.removeItem('daily-feed-auto'); localStorage.removeItem('daily-feed-on'); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(3000);
