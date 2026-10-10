@@ -3380,20 +3380,27 @@
        * 來源網址存進追蹤狀態（詳細頁看得到）。官網、104 上查到的電話一起回來，下面找電話那關直接用，省 Google 地圖的額度。
        * 送出去的只有公司名、統編、地址。
        */
+      /*
+       * 跟使用者的規則怎麼合（使用者：「最後是有效的名單要滿足我的規則」→ 選 A）：規則優先、訊號其次。
+       * 符合規則＝資本額 500～6,000 萬 且 我的分公司（利率不敏感本來就是排序裡的訊號）。只拿符合規則的去上網查，
+       * 排序是「符合規則的在前 → 有訊號的在前 → 原本的名次」；符合規則的不夠額度才用不符合的補（排序不是門檻，額度一定補滿）。
+       */
       const intel = new Map();
       let research = null;
+      const rulesOkM = (c) => !!c.capOk && c.branchRank === 0;
+      const rulesOkB = (r) => { const f = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; return !!(f && f.capOk && f.branchRank === 0); };
       if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
         const taxOf = (k) => (/^\d{8}$/.test(k) ? k : '');
         const items = [
-          ...merged.slice(0, enough).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c) })),
-          ...bz.slice(0, enough).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '' })),
+          ...merged.filter(rulesOkM).slice(0, enough).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c) })),
+          ...bz.filter(rulesOkB).slice(0, enough).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '' })),
         ];
         try {
-          const got = (await window.backendResearch(items)) || {};
+          const got = items.length ? (await window.backendResearch(items)) || {} : {};
           Object.entries(got).forEach(([k, v]) => { if (v) intel.set(k, v); });
           const score = (k) => { const v = intel.get(k); return v && v.expansion ? (v.score || 1) : 0; };
-          merged = merged.map((c, i) => [c, i]).sort((a, b) => score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
-          bz = bz.map((r, i) => [r, i]).sort((a, b) => score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
+          merged = merged.map((c, i) => [c, i]).sort((a, b) => Number(rulesOkM(b[0])) - Number(rulesOkM(a[0])) || score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
+          bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
           research = { asked: items.length, withSignals: [...intel.values()].filter((v) => v.expansion).length };
         } catch (err) { console.error('網路查擴張訊號', err); research = { asked: items.length, withSignals: 0, error: String(err && err.message ? err.message : err) }; }
       }
