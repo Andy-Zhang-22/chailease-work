@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-327';
+  const APP_VERSION = '20261010-328';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -596,12 +596,15 @@
     const bar = $('#signalBar');
     if (!bar) return;
     bar.textContent = '';
-    const list = allViews().filter((v) => v.signals && v.signals.length && !v.blocked);
+    // 主力客戶每月上網查到的擴張訊號（customerIntel，版本 328）也算新動態：三個月內、不是每日新名單（新名單卡片本來就掛 🌐）
+    const webOk = (v) => v.intel && v.intel.expansion && v.intel.summary && Date.now() - (v.intel.at || 0) <= 92 * 86400000 && !FRESH_SOURCE_RE.test(String(v.source || ''));
+    const lineOf = (v) => [...(v.signals || []).map((x) => `${x.src}：${x.text}`), ...(webOk(v) ? [`網路：${v.intel.summary}`] : [])].join('；');
+    const list = allViews().filter((v) => ((v.signals && v.signals.length) || webOk(v)) && !v.blocked);
     bar.hidden = !list.length;
     if (!list.length) return;
     bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `📣 ${list.length} 家客戶最近三個月有新動態`,
-      title: list.slice(0, 12).map((v) => `${v.company}：${v.signals.map((x) => `${x.src} ${x.text}`).join('、')}`).join('\n'),
-      onclick: () => openSimpleList('客戶新動態', '這幾家最近三個月出現在新進來的公開資料裡（後台每天比對）。', list.map((v) => ({ v, text: v.signals.map((x) => `${x.src}：${x.text}`).join('；') }))) }));
+      title: list.slice(0, 12).map((v) => `${v.company}：${lineOf(v)}`).join('\n'),
+      onclick: () => openSimpleList('客戶新動態', '這幾家最近三個月出現在新進來的公開資料裡（後台每天比對），或後台每月上網查到擴張訊號。', list.map((v) => ({ v, text: lineOf(v) }))) }));
   }
   /** 一個簡單的清單視窗：公司名＋一句話＋打開 */
   function openSimpleList(title, hint, rows) {
@@ -638,6 +641,35 @@
     return { checked, withSignals, changed };
   }
   window.customerSignals = customerSignals;   // 後台、測試用
+  /*
+   * 主力客戶每月上網查一次擴張訊號（版本 328；使用者：「Claude api 金鑰還能應用在系統的哪裡？」→「主力客戶那個做」）。
+   * 後台每月 1 日叫：主力名單（不是每日新名單）、沒標禁止推廣、有統編的，一個月最多 max 家；有機會的先、最近聯絡過的先；
+   * 30 天內查過的跳過。結果存進追蹤狀態 intel（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行、
+   * 名單上方「客戶新動態」那條也算進去。送出去的只有公司名、統編、地址。
+   */
+  async function customerIntel({ max = 120 } = {}) {
+    if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0, skipped: 0 };
+    const recent = Date.now() - 30 * 86400000;
+    const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !v.blocked && !FRESH_SOURCE_RE.test(String(v.source || '')));
+    const fresh = pool.filter((v) => !(v.intel && v.intel.at > recent));
+    fresh.sort((a, b) => Number(b.chance === 'yes') - Number(a.chance === 'yes') || String(b.lastDate || '').localeCompare(String(a.lastDate || '')));
+    const batchItems = fresh.slice(0, max);
+    let withSignals = 0; let strong = 0; let asked = 0;
+    for (let i = 0; i < batchItems.length; i += 15) {
+      const batch = batchItems.slice(i, i + 15);
+      const got = (await window.backendResearch(batch.map((v) => ({ key: v.id, name: v.company, taxId: String(v.taxId || '').replace(/\D/g, ''), address: v.address || '' })))) || {};
+      asked += batch.length;
+      for (const v of batch) {
+        const it = got[v.id];
+        if (!it) continue;
+        if (it.expansion) { withSignals += 1; if ((it.score || 0) >= 2) strong += 1; }
+        await saveState(v.id, { intel: { at: Date.now(), expansion: !!it.expansion, score: it.score || 0, summary: it.summary || '', sources: (it.sources || []).slice(0, 5) } });
+      }
+    }
+    if (asked) { await reload(); render(); scheduleSync(); }
+    return { asked, withSignals, strong, skipped: pool.length - fresh.length, left: Math.max(0, fresh.length - batchItems.length) };
+  }
+  window.customerIntel = customerIntel;   // 後台、測試用
 
   function renderRemindBar() {
     renderFeedBar();

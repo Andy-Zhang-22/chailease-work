@@ -4129,7 +4129,7 @@ findbiz 的公司登記頁 `/fts/company/統編`。原本登記清冊、動產�
 - 系統原本只認台灣格式，三處要改：
   - **國際電話**（`extractPhones`）：
     - 「+66-2-381-8780」「+66(0)25419775」「泰國: +66… / 台灣: +886…」照國碼撥（dial 是「+國碼號碼」，國碼後面的 (0) 去掉），冒號前的字當備註。
-    - 原本泰國的「(02)3229334」會被當成台北 02，按下去撥到台灣。所以名錄的電話整理時一律轉成 +66 格式。
+    - 原本泰國的「(02)2345678」會被當成台北 02，按下去撥到台灣。所以名錄的電話整理時一律轉成 +66 格式。
   - **國家欄不是台灣的列**（`toRecords`）：照表頭位置直接讀，不套台灣格式的驗證。原本英文公司名、外國地址、外國人名過不了驗證，產業別被塞進公司名、地址整格丟掉。英文公司名保留空白。
   - **商工登記不查外國公司**（`registryBatch`）：台灣查不到，免得每天記一筆「查不到」。
 - 測試：`normalize.test.js` 加國際電話與外國列的單元測試。
@@ -4459,3 +4459,32 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 合併頁卡片上的來源名稱改成純文字，不再跳到那一頁。代價：各頁特有的篩選（動保契約類別、清冊案由）沒地方用了。
 - 測試：`test-nav.js`（三個按鈕、沒按鈕的頁切過去不亮）、`test-mix.js`（來源名稱是文字）、`test-chattel／trade／factory／industry／nhi.js`
   改成確認按鈕不在。版號 20261010-327。
+
+## Claude 的守門員 mod：repo-guard
+
+使用者問「mods，你有什麼建議嗎」→ 建議兩個守門員 →「照你建議的做」。這不是網站功能，是改 Claude Code 自己的行為，所以版號不動。
+
+- `.claude/mods/repo-guard/`：hooks 模組 `hooks/register.ts`，三個 `tool.call` hook。
+  - Write／Edit：寫進 repo 的內容有看起來是真的台灣電話就擋（`leads/`、`/tmp` 不管）。
+  - Bash 的 `git commit`：相對 HEAD 新增的行＋未追蹤的文字檔有真電話 → 擋；改了 `assets/`、`index.html`、`tools/`、`.github/`
+    但 version.json 跟 HEAD 一樣 → 擋；`APP_VERSION`、`?v=`、version.json 三處不一致 → 擋；版號有換但 README 沒有「（版本 N）」→ 擋。
+    過了就跳一句「個資、版號都檢查過了」。
+  - 假電話的規則（`looksFake`）：去掉區碼後四個一樣、四個連號、三三一樣、四組疊字。掃了目前 repo（leads/ 以外）：
+    7 個測試檔有這規則認不出是假的號碼，使用者選「改成假號碼」：全部換成 2222、1234 這種明顯假的，測試照過。
+- 載入方式：repo 根目錄 `.claude-plugin/marketplace.json` 把 repo 本身當 marketplace，`.claude/settings.json` 用
+  `extraKnownMarketplaces`＋`enabledPlugins` 啟用，每個 session 開始時自動載。這個 session 寫的時候使用者沒開熱載入，下個 session 才生效。
+- 測試：`claude plugin validate`、`claude plugin test`（4 個測試：假號碼規則、Write 擋／放行、Edit、Bash 不是 commit 不檢查）、`tsc` 型別檢查都過。
+
+## 主力客戶每月上網查擴張訊號（版本 328）
+
+使用者：「Claude api 金鑰還能應用在系統的哪裡？」→ 建議「主力客戶每月上網查一次擴張訊號」→「主力客戶那個做」。
+
+- `customerIntel({ max })`（app.js）：主力名單（`source` 不是每日新名單）、有統編、沒標禁止推廣的，30 天內查過的跳過；
+  有機會的先、最近聯絡過的先；一次最多 `max` 家，15 家一批交給 `window.backendResearch`（跟新名單同一條 Claude＋網路搜尋）。
+  結果存進追蹤狀態 `intel`（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行「🌐 日期 網路查到：…　來源」。
+- 「客戶新動態」那條（`renderSignalBar`）把三個月內查到訊號的主力客戶也算進去，清單那行寫「網路：…」；每日新名單不算（卡片本來就掛 🌐）。
+- 後台 `feed-drive.mjs` 多一個 `--recheck auto|yes|no`：每月 1 日（或手動 yes）叫 `customerIntel({ max: 120 })`，印查了幾家、幾家有訊號、跳過幾家、還有幾家下個月輪到。
+  workflow 多輸入 `recheck`，timeout 25 → 40 分鐘。沒設 Claude 就跳過。
+- 費用：Sonnet 一家約 NT$0.7，一個月 120 家約 NT$80；名單約 780 家，大約半年輪一遍（有機會的每月都排前面）。
+- 送出去的只有公司名、統編、地址。Actions 紀錄只印筆數。
+- 測試：`test-feed-backend.js` 加主力客戶一那段（只查主力、存 intel、卡片 🌐、新動態清單、詳細頁、30 天內跳過）。版號 20261010-328。

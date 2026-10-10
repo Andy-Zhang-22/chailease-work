@@ -1,0 +1,8 @@
+{
+  "extraKnownMarketplaces": {
+    "chailease-work": { "source": { "source": "github", "repo": "Andy-Zhang-22/chailease-work" } }
+  },
+  "enabledPlugins": {
+    "repo-guard@chailease-work": true
+  }
+}
