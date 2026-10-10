@@ -1,4 +1,5 @@
-# 一次性探路：Claude API＋網路搜尋（tools/intel.mjs）在 Actions 上接得通嗎。拿一家公開的上市公司試一筆，只印有沒有訊號、幾個來源。看完就刪。
+# 一次性探路：Claude 的 Workload Identity 聯合＋網路搜尋（tools/intel.mjs）在 Actions 上接得通嗎。
+# 拿一家公開的上市公司試一筆，只印有沒有訊號、幾個來源。聯合規則對準 main 分支，所以要在 main 上手動執行。看完就刪。
 name: 探路 Claude 網路搜尋
 
 on:
@@ -6,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   probe:
@@ -16,12 +18,21 @@ jobs:
         with:
           node-version: '22'
       - run: npm i --no-save @anthropic-ai/sdk
+      - name: 跟 GitHub 要 OIDC token
+        run: |
+          curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value > "$RUNNER_TEMP/anthropic-jwt"
       - env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          ANTHROPIC_IDENTITY_TOKEN_FILE: ${{ runner.temp }}/anthropic-jwt
         run: |
           node --input-type=module -e "
           import { researchCompanies } from './tools/intel.mjs';
-          const r = await researchCompanies([{ key: '22099131', name: '台灣積體電路製造股份有限公司', taxId: '22099131', address: '新竹市力行六路8號' }], { apiKey: process.env.ANTHROPIC_API_KEY, log: (m) => console.log(m) });
+          const r = await researchCompanies([{ key: '22099131', name: '台灣積體電路製造股份有限公司', taxId: '22099131', address: '新竹市力行六路8號' }], { log: (m) => console.log(m) });
           const x = r.results['22099131'];
           console.log('asked', r.asked, 'withSignals', r.withSignals, 'failed', r.failed, 'result', x ? JSON.stringify({ expansion: x.expansion, score: x.score, summaryLen: x.summary.length, sources: x.sources.length }) : null);
           "

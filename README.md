@@ -4367,12 +4367,18 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   `fallbacks: "default"`）查一家公司最近一年的擴張訊號（徵才、新廠新設備、搬遷擴大、得標、增資、新產品新市場、營收成長），
   回 `{ expansion, score 0～3, summary 一句、sources 網址 }`；`parseIntel` 從回覆挖最後一段 JSON（單元測試 `intel.test.js`）。
   同名公司要用統編或地址確認，確認不了當沒有。`pause_turn` 就原樣送回去接著跑。一次 3 家並行。
-- 後台 `feed-drive.mjs`：有 Secrets `ANTHROPIC_API_KEY` 才用 Playwright 的 `exposeFunction` 把 `window.backendResearch` 掛進網站；
+- 身分用 **Workload Identity 聯合**，repo 裡沒有任何 sk-ant 金鑰（使用者：「我想要身份聯合的方式來做」「不然我怕會有洩漏金鑰的風險」）：
+  Claude 主控台「Workload identity → Connect workload → GitHub Actions」建發行者（github-actions、discovery）、服務帳號（developer）、
+  規則（subject 對準 `repo:Andy-Zhang-22/chailease-work:ref:refs/heads/main`、audience `https://api.anthropic.com`、scope `workspace:developer`、
+  權杖壽命 3600 秒）；規則、組織、服務帳號的 ID 放 Actions 變數 `ANTHROPIC_FEDERATION_RULE_ID`／`ANTHROPIC_ORGANIZATION_ID`／`ANTHROPIC_SERVICE_ACCOUNT_ID`
+  （不是秘密）。workflow 跟 GitHub 要一次性的 OIDC token 寫進 `$RUNNER_TEMP/anthropic-jwt`，SDK 看 `ANTHROPIC_IDENTITY_TOKEN_FILE` 自己換短效權杖。
+  規則只認 main 分支，所以只有排程（在 main 上跑）查得到；分支上的手動執行查不到、其他照舊。`ANTHROPIC_API_KEY` 仍接受（本機測試）。
+- 後台 `feed-drive.mjs`：有聯合變數（或金鑰）才用 Playwright 的 `exposeFunction` 把 `window.backendResearch` 掛進網站；
   網站的 `dailyFeed` 在電話關卡之後、分配額度之前，把候選前面夠用的那段（額度兩倍、有電話的）交過去查，
   查到的排前面（**是排序不是門檻**，不夠的照原本順序補），那句用「，網路：…」接在訪談內容的「每日新名單，符合：…」後面
   （登記清冊那頁只留「；」前面那段，所以用「，」接），來源網址存進追蹤狀態 `intel`。
 - 畫面：卡片標「🌐 網路有擴張訊號」，詳細頁一行「🌐 日期 網路查到：…　來源 1」。沒金鑰、或 Claude 那邊失敗，挑名單照舊。
 - 送出去的只有公司名、統編、地址；不送電話、負責人、備註。Actions 紀錄只印筆數（查了幾家、幾家有訊號、幾家失敗）。
 - 費用：一家約 2～4 次搜尋加一萬多個 token，約 NT$2～3；額度 10 家一天查 20 家約 NT$50，100 美元約兩個月。
-- 探路：`probe-intel.yml` 在 Actions 上拿一家上市公司試一筆確認接得通，看完刪。版號 20261010-322。
+- 探路：`probe-intel.yml` 在 main 上手動跑，拿一家上市公司試一筆確認聯合接得通，看完刪。版號 20261010-322。
 

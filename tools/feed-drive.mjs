@@ -18,7 +18,8 @@
  *
  * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no]
  *   需要：GDRIVE_ACCESS_TOKEN（或 GDRIVE_SERVICE_ACCOUNT）、PLACES_API_KEY；本機測試可設 PW_CHROMIUM 指定瀏覽器。
- *   ANTHROPIC_API_KEY（版本 322）：有設就在挑名單前用 Claude＋網路搜尋查候選的擴張訊號（tools/intel.mjs），查到的排前面。
+ *   Claude（版本 322）：有 Workload Identity 聯合的環境變數（ANTHROPIC_FEDERATION_RULE_ID…，workflow 設）或 ANTHROPIC_API_KEY，
+ *   就在挑名單前用 Claude＋網路搜尋查候選的擴張訊號（tools/intel.mjs），查到的排前面。
  */
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -37,6 +38,9 @@ const MODE = opt('mode', 'report') === 'write' ? 'write' : 'report';
 const NOPHONE = opt('nophone', 'auto');
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+// Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
+const ANTHROPIC_WIF = ['ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_ORGANIZATION_ID', 'ANTHROPIC_SERVICE_ACCOUNT_ID', 'ANTHROPIC_IDENTITY_TOKEN_FILE'].every((k) => (process.env[k] || '').trim());
+const CLAUDE_ON = !!ANTHROPIC_KEY || ANTHROPIC_WIF;
 // Google 金鑰的「網站限制」看 Referer：假裝是從網站本身送出的
 const SITE_URL = (process.env.SITE_URL || (process.env.GITHUB_REPOSITORY ? `https://${process.env.GITHUB_REPOSITORY.split('/')[0].toLowerCase()}.github.io/${process.env.GITHUB_REPOSITORY.split('/')[1]}/` : '')).trim();
 
@@ -71,7 +75,7 @@ async function main() {
   const file = await findFile(token);
   if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${saEmail || '（見設定）'}（要給「編輯者」權限）`);
   const doNoPhone = NOPHONE === 'yes' || (NOPHONE === 'auto' && taipeiDate().getUTCDate() === 1);
-  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${ANTHROPIC_KEY ? '，有 Claude 金鑰（候選先上網查擴張訊號）' : '，沒有 Claude 金鑰（不上網查訊號）'}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
+  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（候選先上網查擴張訊號）` : '，沒設 Claude（不上網查訊號）'}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
 
   const { chromium } = require('playwright');
   const { srv, port } = await serve();
@@ -99,7 +103,7 @@ async function main() {
     page.on('pageerror', () => { pageErrors += 1; });
     // 網站挑名單時把候選丟過來，這邊用 Claude＋網路搜尋查擴張訊號（沒金鑰就不掛，網站照舊）
     const researchStats = { asked: 0, withSignals: 0, failed: 0 };
-    if (ANTHROPIC_KEY) {
+    if (CLAUDE_ON) {
       await page.exposeFunction('backendResearch', async (items) => {
         const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, log: (m) => console.log(`  ${m}`) });
         researchStats.asked += r.asked; researchStats.withSignals += r.withSignals; researchStats.failed += r.failed;

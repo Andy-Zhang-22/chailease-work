@@ -6,7 +6,10 @@
  * 徵才、新廠／新設備／搬遷擴大、得標、增資、新產品新市場、營收成長。查到的排前面（是排序不是門檻，
  * 使用者定的規則），訊號那句寫進訪談內容、來源網址存在客戶的追蹤狀態（詳細頁看得到）。
  *
- * 送出去的只有公司名、統編、地址；不送電話、負責人、備註。金鑰放 Secrets（ANTHROPIC_API_KEY）。
+ * 送出去的只有公司名、統編、地址；不送電話、負責人、備註。
+ * 身分用 Workload Identity 聯合（使用者：「不然我怕會有洩漏金鑰的風險」）：workflow 跟 GitHub 要一次性的 OIDC token 寫進檔案，
+ * SDK 看 ANTHROPIC_FEDERATION_RULE_ID／ANTHROPIC_ORGANIZATION_ID／ANTHROPIC_SERVICE_ACCOUNT_ID／ANTHROPIC_IDENTITY_TOKEN_FILE
+ * 自己拿去換短效的存取權杖，repo 裡沒有任何 sk-ant 金鑰。也接受 ANTHROPIC_API_KEY（本機測試用）。
  * 這個 repo 的 Actions 紀錄是公開的：這裡只印筆數。
  */
 const MODEL = 'claude-opus-5-5';
@@ -67,13 +70,18 @@ async function researchOne(client, item, { maxSearches }) {
  * @param {{key:string,name:string,taxId?:string,address?:string}[]} items
  * @returns {Promise<{results: Object<string, object|null>, asked: number, withSignals: number, failed: number, usage: {input:number, output:number, searches:number}}>}
  */
-export async function researchCompanies(items, { apiKey, concurrency = 3, maxSearches = 4, log = () => {} } = {}) {
+export async function researchCompanies(items, { apiKey = '', concurrency = 3, maxSearches = 4, log = () => {} } = {}) {
   const results = {};
   const usage = { input: 0, output: 0, searches: 0 };
   let withSignals = 0; let failed = 0;
   if (!items.length) return { results, asked: 0, withSignals, failed, usage };
   const { default: Anthropic } = await import('@anthropic-ai/sdk');   // 只有後台裝了套件才載；parseIntel 的測試不用
-  const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 120000 });
+  // 沒給金鑰就不帶 apiKey：SDK 會自己從環境變數走 Workload Identity 聯合（或 ANTHROPIC_API_KEY）。
+  // workflow 沒設的變數會是空字串，SDK 可能當成「有設」（空的 ANTHROPIC_API_KEY 會壓過聯合），先清掉
+  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_PROFILE', 'ANTHROPIC_WORKSPACE_ID', 'ANTHROPIC_IDENTITY_TOKEN_FILE', 'ANTHROPIC_IDENTITY_TOKEN']) {
+    if (process.env[k] !== undefined && !String(process.env[k]).trim()) delete process.env[k];
+  }
+  const client = new Anthropic({ ...(apiKey ? { apiKey } : {}), maxRetries: 2, timeout: 120000 });
   const queue = items.slice();
   const worker = async () => {
     while (queue.length) {
