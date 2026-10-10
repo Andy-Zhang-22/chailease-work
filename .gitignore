@@ -5,3 +5,6 @@ node_modules/
 # 健檢報告是每次執行產生的，不進版控（本機跑的結果會因為網路限制而誤導）
 registry-check.md
 registry-check.json
+
+# Claude Code 載入 mod 時自己寫的型別檔（.claude/mods/*/.claude-plugin/types/），不進 repo
+.claude/mods/*/.claude-plugin/types/

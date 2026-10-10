@@ -36,6 +36,14 @@
 - 不要自己編網址：資料來源的網址要用 data.gov.tw 的詮釋資料，或在 Actions 上探路確認過。
 - 沒被要求的東西不要順手改。
 
+## 守門員 mod（repo-guard）
+
+- `.claude/mods/repo-guard/` 是 Claude Code 的 mod，專案設定（`.claude/settings.json`）會載入。它在兩個地方自動擋：
+  - Write／Edit 寫進 repo 的內容有看起來是真的台灣電話（leads/ 的公開資料不管）。
+  - `git commit` 前：新增的行有真電話；改了網站或後台程式但版號沒換；版號三處不一致；README 沒有這一版的段落。
+- 假電話的規則：去掉區碼後四個一樣（0000）、四個連號（1234、9876）、三三一樣（333444）、四組疊字（22778899）。測試資料照這個寫。
+- 改了 mod 要跑 `claude plugin validate .claude/mods/repo-guard` 和 `claude plugin test .claude/mods/repo-guard`。
+
 ## Git 與合併
 
 - 在指定的工作分支開發，推上去開 PR 到 main。

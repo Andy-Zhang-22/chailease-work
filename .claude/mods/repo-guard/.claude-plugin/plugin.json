@@ -1,0 +1,1 @@
+{ "name": "repo-guard", "version": "0.1.0", "description": "公開 repo 的守門員：寫檔、commit 前擋真電話；commit 前檢查版號三處一致、README 有那一版" }

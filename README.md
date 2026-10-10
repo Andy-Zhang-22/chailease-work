@@ -4459,3 +4459,18 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 合併頁卡片上的來源名稱改成純文字，不再跳到那一頁。代價：各頁特有的篩選（動保契約類別、清冊案由）沒地方用了。
 - 測試：`test-nav.js`（三個按鈕、沒按鈕的頁切過去不亮）、`test-mix.js`（來源名稱是文字）、`test-chattel／trade／factory／industry／nhi.js`
   改成確認按鈕不在。版號 20261010-327。
+
+## Claude 的守門員 mod：repo-guard
+
+使用者問「mods，你有什麼建議嗎」→ 建議兩個守門員 →「照你建議的做」。這不是網站功能，是改 Claude Code 自己的行為，所以版號不動。
+
+- `.claude/mods/repo-guard/`：hooks 模組 `hooks/register.ts`，三個 `tool.call` hook。
+  - Write／Edit：寫進 repo 的內容有看起來是真的台灣電話就擋（`leads/`、`/tmp` 不管）。
+  - Bash 的 `git commit`：相對 HEAD 新增的行＋未追蹤的文字檔有真電話 → 擋；改了 `assets/`、`index.html`、`tools/`、`.github/`
+    但 version.json 跟 HEAD 一樣 → 擋；`APP_VERSION`、`?v=`、version.json 三處不一致 → 擋；版號有換但 README 沒有「（版本 N）」→ 擋。
+    過了就跳一句「個資、版號都檢查過了」。
+  - 假電話的規則（`looksFake`）：去掉區碼後四個一樣、四個連號、三三一樣、四組疊字。掃了目前 repo（leads/ 以外）：
+    7 個測試檔有這規則認不出是假的號碼，先留著（只擋新增的行，舊的不影響）；要改成明顯假號碼再說。
+- 載入方式：repo 根目錄 `.claude-plugin/marketplace.json` 把 repo 本身當 marketplace，`.claude/settings.json` 用
+  `extraKnownMarketplaces`＋`enabledPlugins` 啟用，每個 session 開始時自動載。這個 session 寫的時候使用者沒開熱載入，下個 session 才生效。
+- 測試：`claude plugin validate`、`claude plugin test`（4 個測試：假號碼規則、Write 擋／放行、Edit、Bash 不是 commit 不檢查）、`tsc` 型別檢查都過。
