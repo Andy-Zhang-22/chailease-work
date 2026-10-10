@@ -1067,6 +1067,10 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .excluded-phone { margin: 4px 0; font-weight: 600; }
 .badge-phone-back { color: var(--primary); border-color: var(--primary); }
 .badge-intel { color: var(--primary); border-color: var(--primary); }
+.warn-line { color: #b42318; font-size: 13px; margin: 6px 0 0; }
+.simple-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.simple-row { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; font-size: 14px; }
+.simple-open { font-weight: 600; }
 .intel-line a { white-space: nowrap; }
 /* 今天要拜訪（出發提醒） */
 .depart-bar { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 10px; font-size: 13.5px; }

@@ -863,7 +863,7 @@
     const p = String(r['期別'] || ''); const pl = p ? `${p.slice(0, 3)}/${+p.slice(3)}` : '';
     return { name: r['公司名稱'], taxId: String(r['統一編號'] || '').replace(/\D/g, ''), address: r['公司所在地'] || '', capital: r.capital || 0,
       years: r.foundedDate ? yearsSince(r.foundedDate) : null, tel, branchKey: r.branch.key,
-      info: `${pl} ${r.type === 'setup' ? '新設立' : (r.reason || '變更')}`.trim(), add: () => addToList([r]) };
+      info: `${pl} ${r.type === 'setup' ? '新設立' : (r.reason || '變更')}`.trim(), ym: p.length === 5 ? `${+p.slice(0, 3) + 1911}-${p.slice(3)}` : '', add: () => addToList([r]) };
   }
   /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
   let factIdx = null; let factIdxN = -1;

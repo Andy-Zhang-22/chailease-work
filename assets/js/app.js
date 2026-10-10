@@ -9,10 +9,21 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-322';
+  const APP_VERSION = '20261010-323';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
+  /*
+   * 後台模式（版本 323）：feed-drive.mjs 用無頭瀏覽器開網站時在 localStorage 設 backend-run=1。
+   * 網站一開不要自己跑每日那串（挑新名單、重排、商工登記更新、找電話、摘要檔、自動換版），全部由後台照順序叫，
+   * 使用者的設定（自動挑有沒有開、額度、要不要自動重排）同步下來照樣算數。
+   */
+  const BACKEND_RUN = (() => { try { return localStorage.getItem('backend-run') === '1'; } catch (e) { return false; } })();
+  /** 登記現況不是營業中（跟 tools/registry-drive.mjs 的 CLOSED_RE 同一條）：解散、撤銷、廢止、清算、停業、歇業、合併消滅 */
+  const CLOSED_RE = /解散|撤銷|廢止|清算|停業|歇業|消滅|撤回/;
+  const regClosed = (v) => CLOSED_RE.test(String(v.regStatus || ''));
+  /** 'YYYY-MM' 距今幾個月（0＝本月）；認不得回 999 */
+  const monthsAgo = (ym) => { const m = String(ym || '').match(/^(\d{4})-(\d{2})$/); if (!m) return 999; const t = todayISO(); return (+t.slice(0, 4) - +m[1]) * 12 + (+t.slice(5, 7) - +m[2]); };
   const REG_KIND_LABEL = {
     capitalUp: '增資', capitalDown: '減資', address: '變更登記地址', owner: '負責人異動',
     other: '其他', none: '無變更', unchecked: '未查核',
@@ -551,11 +562,78 @@
     renderDepartBar();
   }
 
+  /*
+   * 登記現況提醒（版本 323；使用者點頭的「登記現況提醒（解散、廢止、停業）」）：商工登記更新（網站或後台）記下登記現況，
+   * 不是營業中的在名單上方提一條，點開列出來；不自動標禁止推廣，由使用者在詳細頁決定。
+   */
+  function renderClosedBar() {
+    const bar = $('#closedBar');
+    if (!bar) return;
+    bar.textContent = '';
+    const list = allViews().filter((v) => regClosed(v) && !v.blocked);
+    bar.hidden = !list.length;
+    if (!list.length) return;
+    bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `⚠ ${list.length} 家登記現況是解散／停業，看一下`,
+      title: list.slice(0, 12).map((v) => `${v.company}：${v.regStatus}`).join('\n'), onclick: () => openSimpleList('登記現況不是營業中', '商工登記查到的登記現況。要不要標禁止推廣由你決定：打開那家按「禁止推廣」。', list.map((v) => ({ v, text: v.regStatus }))) }));
+  }
+  /*
+   * 客戶新動態（版本 323；使用者點頭的「客戶出現在本月新資料」）：後台每天 customerSignals() 比對，三個月內出現在
+   * 新設工廠、剛開始請人、出進口、電子發票、動保、清冊、產業名單的，名單上方提一條，點開列出來；詳細頁也有一行。
+   */
+  function renderSignalBar() {
+    const bar = $('#signalBar');
+    if (!bar) return;
+    bar.textContent = '';
+    const list = allViews().filter((v) => v.signals && v.signals.length && !v.blocked);
+    bar.hidden = !list.length;
+    if (!list.length) return;
+    bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `📣 ${list.length} 家客戶最近三個月有新動態`,
+      title: list.slice(0, 12).map((v) => `${v.company}：${v.signals.map((x) => `${x.src} ${x.text}`).join('、')}`).join('\n'),
+      onclick: () => openSimpleList('客戶新動態', '這幾家最近三個月出現在新進來的公開資料裡（後台每天比對）。', list.map((v) => ({ v, text: v.signals.map((x) => `${x.src}：${x.text}`).join('；') }))) }));
+  }
+  /** 一個簡單的清單視窗：公司名＋一句話＋打開 */
+  function openSimpleList(title, hint, rows) {
+    const host = $('#editorBody');
+    host.textContent = '';
+    host.append(el('h2', { textContent: title }), el('p', { className: 'muted', textContent: hint }));
+    host.append(el('div', { className: 'simple-list' }, rows.map(({ v, text }) => el('div', { className: 'simple-row' }, [
+      el('button', { className: 'link-btn simple-open', type: 'button', textContent: v.company, onclick: () => { $('#editor').hidden = true; openDetail(v.id); } }),
+      el('span', { className: 'muted', textContent: `　${text}` }),
+    ]))));
+    $('#editor').hidden = false;
+  }
+  /**
+   * 後台每天叫的：每一家有統編的客戶，去各份公開資料（factsOf）看三個月內有沒有出現；有變動才寫進追蹤狀態 sigs。
+   * 回 { checked, withSignals, changed }。
+   */
+  async function customerSignals() {
+    if (window.ensureSourcesLoaded) await window.ensureSourcesLoaded();
+    // 登記清冊、商行的每期清單不算「新動態」（變更登記那邊已經由商工登記更新記了；剛從那頁挑進來的也會出現，等於沒資訊）
+    const srcs = MIX_SOURCES.filter((x) => !['le', 'bz'].includes(x.key) && x.mod() && x.mod().factsOf);
+    let checked = 0; let withSignals = 0; let changed = 0;
+    for (const v of allViews()) {
+      const tax = String(v.taxId || '').replace(/\D/g, '');
+      if (tax.length !== 8) continue;
+      checked += 1;
+      const sigs = srcs.map((x) => ({ x, f: x.mod().factsOf(tax) })).filter(({ f }) => f && f.ym && monthsAgo(f.ym) <= 2)
+        .map(({ x, f }) => ({ src: x.label, text: String(f.info || '').slice(0, 60), ym: f.ym }));
+      if (sigs.length) withSignals += 1;
+      const prev = (state.userStates.get(v.id) || {}).sigs || [];
+      const same = prev.length === sigs.length && prev.every((p, i) => p.src === sigs[i].src && p.ym === sigs[i].ym && p.text === sigs[i].text);
+      if (!same) { changed += 1; await saveState(v.id, { sigs: sigs.length ? sigs : undefined, sigsAt: sigs.length ? Date.now() : undefined }); }
+    }
+    if (changed) { await reload(); render(); scheduleSync(); }
+    return { checked, withSignals, changed };
+  }
+  window.customerSignals = customerSignals;   // 後台、測試用
+
   function renderRemindBar() {
     renderFeedBar();
     renderDepartBar();
     renderOppBar();
     renderPhoneBackBar();
+    renderClosedBar();
+    renderSignalBar();
     const bar = $('#remindBar');
     if (!bar) return;
     const items = remindItems();
@@ -902,6 +980,8 @@
       chance: (mine && mine.chance) || '',
       chanceAt: (mine && mine.chanceAt) || 0,
       intel: (mine && mine.intel) || null,   // 後台用網路查到的擴張訊號（版本 322）
+      regStatus: (mine && mine.regStatus) || '',   // 商工登記的登記現況（版本 323）
+      signals: ((mine && mine.sigs) || []).filter((x) => x && x.ym && monthsAgo(x.ym) <= 3),   // 客戶新動態：三個月內出現在哪份新資料（版本 323）
       edited: !!edits,
       group: groupMap().get(record.id) || '',
     };
@@ -3295,13 +3375,13 @@
    */
   async function dailyFeed(opts) {
     const { force = false, more = false, awaitPhones = false } = opts || {};
-    if (feeding) return;
-    if (!force && !more && !dailyFeedOn()) return;
+    if (feeding) return { picked: 0, busy: true };
+    if (!force && !more && !dailyFeedOn()) return { picked: 0, off: true };
     const today = todayISO();
     if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return { picked: 0, holiday: true, day: today };
-    if (!force && !more && registryPref('daily-feed-on') === today) return;
-    if (!state.records.length && !more) return;   // 還沒有主名單，先不餵
-    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return; }
+    if (!force && !more && registryPref('daily-feed-on') === today) return { picked: 0, done: true, day: today };
+    if (!state.records.length && !more) return { picked: 0, empty: true };   // 還沒有主名單，先不餵
+    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return { picked: 0, notReady: true }; }
     /*
      * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
      * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
@@ -3312,7 +3392,7 @@
       try { last = Number(await window.Store.getMeta('lastSyncAt')) || 0; } catch (e) { last = 0; }
       const syncedToday = last && new Date(last).toDateString() === new Date().toDateString();
       if (!syncedToday) {
-        if (!force && !more) return;
+        if (!force && !more) return { picked: 0, notSynced: true };
         const ok = await runSync({ quiet: true });
         if (!ok) { toast('先同步雲端再挑新名單，不然會跟另一台裝置挑到重複的；請按上面的 ⟳ 同步'); return; }
       }
@@ -5506,6 +5586,10 @@
       body.append(el('p', { className: 'muted', textContent: `電話：${r.phoneRaw}` }));
     }
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
+    // 登記現況不是營業中（版本 323）：講白，禁不禁止推廣使用者決定
+    if (regClosed(r)) body.append(el('p', { className: 'warn-line closed-line', textContent: `⚠ 商工登記的登記現況：${r.regStatus}。要不要標禁止推廣由你決定。` }));
+    // 客戶新動態（版本 323）
+    if (r.signals && r.signals.length) body.append(el('p', { className: 'muted signal-line', textContent: `📣 新動態：${r.signals.map((x) => `${x.src} ${x.text}`).join('；')}` }));
     // 後台挑名單時用網路查到的擴張訊號（版本 322）：那一句＋來源網址
     if (r.intel) {
       body.append(el('p', { className: 'muted intel-line' }, [
@@ -6755,7 +6839,7 @@ export default {
           // 查到不一致就更新，不分「只補空白」——查到了不寫入，等於白查
           if (next && next !== now) changes[key] = { from: now, to: next };
         });
-        const item = { rec, r, changes: all, regChanged: registryValue('regChanged', res.data) };   // 變更登記的日期用登記上的最近異動日期
+        const item = { rec, r, changes: all, regChanged: registryValue('regChanged', res.data), status: String((res.data && res.data.status) || '').trim() };   // 變更登記的日期用登記上的最近異動日期；登記現況給「登記現況提醒」
         checked.push(item);
         const diff = Object.keys(changes).length ? { rec, r, changes, status: res.data.status } : null;
         if (diff) diffs.push(diff);
@@ -6815,6 +6899,7 @@ export default {
     for (const c of checked) {
       const kinds = classifyRegistryChanges(c.changes, c.r);
       const patch = { regAt: now, regError: undefined };
+      if (c.status) patch.regStatus = c.status;   // 登記現況（核准設立、解散、停業…）
       if (kinds.length) {
         const kept = {};
         Object.entries(c.changes).forEach(([key, ch]) => { if (String(ch.from || '').trim()) kept[key] = ch; });
@@ -6888,6 +6973,7 @@ export default {
    * 套用；一路失敗就停下來，當天不再重試，把原因記在設定視窗裡。
    */
   async function maybeAutoRegistry() {
+    if (BACKEND_RUN) return;   // 後台模式：商工登記更新是另一支（registry-drive.mjs）在做
     if (!registryAutoOn()) return;
     if (!state.records.length) return;
     if (registryJob.running) return;   // 手動那輪還在跑，先不要搶，下一分鐘再看
@@ -8285,6 +8371,7 @@ export default {
   window.buildSummary = buildSummary;   // 測試用
   let summaryAt = 0;
   async function writeSummaryMaybe() {
+    if (BACKEND_RUN) return;   // 後台沒有「使用」可記，服務帳號也不能新建檔
     if (!window.DriveSync.writeSummary || Date.now() - summaryAt < 30 * 60000) return;
     summaryAt = Date.now();
     try { await window.DriveSync.writeSummary(`${window.DriveSync.SUMMARY_PREFIX}${deviceLabel()}.json`, buildSummary()); } catch (err) { console.warn('摘要檔寫不上去', err); }
@@ -8333,7 +8420,7 @@ export default {
        * 正在做事（詳細頁、視窗、匯入開著，正在打字，商工登記在跑，正在同步）才跳提示條讓人自己按。
        */
       const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      const busy = !$('#drawer').hidden || !$('#editor').hidden || !$('#importer').hidden || typing || registryJob.running || !!document.querySelector('#btnSync.is-busy');
+      const busy = BACKEND_RUN || !$('#drawer').hidden || !$('#editor').hidden || !$('#importer').hidden || typing || registryJob.running || !!document.querySelector('#btnSync.is-busy');
       if (!busy) { go(); return; }
       const bar = $('#updateBar');
       bar.hidden = false;
@@ -8745,7 +8832,9 @@ export default {
     const undone = await undoClosedBatch();
     render();
     if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
-    if (window.DriveSync.isConfigured()) {
+    if (BACKEND_RUN) {
+      // 後台模式：什麼都不自己跑，等 feed-drive.mjs 照順序叫 runSync → dailyFeed → autoRebalance → customerSignals → runSync
+    } else if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
       runSync({ quiet: true }).then(() => dailyFeed()).catch(() => dailyFeed()).then(() => autoRebalance()).catch(console.error)
@@ -8755,7 +8844,7 @@ export default {
         .then(() => phoneBackDaily()).catch(console.error);
     }
     // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）；挑完再照上限重排（一天一次）
-    setInterval(() => { dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error); }, 60000);
+    if (!BACKEND_RUN) setInterval(() => { dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error); }, 60000);
     /*
      * 沒人接住的失敗至少要讓使用者看到。
      *

@@ -19,6 +19,12 @@ const LROWS=[
 ];
 const LCSV='﻿'+[LHEAD,...LROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const LINDEX={latest:'11508',generatedAt:'2026-09-26T17:00:00.000Z',periods:{'11508':{generatedAt:'2026-09-26T17:00:00.000Z',period:'11508',files:[{city:'新北市',type:'change',path:'11508/新北市-change.csv',rows:4,capitalUp:4}]}}};
+const NHEAD='統編,名稱,地址,行業代號,行業,成立日期,投保年月,電話,資本額';
+const NROWS=[
+ ['99999991','主力客戶一有限公司','新北市新莊區中正路9號','4582','運動用品、器材批發業','104/09/03','202609','02-2222-3333','3000000'],   // 已在名單：不會被挑，但會變成「新動態」
+];
+const NCSV='\uFEFF'+[NHEAD,...NROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
+const NINDEX={generatedAt:'2026-10-02T20:00:00.000Z',cities:['新北市'],months:6,total:1,withPhone:1,latestYm:'2026/09',files:[{path:'nhi.csv',rows:1}]};
 const mk=(id,company,taxId,phone)=>({id,source:'A.csv',company,aliases:[],taxId,grade:'',founded:'2015',capital:'3,000',phoneRaw:phone,phones:phone?[{digits:phone.replace(/\D/g,''),ext:'',note:''}]:[],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路9號',city:'新北市',district:'新莊區',notesRaw:'',timeline:[],outcome:'new',nextDate:'2026-10-20',lastDate:'',addedDate:'2026-09-01'});
 const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('2','戊五範例有限公司','55555555','')];
 (async()=>{
@@ -39,6 +45,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
    if(/leads\/11508\//.test(u)) return r.fulfill({status:200,contentType:'text/csv',body:LCSV});
    if(/trade\/phones\.csv/.test(u)) return r.fulfill({status:200,contentType:'text/csv',body:'﻿統編,電話,傳真,核發日期\n11111111,02-1234-5678,,2025/01/01\n'});
    if(/trade\/index\.json/.test(u)) return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({generatedAt:'a'})});
+   if(/leads\/nhi\/index\.json/.test(u)) return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(NINDEX)});
+   if(/leads\/nhi\/nhi\.csv/.test(u)) return r.fulfill({status:200,contentType:'text/csv',body:NCSV});
    return r.fulfill({status:404,body:''});
  });
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
@@ -115,6 +123,37 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]').catch(()=>null); await pg.click('[data-act="excluded"]'); await pg.waitForTimeout(400);
  const ex=(await pg.textContent('#editorBody')).replace(/\s+/g,' ');
  chk(/戊五範例有限公司/.test(ex) && /Google 地圖/.test(ex), `「已排除的公司」標出 Google 查到的：${ex.match(/戊五.{0,80}/)?.[0]}`);
+ // ===== 版本 323 =====
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ // 客戶新動態：主力客戶一這個月出現在健保新投保（2026-09，距今 1 個月）→ 名單上方提一條、詳細頁一行；再叫一次沒變動
+ const sig=await pg.evaluate(()=>window.customerSignals());
+ chk(sig && sig.checked>=1 && sig.withSignals===1 && sig.changed===1, `customerSignals：比對、1 家有新動態、改了 1 家：${JSON.stringify(sig)}`);
+ chk(/1 家客戶最近三個月有新動態/.test(await pg.textContent('#signalBar')), `名單上方：${await pg.textContent('#signalBar')}`);
+ const sig2=await pg.evaluate(()=>window.customerSignals());
+ chk(sig2 && sig2.changed===0, `再叫一次沒變動就不寫：${JSON.stringify(sig2)}`);
+ await pg.locator('#cards .card:has-text("主力客戶一") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ chk(/📣 新動態：剛開始請人 2026\/09 成立投保單位/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), `詳細頁一行新動態：${(await pg.textContent('#drawerBody .signal-line')||'').trim()}`);
+ await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
+ await pg.click('#signalBar button'); await pg.waitForTimeout(300);
+ chk(/客戶新動態/.test(await pg.textContent('#editorBody')) && (await pg.locator('#editorBody .simple-open').count())===1, '點開列出那一家');
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ // 登記現況：商工登記查到「解散」→ 名單上方提一條、詳細頁講白；標了禁止推廣的不算
+ await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='主力客戶一有限公司'); await window.Store.setState({recordId:v.id,regStatus:'解散',regAt:Date.now(),updatedAt:Date.now()}); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk(/1 家登記現況是解散／停業/.test(await pg.textContent('#closedBar')), `名單上方：${await pg.textContent('#closedBar')}`);
+ await pg.locator('#cards .card:has-text("主力客戶一") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
+ chk(/商工登記的登記現況：解散。要不要標禁止推廣由你決定/.test(await pg.textContent('#drawerBody')), '詳細頁講白登記現況，不自動標');
+ await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
+ const tomb2=await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='主力客戶一有限公司'); return v.blocked; });
+ chk(tomb2===false, '沒自動標禁止推廣');
+ // 後台模式旗標：網站一開不自己挑（daily-feed-auto 沒關也一樣），等後台叫；自動挑關著時 dailyFeed() 回 off、挑過回 done
+ await pg.evaluate(()=>{ localStorage.setItem('backend-run','1'); localStorage.removeItem('daily-feed-auto'); localStorage.removeItem('daily-feed-on'); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(3000);
+ chk((await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單-2026-10-05-補/.test(v.source)).length))===0, '後台模式：網站一開沒有自己再挑一批');
+ await pg.evaluate(()=>localStorage.setItem('daily-feed-auto','0'));
+ chk((await pg.evaluate(()=>window.dailyFeed())).off===true, 'dailyFeed()：自動挑關著回 off');
+ await pg.evaluate(()=>{ localStorage.removeItem('daily-feed-auto'); localStorage.setItem('daily-feed-on','2026-10-05'); });
+ chk((await pg.evaluate(()=>window.dailyFeed())).done===true, 'dailyFeed()：今天挑過回 done');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

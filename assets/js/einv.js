@@ -57,6 +57,7 @@
     return null;
   }
   const ymLabel = (ym) => (ym ? `${ym.y}/${String(ym.m).padStart(2, '0')}` : '');
+  const ymIso = (ym) => (ym ? `${ym.y}-${String(ym.m).padStart(2, '0')}` : '');   // 給 app.js customerSignals 比月份（ymKey 另有用途）
   /** 首見年月距今幾個月（同一個月＝0） */
   const monthsSinceYm = (ym, today) => { const t = today || new Date(); return Math.max(0, (t.getFullYear() - ym.y) * 12 + (t.getMonth() + 1 - ym.m)); };
   const whenOf = (r) => (!r.isNew || r.firstMonths == null ? 'base' : r.firstMonths < 1 ? 'new' : r.firstMonths < 3 ? 'm3' : r.firstMonths < 6 ? 'm6' : 'old');
@@ -496,7 +497,7 @@
    */
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `${r.ym ? `${ymLabel(r.ym)} ` : ''}出現在電子發票導入名單`, add: () => addToList([r]) };
+      info: `${r.ym ? `${ymLabel(r.ym)} ` : ''}出現在電子發票導入名單`, ym: ymIso(r.ym), add: () => addToList([r]) };
   }
   /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
   let factIdx = null; let factIdxN = -1;

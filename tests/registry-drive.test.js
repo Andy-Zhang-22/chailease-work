@@ -34,9 +34,11 @@ test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不�
     logs: [], tombstones: {}, settings: { 'registry-mirror': { v: '1', at: 1 } },
     states: [{ recordId: 'a', updatedAt: 100, edits: { keyman: '小陳' }, editsAt: 100, regChanges: [{ date: '2026-01-01', kinds: ['address'], changes: {} }] }] };
   const results = [
-    { recordId: 'a', ok: true, view: { company: '甲', capital: '10,000', owner: '王' }, changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } }, regChanged: '115/09/20' },
-    { recordId: 'b', ok: false, reason: '查無資料\n第二行' },
+    { recordId: 'a', company: '甲', ok: true, view: { company: '甲', capital: '10,000', owner: '王' }, changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } }, regChanged: '115/09/20', status: '核准設立' },
+    { recordId: 'b', company: '乙', ok: false, reason: '查無資料\n第二行' },
+    { recordId: 'c', company: '丙', ok: true, view: { company: '丙', capital: '', owner: '' }, changes: {}, status: '解散' },
   ];
+  dump.records.push({ id: 'c', company: '丙', taxId: '3' });
   const out = m.applyResults(dump, results, { now: 5000, today: '2026-09-29', mergeRegChanges: DriveSync.mergeRegChanges, regHistoryOf: DriveSync.regHistoryOf });
   const a = out.states.find((s) => s.recordId === 'a'); const b = out.states.find((s) => s.recordId === 'b');
   assert.deepEqual(a.edits, { keyman: '小陳', capital: '30,000', owner: '李' }, '原本的編輯留著，登記的差異蓋上去');
@@ -44,12 +46,17 @@ test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不�
   assert.equal(a.regChanges.length, 2); assert.deepEqual(a.regChanges[0], { date: '2026-09-20', kinds: ['capitalUp', 'owner'], changes: { capital: { from: '10,000', to: '30,000' }, owner: { from: '王', to: '李' } } }, '日期是登記的最近異動日期（115/09/20），不是跑的那天 9/29');
   assert.deepEqual(a.regChange, a.regChanges[0]);
   assert.equal(b.regAt, 5000); assert.equal(b.regError, '查無資料');
+  assert.equal(a.regStatus, '核准設立', '登記現況記進追蹤狀態');
+  const c = out.states.find((s) => s.recordId === 'c'); assert.equal(c.regStatus, '解散');
+  assert.match(m.CLOSED_RE.source, /解散/); assert.ok(m.CLOSED_RE.test('解散') && m.CLOSED_RE.test('歇業/撤銷') && !m.CLOSED_RE.test('核准設立'), 'CLOSED_RE 認得解散、歇業，不認核准設立');
+  const rep = m.buildReport({ mode: 'write', today: '2026-09-29', results, diffs: [results[0]], failed: [results[1]], missing: [], seconds: 3 });
+  assert.match(rep, /1 筆登記現況不是營業中/); assert.match(rep, /丙：解散/); assert.doesNotMatch(rep, /甲：核准設立/);
   assert.equal(out.settings['registry-auto-last'].v, '2026-09-29'); assert.match(out.settings['registry-auto-summary'].v, /更新 1 筆，1 筆查不到/);
   assert.equal(out.edited, 1);
   assert.equal(dump.states[0].edits.capital, undefined, '不改原本的 dump');
   // 跟雲端最新版合併：後台的狀態時間比較新，會贏；名單本身從雲端來
   const merged = DriveSync.mergeDumps(dump, { ...out, records: [], logs: [] });
-  assert.equal(merged.records.length, 2);
+  assert.equal(merged.records.length, 3);
   assert.equal(merged.states.find((s) => s.recordId === 'a').edits.capital, '30,000');
 });
 

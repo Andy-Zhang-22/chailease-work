@@ -773,7 +773,7 @@
   function cardFacts(r) {
     const tel = global.Trade && global.Trade.telOf ? global.Trade.telOf(r.cust.id) : '';
     return { name: r.cust.name, taxId: String(r.cust.id || '').replace(/\D/g, ''), address: r.addr || '', capital: 0, years: r.years, tel, branchKey: r.branch.key,
-      info: `${lenderShort(r.lender.name)} ${ymOf(r.startUse)} 擔保 ${wan(r.amount)}${r.end && r.days != null ? `，${ymOf(r.end)} 到期` : ''}`, add: () => addToList([r]) };
+      info: `${lenderShort(r.lender.name)} ${ymOf(r.startUse)} 擔保 ${wan(r.amount)}${r.end && r.days != null ? `，${ymOf(r.end)} 到期` : ''}`, ym: /^\d{4}\/\d{2}$/.test(ymOf(r.startUse)) ? ymOf(r.startUse).replace('/', '-') : '', add: () => addToList([r]) };
   }
   /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
   let factIdx = null; let factIdxN = -1;

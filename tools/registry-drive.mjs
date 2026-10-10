@@ -47,6 +47,8 @@ const REGISTRY_FIELDS = [
 ];
 const FIELD_LABEL = Object.fromEntries(REGISTRY_FIELDS);
 const REG_KIND_ORDER = ['capitalUp', 'capitalDown', 'address', 'owner', 'other'];
+/** 登記現況不是營業中（跟 app.js 的 CLOSED_RE 同一條）：解散、撤銷、廢止、清算、停業、歇業、合併消滅 */
+const CLOSED_RE = /解散|撤銷|廢止|清算|停業|歇業|消滅|撤回/;
 const registryValue = (key, data) => { const v = String((data && data[key]) || '').trim(); if (key === 'founded') { const m = v.match(/^(\d{4})/); return m ? m[1] : ''; } return v; };
 /** 舊資料的地址一格裡寫「104登記：… / 公司登記：…」：登記地址取「公司登記」那段（跟 normalize.js 的 splitAddress 同一條規則），不然會跟登記查到的永遠不一樣 */
 const registeredAddress = (raw) => {
@@ -112,6 +114,7 @@ function applyResults(dump, results, { now, today, mergeRegChanges, regHistoryOf
       st.regAt = now; st.regError = String(res.reason || '查不到').split('\n')[0].slice(0, 120);
     } else {
       st.regAt = now; delete st.regError;
+      if (res.status) st.regStatus = res.status;   // 登記現況（核准設立、解散、停業…）：網站的「登記現況提醒」看這個
       const kinds = classify(res.changes, res.view);
       if (kinds.length) {
         const kept = {};
@@ -172,7 +175,7 @@ async function main() {
     const view = viewOf(rec, states.get(rec.id));
     const res = await Registry.lookupCompany({ taxId: String(view.taxId || '').replace(/\D/g, ''), name: view.company }, { useMirror });
     if (!res.ok) { results.push({ recordId: rec.id, company: view.company, ok: false, reason: res.reason }); fails += 1; }
-    else { results.push({ recordId: rec.id, company: view.company, ok: true, changes: diffFields(view, res.data), view, label: res.label, regChanged: registryValue('regChanged', res.data) }); fails = 0; }
+    else { results.push({ recordId: rec.id, company: view.company, ok: true, changes: diffFields(view, res.data), view, label: res.label, regChanged: registryValue('regChanged', res.data), status: String((res.data && res.data.status) || '').trim() }); fails = 0; }
     if ((i + 1) % 50 === 0) console.log(`  …${i + 1}/${list.length}`);
     // 連續查不到太多筆就是被擋了，別再耗
     if (fails >= 8 && results.every((r) => !r.ok)) { out(`✗ 前 ${fails} 筆全部連不上（${String(res.reason || '').split('\n')[0]}），來源被擋住，這次停止。`); await writeSummary(summary); process.exitCode = 1; return; }
@@ -213,6 +216,9 @@ async function main() {
 function buildReport({ mode, today, results, diffs, failed, missing, seconds }) {
   const KIND = { capitalUp: '增資', capitalDown: '減資', address: '變更地址', owner: '變更負責人', other: '其他' };
   const lines = [`${today} 後台商工登記更新（${mode === 'write' ? '已套用' : '只列差異、沒套用'}）：查 ${results.length} 筆，${seconds} 秒；${diffs.length} 筆跟登記不一致，${failed.length} 筆查不到（${missing.length} 筆登記上真的沒有）。`];
+  // 登記現況不是營業中的（使用者點頭的「登記現況提醒」）：只列出來，不自動標禁止推廣
+  const closed = results.filter((r) => r.ok && CLOSED_RE.test(String(r.status || '')));
+  if (closed.length) lines.push('', `※ ${closed.length} 筆登記現況不是營業中（網站名單上方會提醒，禁不禁止推廣你決定）：`, ...closed.slice(0, 60).map((r) => `  ・${r.company}：${r.status}`));
   if (diffs.length) {
     lines.push('', `▍有差異的 ${diffs.length} 筆`);
     diffs.forEach((d) => {
@@ -232,7 +238,7 @@ async function writeSummary(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
 }
 
-export { diffFields, classify, applyResults, viewOf, buildReport, staleRegistry, regDateMs, REGISTRY_FIELDS };
+export { diffFields, classify, applyResults, viewOf, buildReport, staleRegistry, regDateMs, REGISTRY_FIELDS, CLOSED_RE };
 
 if (process.argv[1] && /registry-drive\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });

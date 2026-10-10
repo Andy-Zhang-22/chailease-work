@@ -555,7 +555,7 @@
    */
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `${r.first ? `${r.first.y}/${String(r.first.m).padStart(2, '0')} ` : ''}登記出進口${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).length ? `（${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).join('、')}）` : ''}`, add: () => addToList([r]) };
+      info: `${r.first ? `${r.first.y}/${String(r.first.m).padStart(2, '0')} ` : ''}登記出進口${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).length ? `（${[r.imp ? '進口' : '', r.exp ? '出口' : ''].filter(Boolean).join('、')}）` : ''}`, ym: r.first ? `${r.first.y}-${String(r.first.m).padStart(2, '0')}` : '', add: () => addToList([r]) };
   }
   /** 統編 → 這一頁看到的那一句（別的分頁卡片上「🔗 也在」用；名單裡有沒有都算） */
   let factIdx = null; let factIdxN = -1;
