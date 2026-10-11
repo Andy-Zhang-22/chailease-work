@@ -1,5 +1,5 @@
 // 拜訪路線排順路（使用者：「都做」）：行事曆一天的拜訪，有約時間的照時間在前；其他從上一站（沒有就從分公司）挑最近的；
-// 沒有地圖金鑰用行政區中心點，有的話「📍 用地圖座標排」查門牌座標（存 30 天）
+// 用行政區中心點排（「📍 用地圖座標排」版本 329 拿掉了）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -33,20 +33,14 @@ const mk=(id,company,addr,dist,city)=>({id,source:'A.csv',company,aliases:[],tax
  const o1=await order();
  chk(JSON.stringify(o1)==='["新莊有限公司","板橋有限公司","三重有限公司","台北中山有限公司"]', `從新莊分公司出發挑最近的：${o1.join('→')}`);
  chk(/已排順路/.test(await pg.textContent('#paneCal .cal-route')), '寫明已排順路');
- chk(await pg.locator('#paneCal .cal-geo').count()===0, '沒有地圖金鑰就不出現「用地圖座標排」');
  // 有約時間的照時間在前，其他從那一站接著挑
  const o2=await pg.evaluate(()=>{ const v=(c,d,city)=>({company:c,address:`${city}${d}某路1號`,city,district:d});
    return window.routeOrder([{v:v('甲','新莊區','新北市'),time:''},{v:v('乙','中山區','臺北市'),time:'10:00'},{v:v('丙','三重區','新北市'),time:''},{v:v('丁','板橋區','新北市'),time:''},{v:{company:'戊',address:'',city:'',district:''},time:''}]); });
  chk(JSON.stringify(o2)==='["乙","丙","甲","丁","戊"]', `有約時間的先、再從那一站挑最近的、看不出區的最後：${o2.join('→')}`);
- // 有金鑰：查座標、存 30 天、重排
+ // 「📍 用地圖座標排」版本 329 拿掉了：有金鑰也不出現
  await pg.evaluate(()=>localStorage.setItem('places-api-key','TESTKEY'));
  await pg.click('#paneCal .cal-day[data-date="2026-10-06"]'); await pg.click('#paneCal .cal-day[data-date="2026-10-07"]'); await pg.waitForTimeout(300);
- if (await pg.locator('#paneCal .cal-geo').count()) {
-   await pg.click('#paneCal .cal-geo'); await pg.waitForTimeout(600);
-   const saved=await pg.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('geo:')).length);
-   chk(geoCalls===4 && saved===4, `查了 4 家座標並存起來：${geoCalls}／${saved}`);
-   chk((await order()).length===4, `重排後還是 4 家：${(await order()).join('→')}`);
- } else chk(false, '有金鑰時出現「📍 用地圖座標排」');
+ chk((await pg.locator('#paneCal .cal-geo').count())===0 && geoCalls===0, '沒有「用地圖座標排」、沒打 Google');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

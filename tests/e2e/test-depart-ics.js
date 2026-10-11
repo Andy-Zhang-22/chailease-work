@@ -1,5 +1,5 @@
-// 出發提醒＋加到手機行事曆（使用者：「還有什麼你能幫我做的？」→「都做」）：
-// 名單最上面「今天要拜訪」，出發前 15 分鐘變色、提示；行事曆「📅 加到手機行事曆」匯出今天起還沒去的拜訪（.ics）
+// 出發提醒（使用者：「還有什麼你能幫我做的？」→「都做」）：名單最上面「今天要拜訪」，出發前 15 分鐘變色、提示。
+// 「📅 加到手機行事曆」版本 329 拿掉了（一週用 0 次）。
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -34,17 +34,9 @@ const mk=(id,company,addr)=>({id,source:'測試',company,aliases:[],taxId:'',gra
  await pg.evaluate(()=>{ window.__now += 31000; }); await pg.waitForTimeout(31500);
  chk(/該出發了：今天拜訪範例有限公司（15:30 出發）/.test(await pg.textContent('#toast')), `跳提示：${await pg.textContent('#toast')}`);
 
- const ics=await pg.evaluate(()=>window.visitsIcs());
- const t=ics.text;
- chk(ics.n===3 && !/去過範例/.test(t), `匯出今天起還沒去的 3 個：${ics.n}`);
- chk(/DTSTART:20261006T160000\r\nDTEND:20261006T170000/.test(t) && /TRIGGER:-PT30M/.test(t), '有出發與抵達：抵達時間開始、出發那刻提醒');
- chk(/DTSTART:20261008T130000/.test(t) && /TRIGGER:-PT0M/.test(t), '只有出發時間：出發那刻提醒');
- chk(/DTSTART;VALUE=DATE:20261009\r\nDTEND;VALUE=DATE:20261010/.test(t), '沒排時間的當整天');
- chk(/LOCATION:新北市新莊區中正路1號/.test(t) && /UID:visit-[^\r]+-20261006@chailease-crm/.test(t) && /^BEGIN:VCALENDAR\r\n/.test(t) && /END:VCALENDAR\r\n$/.test(t), '格式：地點、固定 UID、頭尾');
+ // 「📅 加到手機行事曆」版本 329 拿掉了（一週用 0 次）
  await pg.click('.tab[data-tab="cal"]'); await pg.waitForTimeout(500);
- const [dl]=await Promise.all([pg.waitForEvent('download'), pg.click('.cal-ics')]);
- const got=fs.readFileSync(await dl.path(),'utf8');
- chk(/^BEGIN:VCALENDAR/.test(got) && (got.match(/BEGIN:VEVENT/g)||[]).length===3, `行事曆按鈕下載行事曆檔（3 個拜訪）：${got.slice(0,15)}`);
+ chk((await pg.locator('.cal-ics').count())===0 && (await pg.evaluate(()=>typeof window.visitsIcs))==='undefined', '行事曆沒有「加到手機行事曆」了');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

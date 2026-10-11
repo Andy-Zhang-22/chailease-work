@@ -1,6 +1,6 @@
 // 行事曆分頁：只列要去拜訪的（通話紀錄勾「約到拜訪」、約的那天＝下次聯絡日），電話不列；去過的打勾；假日灰掉；
 // 點一天列行程（同區排一起、出發／抵達、導航、記錄、刪除）；刪除＝取消那則的約到拜訪；勾了沒填日期不給存；
-// 直接在行事曆排拜訪（挑客戶、哪天、出發／抵達）、改期；複製這週、分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天、?tab=cal
+// 直接在行事曆排拜訪（挑客戶、哪天、出發／抵達）、改期；分頁名字帶今天家數、詳細頁「看行事曆」跳到那一天（複製這週、加到手機行事曆版本 329 拿掉）、?tab=cal
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -63,7 +63,7 @@ const SEED=[
  let ag=await pg.locator('#paneCal .cal-agenda').textContent();
  chk(/10\/05（一）要跑 1 家，去過 1 家/.test(ag), `標題：${ag.slice(0,40)}`);
  const caps=await pg.locator('#paneCal .cal-cap').allTextContents();
- chk(caps.join('|')==='🚗 新莊區（同區排一起）|✓ 去過的' && (await pg.locator('#paneCal .cal-row.is-call').count())===0, `分組沒有電話：${caps.join('|')}`);
+ chk(caps.join('|')==='✓ 去過的' && (await pg.locator('#paneCal .cal-row.is-call').count())===0 && (await pg.locator('#paneCal .cal-route').count())===0, `一家不標區、不串整天導航（版本 329）；沒有電話：${caps.join('|')}`);
  const r0=pg.locator('#paneCal .cal-row').first();
  chk(/今天拜訪乙/.test(await r0.textContent()) && /出發 09:30・抵達 10:00/.test(await r0.textContent()) && (await r0.locator('a:has-text("導航")').count())===1 && (await r0.locator('a.tel').count())===1 && (await r0.locator('button:has-text("記錄")').count())===1 && (await r0.locator('button:has-text("刪除")').count())===1, `拜訪列：出發／抵達、電話、導航、記錄、刪除：${(await r0.textContent()).replace(/\s+/g,' ')}`);
  chk(/今天去過有限公司/.test(await pg.locator('#paneCal .cal-row.is-done').first().textContent()) && /09\/30 約的：約好週一早上/.test(await pg.locator('#paneCal .cal-row.is-done').first().textContent()), '去過的那列帶哪天約的');
@@ -94,11 +94,8 @@ const SEED=[
  await pg.locator('#cards .card:has-text("週三拜訪") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  await pg.click('#drawerBody .cal-jump'); await pg.waitForTimeout(400);
  chk(await pg.locator('#paneCal').isVisible() && await pg.locator('#drawer').isHidden() && await cell('2026-10-13').evaluate(e=>e.classList.contains('is-sel')), '看行事曆：關掉詳細頁、跳到行事曆那一天（剛改成 10/13）');
- // 複製這週：只有拜訪
- const wk=await pg.evaluate(()=>window.weekText('2026-10-07'));
- chk(/^10\/05～10\/11 拜訪行程\n10\/05（一）\n  🚗 今天拜訪乙有限公司 09:30 出發、10:00 到　新北市新莊區中正路300號　02-2222-3332$/.test(wk) && /10\/13（二）\n  🚗 週三拜訪有限公司 13:30 出發、14:00 到/.test(await pg.evaluate(()=>window.weekText('2026-10-13'))), `這週的文字只有拜訪、去過的不列：${wk.split('\n').join(' / ')}`);
- await pg.click('#paneCal button:has-text("複製這週")'); await pg.waitForTimeout(300);
- chk(/已複製這週的行程/.test(await pg.textContent('#toast')), `複製提示：${await pg.textContent('#toast')}`);
+ // 「複製這週」版本 329 拿掉了
+ chk((await pg.locator('#paneCal button:has-text("複製這週")').count())===0 && (await pg.locator('#paneCal .cal-ics').count())===0, '複製這週、加到手機行事曆兩顆按鈕拿掉了（版本 329）');
  // 刪除：從行事曆拿掉 10/13 的拜訪（取消那則的約到拜訪，紀錄留著、下次聯絡日不動）
  await pg.locator('#paneCal .cal-row button:has-text("刪除")').first().click(); await pg.waitForTimeout(300);
  chk(/把「週三拜訪有限公司」10\/13 的拜訪從行事曆拿掉/.test(await pg.textContent('.ask-overlay')), `刪除先問：${(await pg.textContent('.ask-overlay')).slice(0,60)}`);
@@ -126,10 +123,9 @@ const SEED=[
  chk(/改期：今天打電話有限公司/.test(await pg.textContent('#editorBody h2')) && (await pg.inputValue('#editorBody input[type="time"] >> nth=1'))==='10:30' && (await pg.locator('#editorBody input[type="search"]').count())===0, '改期對話框帶原本的時間、不用再挑客戶');
  await pg.fill('#editorBody input[type="date"]','2026-10-14'); await pg.fill('#editorBody input[type="time"] >> nth=1','14:00'); await pg.click('#editorBody button:has-text("改好了")'); await pg.waitForTimeout(700);
  chk((await evs('2026-10-08')).length===0 && JSON.stringify(await evs('2026-10-14'))==='["🚗 14:00 今天打電話有限公司"]' && (await pg.evaluate(()=>window.customerViews().find(v=>v.company==='今天打電話有限公司').nextDate))==='2026-10-14', `改期：10/8 沒了、10/14 有、下次聯絡日跟著改：${JSON.stringify(await evs('2026-10-14'))}`);
- // 整天導航：今天只有乙一家 → 一個連結、目的地是乙、沒有中途點、不編號
+ // 今天只有乙一家 → 不串整天導航（那一列本來就有導航）、不編號；兩家以上才有（版本 329）
  await pg.evaluate(()=>window.openCalendar('2026-10-05')); await pg.waitForTimeout(300);
- const rt=pg.locator('#paneCal .cal-route a');
- chk((await rt.count())===1 && /整天導航（1 家）/.test(await rt.textContent()) && /destination=.*%E4%B8%AD%E6%AD%A3%E8%B7%AF300/.test(await rt.getAttribute('href')) && !/waypoints=|origin=/.test(await rt.getAttribute('href')) && (await pg.locator('#paneCal .cal-no').count())===0, `整天導航一家：${await rt.getAttribute('href')}`);
+ chk((await pg.locator('#paneCal .cal-route').count())===0 && (await pg.locator('#paneCal .cal-no').count())===0 && (await pg.locator('#paneCal .cal-row.is-visit a:has-text("導航")').count())===1, '一家：沒有整天導航那排、不編號、列上有導航');
  // 六家：切兩段，第 1 段 1→4（中途 1、2、3），第 2 段從第 4 家出發 → 6（中途 5）
  const segs=await pg.evaluate(()=>window.routeLinks(['A1','A2','A3','A4','A5','A6']));
  chk(segs.length===2 && segs[0].label==='🗺 第 1 段（第 1–4 家）' && /destination=A4&waypoints=A1%7CA2%7CA3&/.test(segs[0].href) && !/origin=/.test(segs[0].href)
