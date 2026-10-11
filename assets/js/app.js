@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261011-329';
+  const APP_VERSION = '20261011-330';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -6682,7 +6682,7 @@ export default {
 
   // 這幾個設定要跟著雲端同步：在電腦上設定好，手機打開也要能用
   const SYNCED_PREFS = new Set(['registry-proxy-url', 'registry-dataset-url', 'registry-dataset-taxid-url',
-    'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary',
+    'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary', 'registry-backend-last',
     // 商工登記查到一半的那一輪：另一台打開也接著查剩下的
     'registry-round',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
@@ -6867,7 +6867,7 @@ export default {
     const last = registryPref('registry-auto-last');
     const info = registryPref('registry-auto-summary');
     if (!last) return '還沒有自動更新過。';
-    return `上次自動更新：${dateLabel(last)}${info ? `，${info}` : ''}`;
+    return `上次自動更新：${dateLabel(last)}${info ? `，${info}` : ''}${registryBackendActive() ? `。後台每天清晨查全部（最近 ${dateLabel(registryPref('registry-backend-last'))}），這台不會自己跑` : ''}`;
   }
 
   /*
@@ -6878,9 +6878,20 @@ export default {
    * 這個日期擋重複。查的是全部校正（登記資料是使用者要的正確版本），差異直接
    * 套用；一路失敗就停下來，當天不再重試，把原因記在設定視窗裡。
    */
+  /** 後台（registry-drive.mjs）三天內查過：這台裝置就不用自己跑（版本 330） */
+  const registryBackendActive = () => {
+    const d = registryPref('registry-backend-last');
+    return !!d && (Date.parse(todayISO()) - Date.parse(d)) / 86400000 <= 3;
+  };
   async function maybeAutoRegistry() {
     if (BACKEND_RUN) return;   // 後台模式：商工登記更新是另一支（registry-drive.mjs）在做
     if (!registryAutoOn()) return;
+    /*
+     * 後台每天 05:00 查全部（版本 330；使用者截圖「登記更新 3/786」問「這個不是在後台跑完了嗎」）：
+     * 以前只看「今天同步過沒」，網站開著跨過 0:00、或 05:00 前就同步過，這台就自己再查一遍 786 家。
+     * 後台每次跑完寫 registry-backend-last（只有後台會寫，不會被這台蓋掉）；三天內有，這台就不跑。後台停了三天才接手。
+     */
+    if (registryBackendActive()) return;
     if (!state.records.length) return;
     if (registryJob.running) return;   // 手動那輪還在跑，先不要搶，下一分鐘再看
     const today = todayISO();

@@ -52,6 +52,7 @@ test('套進同步檔：edits／editsAt、regAt、regChanges 往上加、查不�
   const rep = m.buildReport({ mode: 'write', today: '2026-09-29', results, diffs: [results[0]], failed: [results[1]], missing: [], seconds: 3 });
   assert.match(rep, /1 筆登記現況不是營業中/); assert.match(rep, /丙：解散/); assert.doesNotMatch(rep, /甲：核准設立/);
   assert.equal(out.settings['registry-auto-last'].v, '2026-09-29'); assert.match(out.settings['registry-auto-summary'].v, /更新 1 筆，1 筆查不到/);
+  assert.equal(out.settings['registry-backend-last'].v, '2026-09-29', '後台跑過的記號（網站看到三天內就不自己跑）');
   assert.equal(out.edited, 1);
   assert.equal(dump.states[0].edits.capital, undefined, '不改原本的 dump');
   // 跟雲端最新版合併：後台的狀態時間比較新，會贏；名單本身從雲端來
