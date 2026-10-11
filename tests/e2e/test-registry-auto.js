@@ -36,6 +36,17 @@ const REG={ '11111111':{Business_Accounting_NO:'11111111',Company_Name:'甲公�
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
  chk(await pg.isChecked('#autoRegistry'), '設定視窗的「每天自動更新」勾著');
  chk(/上次自動更新：\d{4}\/\d{2}\/\d{2}，查 3 筆，更新 2 筆/.test(await pg.textContent('#editorBody')), '設定視窗顯示上次自動更新摘要');
+ // 後台三天內查過（registry-backend-last，只有後台會寫、會同步）：這台就算記號不是今天也不自己跑；超過三天才接手（版本 330）
+ await pg.evaluate(()=>{ localStorage.setItem('registry-auto-last','2000-01-01'); const d=new Date(Date.now()-2*86400000); localStorage.setItem('registry-backend-last',d.toISOString().slice(0,10)); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2500);
+ chk(calls===c1 && (await pg.evaluate(()=>localStorage.getItem('registry-auto-last')))==='2000-01-01', `後台兩天前查過：這台不跑（查詢次數 ${calls} 不變）`);
+ await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
+ chk(/後台每天清晨查全部.*這台不會自己跑/.test(await pg.textContent('#editorBody')), '設定視窗講白：後台在查，這台不跑');
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ await pg.evaluate(()=>{ localStorage.setItem('registry-backend-last','2000-01-01'); });
+ await pg.reload(); await pg.waitForSelector('#btnImport');
+ await pg.waitForFunction(()=>/商工登記自動更新/.test(document.querySelector('#toast')?.textContent||''),{timeout:30000}).catch(()=>{});
+ chk(calls>c1, `後台超過三天沒跑：這台接手（查詢次數 ${calls}）`);
  // 來源全掛時：當天記失敗、不套用、明天再試
  await ctx.unroute(/data\.gcis\.nat\.gov\.tw|x\.workers\.dev/); await ctx.route(/data\.gcis\.nat\.gov\.tw|x\.workers\.dev/,(route)=>route.fulfill({status:502,contentType:'text/plain',headers:{'access-control-allow-origin':'*'},body:'連不上政府網站'}));
  await pg.evaluate(()=>{ localStorage.setItem('registry-auto-last','2000-01-01'); });

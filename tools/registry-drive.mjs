@@ -135,6 +135,7 @@ function applyResults(dump, results, { now, today, mergeRegChanges, regHistoryOf
   });
   const settings = { ...(dump.settings || {}) };
   settings['registry-auto-last'] = { v: today, at: now };
+  settings['registry-backend-last'] = { v: today, at: now };   // 只有後台會寫：網站三天內看到就不自己跑（版本 330）
   const okCount = results.filter((r) => r.ok).length;
   settings['registry-auto-summary'] = { v: `後台查 ${results.length} 筆，更新 ${edited} 筆，${results.length - okCount} 筆查不到`, at: now };
   return { ...dump, states: [...states.values()], settings, edited };
@@ -203,7 +204,7 @@ async function main() {
     : { ...base, settings: { ...(base.settings || {}) }, edited: 0 };
   patched.settings['registry-drive-report'] = { v: report, at: now };
   const merged = DriveSync.mergeDumps(base, { ...patched, records: [], logs: [] });
-  const keep = MODE === 'write' ? ['registry-auto-last', 'registry-auto-summary', 'registry-drive-report'] : ['registry-drive-report'];
+  const keep = MODE === 'write' ? ['registry-auto-last', 'registry-auto-summary', 'registry-backend-last', 'registry-drive-report'] : ['registry-drive-report'];
   merged.settings = { ...(merged.settings || {}), ...Object.fromEntries(keep.map((k) => [k, patched.settings[k]])) };
   await upload(token, file.id, merged);
   out(MODE === 'write'
