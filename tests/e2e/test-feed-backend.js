@@ -163,6 +163,23 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  const ci2=await pg.evaluate(()=>window.customerIntel());
  chk(ci2 && ci2.asked===0 && ci2.skipped===1, `30 天內查過的跳過：${JSON.stringify(ci2)}`);
+ // ===== 版本 331 =====
+ // 今天排著、還沒查過訊號的新名單補查：丁四是別處挑進來排在今天的（沒 intel）→ fillTodayIntel 只問它、存 intel、卡片掛 🌐；再叫一次沒得問
+ await pg.evaluate(async()=>{ await window.Store.saveRecords([{id:'9',source:'每日新名單-2026-10-05.csv',company:'丁四大企業股份有限公司',aliases:[],taxId:'44444444',grade:'',founded:'2019',capital:'150,000',phoneRaw:'02-0000-4444',phones:[{digits:'0200004444',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路4號',city:'新北市',district:'新莊區',notesRaw:'每日新名單，符合：我的分公司',nextDate:'2026-10-05',lastDate:null,addedDate:'2026-10-05',country:'台灣'}]); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ const before331=researched.length;
+ const fi=await pg.evaluate(()=>window.fillTodayIntel());
+ chk(fi && fi.asked===1 && fi.withSignals===1 && fi.strong===1 && researched.length===before331+1 && /丁四/.test(researched[before331][0]), `補查只問丁四：${JSON.stringify(fi)}`);
+ await pg.waitForTimeout(500);
+ chk((await pg.locator('#cards .card:has-text("丁四") .badge-intel').count())===1, '補查到的掛「🌐 網路有擴張訊號」');
+ chk((await pg.evaluate(()=>window.fillTodayIntel())).asked===0, '再叫一次：都查過了，不問');
+ // 後台三天內挑過（feed-backend-last，只有後台會寫）：這台的自動挑不跑（回 backend）；自己按「再補」照常走
+ await pg.evaluate(()=>{ localStorage.setItem('feed-backend-last','2026-10-05'); localStorage.removeItem('daily-feed-on'); localStorage.removeItem('daily-feed-auto'); });
+ chk((await pg.evaluate(()=>window.dailyFeed())).backend===true, 'dailyFeed()：後台三天內挑過，這台不自己挑');
+ chk((await pg.evaluate(()=>window.dailyFeed({force:true}))).backend!==true, '自己按的（force）不受影響');
+ await pg.evaluate(()=>{ localStorage.setItem('feed-backend-last','2000-01-01'); });
+ chk((await pg.evaluate(()=>window.dailyFeed())).backend!==true, '後台超過三天沒挑：這台接手');
+ await pg.evaluate(()=>{ localStorage.removeItem('feed-backend-last'); });
  // 後台模式旗標：網站一開不自己挑（daily-feed-auto 沒關也一樣），等後台叫；自動挑關著時 dailyFeed() 回 off、挑過回 done
  await pg.evaluate(()=>{ localStorage.setItem('backend-run','1'); localStorage.removeItem('daily-feed-auto'); localStorage.removeItem('daily-feed-on'); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(3000);

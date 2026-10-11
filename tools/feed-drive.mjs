@@ -145,6 +145,11 @@ async function main() {
         + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
+    // 3a. 今天排著的新名單裡還沒查過訊號的補查（版本 331：額度被別處挑的排滿時，後台沒挑也沒查，10/12 第一次正式跑就是這樣）
+    if (CLAUDE_ON) {
+      const fi = await page.evaluate(() => window.fillTodayIntel());
+      if (fi.asked) out(`今天排著、還沒查過訊號的 ${fi.asked} 家補查：${fi.withSignals} 家有擴張訊號（明確 ${fi.strong}）`);
+    }
 
     // 3b. 照上限重排（使用者點頭的第 4 項）：照網站的設定（關著就不排、今天排過就不重排），超過上限的把最不急的往後挪
     const moved = await page.evaluate(() => window.autoRebalance());
@@ -171,6 +176,7 @@ async function main() {
     if (MODE === 'write') {
       const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}`;
       await page.evaluate((s) => window.Store.setSetting('feed-drive-summary', s), stamp);
+      await page.evaluate((d) => window.Store.setSetting('feed-backend-last', d), today);   // 只有後台會寫：網站三天內看到就不自己挑（版本 331）
       const pinned = await pinCurrentRevision(token, file.id);
       const before = await modifiedTimeOf(token, file.id);
       const last = await page.evaluate(() => window.runSync({ quiet: true }).then((r) => !!r));
