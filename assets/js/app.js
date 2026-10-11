@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261010-328';
+  const APP_VERSION = '20261011-329';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5107,8 +5107,6 @@
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '▶', title: '下個月', onclick: () => shift(1) }),
       el('button', { className: 'btn btn-tiny', type: 'button', textContent: '今天', onclick: () => { cal.sel = today; cal.month = calYm(today); renderCal(); } }),
       el('span', { className: 'cal-legend', textContent: '🚗 要去拜訪　✓ 去過了' }),
-      el('button', { className: 'btn btn-tiny', type: 'button', textContent: '複製這週', title: '把這一週的行程變成文字，貼到 LINE 或行事曆', onclick: () => copyWeek() }),
-      el('button', { className: 'btn btn-tiny cal-ics', type: 'button', textContent: '📅 加到手機行事曆', title: '今天起還沒去的拜訪匯成行事曆檔，iPhone／Google 行事曆打開就能加入，出發時間會提醒', onclick: () => exportVisitsIcs() }),
     ]);
     host.append(head);
     const grid = el('div', { className: 'cal-grid' });
@@ -5186,23 +5184,15 @@
     '新北市雙溪區': [25.034, 121.866], '新北市貢寮區': [25.022, 121.909], '新北市金山區': [25.222, 121.637], '新北市萬里區': [25.179, 121.689],
     '新北市烏來區': [24.865, 121.550],
   };
-  const GEO_KEY = 'geo:';
-  const GEO_DAYS = 30;
+  // 「📍 用地圖座標排」版本 329 拿掉（一週用 0 次，一天多半只跑一家）：排順路只看行政區中心點
   const visitAddr = (v) => (v.addressActual || v.address || '');
-  function geoCached(addr) {
-    try {
-      const g = JSON.parse(localStorage.getItem(GEO_KEY + addr) || 'null');
-      if (g && Date.now() - g.at < GEO_DAYS * 864e5) return [g.lat, g.lng];
-    } catch (e) { /* 無痕模式 */ }
-    return null;
-  }
   function districtXY(v) {
     const a = window.Normalize.parseAddress(visitAddr(v));
     const city = String(a.city || v.city || '').replace(/台/g, '臺');
     const dist = a.district || v.district || '';
     return DIST_XY[`${city}${dist}`] || Object.entries(DIST_XY).find(([k]) => dist && k.endsWith(dist))?.[1] || null;
   }
-  const stopXY = (v) => geoCached(visitAddr(v)) || districtXY(v);
+  const stopXY = (v) => districtXY(v);
   function homeXY() {
     const b = String(registryPref('my-branch') || '新莊').replace(/分公司$/, '');
     return DIST_XY[`新北市${b}區`] || DIST_XY[`臺北市${b}區`] || Object.entries(DIST_XY).find(([k]) => k.includes(b))?.[1] || DIST_XY['新北市新莊區'];
@@ -5231,28 +5221,6 @@
     return out;
   }
   window.routeOrder = (items) => routeOrder(items).map((x) => x.v.company);   // 測試用
-  /** 用 Google 地圖查門牌座標（只查還沒有的）；查到的存 30 天 */
-  async function geocodeStops(vs) {
-    const key = placesKey();
-    let got = 0;
-    for (const v of vs) {
-      const addr = visitAddr(v);
-      if (!addr || geoCached(addr)) continue;
-      const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.location' },
-        body: JSON.stringify({ textQuery: addr, languageCode: 'zh-TW', regionCode: 'TW', pageSize: 1 }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}${res.status === 403 || res.status === 400 ? '，多半是金鑰沒開 Places API (New)' : ''}`);
-      const j = await res.json();
-      const loc = j.places && j.places[0] && j.places[0].location;
-      if (loc && loc.latitude) {
-        try { localStorage.setItem(GEO_KEY + addr, JSON.stringify({ lat: loc.latitude, lng: loc.longitude, at: Date.now() })); } catch (e) { /* 無痕模式 */ }
-        got += 1;
-      }
-    }
-    return got;
-  }
 
   function calAgenda(iso, list) {
     const H = window.Holidays;
@@ -5273,28 +5241,18 @@
     const nameBtn = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => openDetail(v.id) });
     const timesBadge = (x) => (x.depart || x.arrive ? el('span', { className: 'badge badge-pin', textContent: `${x.depart ? `出發 ${x.depart}` : ''}${x.depart && x.arrive ? '・' : ''}${x.arrive ? `抵達 ${x.arrive}` : ''}` }) : '');
     // 整天導航：照下面的順序串起來；兩家以上才編號
-    const routes = routeLinks(planned.map((x) => addrOf(x.v)));
+    // 一家就只列那家（列上有導航），兩家以上才串整天導航、標同區（版本 329：一天多半只跑一家，排場留給真的要跑好幾家的日子）
+    const routes = planned.length > 1 ? routeLinks(planned.map((x) => addrOf(x.v))) : [];
     if (routes.length) {
       box.append(el('div', { className: 'cal-route' }, [
         ...routes.map((r) => el('a', { className: 'btn btn-tiny btn-primary', href: r.href, target: '_blank', rel: 'noopener', textContent: r.label, title: '從現在位置出發，照下面的順序一次串好（Google 地圖）' })),
         planned.length > 1 ? el('span', { className: 'muted', textContent: routes.length > 1 ? '已排順路；一段最多 4 家，跑完按下一段' : '已排順路', title: '有約時間的照時間，其他從上一站（沒有就從分公司）挑最近的' }) : '',
       ]));
-      // 有 Google 地圖金鑰：用門牌座標排得更準（沒查過座標的才查）
-      const missing = planned.filter((x) => visitAddr(x.v) && !geoCached(visitAddr(x.v)));
-      if (planned.length > 2 && placesKey() && missing.length) {
-        const geo = el('button', { className: 'btn btn-tiny cal-geo', type: 'button', textContent: '📍 用地圖座標排', title: `用 Google 地圖查 ${missing.length} 家的門牌座標，排得比只看行政區準（座標存在這台裝置 30 天）` });
-        geo.onclick = async () => {
-          geo.disabled = true; geo.textContent = '查座標中…';
-          try { const n = await geocodeStops(missing.map((x) => x.v)); toast(`查到 ${n} 家的座標，已重排`); } catch (err) { toast(`查不到座標：${err && err.message ? err.message : err}`); }
-          render();
-        };
-        box.lastChild.append(geo);
-      }
     }
     let lastDist = null;
     planned.forEach((x, i) => {
       const dist = x.v.district || '沒有區';
-      if (dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 ${dist}（同區排一起）` })); lastDist = dist; }
+      if (planned.length > 1 && dist !== lastDist) { box.append(el('div', { className: 'cal-cap', textContent: `🚗 ${dist}（同區排一起）` })); lastDist = dist; }
       box.append(el('div', { className: 'cal-row is-visit' }, [
         planned.length > 1 ? el('span', { className: 'cal-no', textContent: String(i + 1) }) : '',
         nameBtn(x.v),
@@ -5322,92 +5280,6 @@
     return box;
   }
 
-  /** 這一週（週一到週日）的行程變成文字，貼 LINE 或行事曆用。 */
-  function weekText(iso) {
-    const H = window.Holidays;
-    const events = calEvents();
-    const startDow = (new Date(`${iso}T00:00:00`).getDay() + 6) % 7;
-    const mon = addDays(iso, -startDow);
-    const lines = [`${calMd(mon)}～${calMd(addDays(mon, 6))} 拜訪行程`];
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(mon, i);
-      const list = (events.get(d) || []).filter((x) => !x.done);
-      if (!list.length) continue;
-      lines.push(`${calMd(d)}（${H ? H.weekLabel(d) : ''}）`);
-      list.forEach((x) => {
-        const tel = x.v.phones.length ? x.v.phones[0].display : '';
-        const when = [x.depart && `${x.depart} 出發`, x.arrive && `${x.arrive} 到`].filter(Boolean).join('、');
-        lines.push(`  🚗 ${x.v.company}${when ? ` ${when}` : ''}${(x.v.addressActual || x.v.address) ? `　${x.v.addressActual || x.v.address}` : ''}${tel ? `　${tel}` : ''}`);
-      });
-    }
-    return lines.length > 1 ? lines.join('\n') : '';
-  }
-  async function copyWeek() {
-    const text = weekText(cal.sel || todayISO());
-    if (!text) { toast('這一週沒有排拜訪'); return; }
-    const ok = await copyText(text);
-    toast(ok ? '已複製這週的行程，可以貼到 LINE 或行事曆' : '這個瀏覽器不讓網頁複製');
-  }
-  window.weekText = weekText;   // 測試用
-
-  /*
-   * 加到手機行事曆（使用者：「還有什麼你能幫我做的？」→ 選「拜訪同步到手機行事曆」）：
-   * 今天起還沒去的拜訪匯成 .ics，iPhone／Google 行事曆打開就能加入；有出發時間的在出發那刻提醒，
-   * 沒有的在抵達前 30 分鐘提醒，沒排時間的當整天。UID 固定（同一則紀錄＋同一天），重匯同一筆會更新、不會多一筆。
-   * 檔案只在這台裝置產生、直接交給手機行事曆，不經過任何伺服器。
-   */
-  const icsEsc = (t) => String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-  const icsFold = (line) => {
-    // 一行最多 75 bytes（中文一字 3 bytes）：保守一點，40 個字就折
-    const out = []; let cur = '';
-    for (const ch of line) { if (cur.length >= 40) { out.push(cur); cur = ' '; } cur += ch; }
-    out.push(cur);
-    return out.join('\r\n');
-  };
-  const icsDate = (iso) => iso.replace(/-/g, '');
-  const icsTime = (iso, hm) => `${icsDate(iso)}T${hm.replace(':', '')}00`;
-  const addMin = (hm, n) => { const [h, m] = hm.split(':').map(Number); const t = Math.min(23 * 60 + 59, h * 60 + m + n); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
-  const minsOf = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return h * 60 + m; };
-  function visitsIcs() {
-    const today = todayISO();
-    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//chailease-crm//visits//ZH-TW', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:拜訪行程'];
-    let n = 0;
-    [...calEvents().entries()].filter(([iso]) => iso >= today).sort(([a], [b]) => a.localeCompare(b)).forEach(([iso, list]) => {
-      list.filter((x) => !x.done).forEach((x) => {
-        const v = x.v;
-        const addr = v.addressActual || v.address || '';
-        const start = x.arrive || x.depart;
-        const desc = [
-          x.depart || x.arrive ? `${x.depart ? `${x.depart} 出發` : ''}${x.depart && x.arrive ? '、' : ''}${x.arrive ? `${x.arrive} 到` : ''}` : '',
-          v.phones.length ? `電話 ${v.phones[0].display || v.phones[0].raw}` : '',
-          x.note || '',
-        ].filter(Boolean).join('\n');
-        lines.push('BEGIN:VEVENT', `UID:visit-${x.log.uid || x.log.logId}-${icsDate(iso)}@chailease-crm`, `DTSTAMP:${stamp}`);
-        if (start) lines.push(`DTSTART:${icsTime(iso, start)}`, `DTEND:${icsTime(iso, addMin(start, 60))}`);
-        else lines.push(`DTSTART;VALUE=DATE:${icsDate(iso)}`, `DTEND;VALUE=DATE:${icsDate(addDays(iso, 1))}`);
-        lines.push(icsFold(`SUMMARY:${icsEsc(`🚗 拜訪 ${v.company}`)}`));
-        if (addr) lines.push(icsFold(`LOCATION:${icsEsc(addr)}`));
-        if (desc) lines.push(icsFold(`DESCRIPTION:${icsEsc(desc)}`));
-        if (start) {
-          // 有出發時間：出發那刻提醒；只有抵達：前 30 分鐘
-          const before = x.depart && x.arrive && minsOf(x.arrive) > minsOf(x.depart) ? minsOf(x.arrive) - minsOf(x.depart) : x.depart && !x.arrive ? 0 : 30;
-          lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', icsFold(`DESCRIPTION:${icsEsc(`該出發了：${v.company}`)}`), `TRIGGER:-PT${before}M`, 'END:VALARM');
-        }
-        lines.push('END:VEVENT');
-        n += 1;
-      });
-    });
-    lines.push('END:VCALENDAR');
-    return { text: `${lines.join('\r\n')}\r\n`, n };
-  }
-  window.visitsIcs = visitsIcs;   // 測試用
-  function exportVisitsIcs() {
-    const { text, n } = visitsIcs();
-    if (!n) { toast('今天起沒有排拜訪'); return; }
-    download(`拜訪行程_${todayISO()}.ics`, text, 'text/calendar;charset=utf-8');
-    toast(`已匯出 ${n} 個拜訪：打開檔案就能加到手機行事曆（重匯同一筆會更新，不會多一筆）`);
-  }
 
   /* ---------------- 詳細資料抽屜 ---------------- */
 
