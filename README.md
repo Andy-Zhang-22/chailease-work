@@ -4524,3 +4524,13 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   只存 intel（卡片掛 🌐、詳細頁那行），不改訪談內容、不改順序。後台挑完（不管有沒有挑到）就叫一次，印「補查幾家、幾家有訊號」。
 - 測試：`test-feed-backend.js` 加補查（只問沒 intel 的那家、掛 🌐、再叫不問）與 `feed-backend-last`（自動不挑、force 照常、超過三天接手）。
   版號 20261012-331。
+
+## 抓檔失敗不能被當成功；健保名單下載加重試（版本 332）
+
+每月 12 日例行檢查發現：10/10 的「每月健保新投保單位」Actions 顯示成功，但其實下載健保署的檔案時斷線（ECONNRESET），
+`node tools/fetch-nhi.mjs | tee` 的 node 掛了、tee 正常結束，步驟就被當成功；名單停在 10/01 那次抓的（2026/09），沒人知道。
+
+- 所有會 `| tee` 的 workflow（monthly-*、daily-listed）加 `defaults.run.shell: bash`：GitHub 的 bash 預設 `-eo pipefail`，node 掛了 run 就紅。
+- `fetch-nhi.mjs` 下載年度檔連抓三次（間隔 5、10 秒），都失敗才算失敗。
+- 其他來源這個月都正常：登記清冊 11509 期、商行 10/8、出進口 10/9、動保 10/10、電子發票 10/11（剛導入 1,497 家）、上市櫃每天；產業名單 10/14、新設工廠 10/20 還沒到。
+- 版號 20261012-332。
