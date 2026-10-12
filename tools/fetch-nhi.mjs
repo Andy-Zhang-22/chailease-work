@@ -135,9 +135,19 @@ async function main() {
     const u = urls.get(y);
     if (!u) { console.log(`民國 ${y} 年：沒有這一年的檔（還沒上架）`); continue; }
     console.log(`民國 ${y} 年：下載 ${u}`);
-    const res = await fetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(300000), redirect: 'follow' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
+    // 健保署的站偶爾中途斷線（10/10 那次 ECONNRESET）：連抓三次，都失敗才算失敗（版本 332）
+    let buf = null;
+    for (let attempt = 1; attempt <= 3 && !buf; attempt += 1) {
+      try {
+        const res = await fetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(300000), redirect: 'follow' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buf = Buffer.from(await res.arrayBuffer());
+      } catch (e) {
+        console.log(`民國 ${y} 年：第 ${attempt} 次下載失敗：${e.cause && e.cause.code ? e.cause.code : e.message}`);
+        if (attempt === 3) throw e;
+        await new Promise((r) => setTimeout(r, 5000 * attempt));
+      }
+    }
     const rows = odsTable(buf);
     const head = rows[0] || [];
     let inCityN = 0;

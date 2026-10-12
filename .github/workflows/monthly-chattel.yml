@@ -23,6 +23,11 @@ on:
         required: false
         default: '300'
 
+# run 步驟一律用 bash（-eo pipefail）：抓檔的 node 掛了，| tee 不會把它吞成成功（10/10 健保那次就是這樣被當成功，版本 332）
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: write
   actions: write   # 時間到還沒查完，自己再排下一輪

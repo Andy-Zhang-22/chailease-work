@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261011-330';
+  const APP_VERSION = '20261012-332';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -670,6 +670,31 @@
     return { asked, withSignals, strong, skipped: pool.length - fresh.length, left: Math.max(0, fresh.length - batchItems.length) };
   }
   window.customerIntel = customerIntel;   // 後台、測試用
+  /*
+   * 今天排著的新名單裡還沒上網查過訊號的，補查（版本 331）：後台來的時候額度已經被別處挑的（裝置自己挑的、
+   * 假日按「再補」排到今天的、重排挪過來的）排滿，就不會挑、也就沒查訊號。這些還是今天要打的 15 家，補查一次
+   * 讓卡片掛 🌐、詳細頁看得到那句。只存 intel，不改訪談內容、不改順序。
+   */
+  async function fillTodayIntel() {
+    if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0 };
+    const today = todayISO();
+    const list = allViews().filter((v) => isFreshLead(v) && v.nextDate === today && !v.blocked && !v.intel);
+    let withSignals = 0; let strong = 0; let asked = 0;
+    for (let i = 0; i < list.length; i += 15) {
+      const batch = list.slice(i, i + 15);
+      const got = (await window.backendResearch(batch.map((v) => ({ key: v.id, name: v.company, taxId: String(v.taxId || '').replace(/\D/g, ''), address: v.address || '' })))) || {};
+      asked += batch.length;
+      for (const v of batch) {
+        const it = got[v.id];
+        if (!it) continue;
+        if (it.expansion) { withSignals += 1; if ((it.score || 0) >= 2) strong += 1; }
+        await saveState(v.id, { intel: { at: Date.now(), expansion: !!it.expansion, score: it.score || 0, summary: it.summary || '', sources: (it.sources || []).slice(0, 5) } });
+      }
+    }
+    if (asked) { await reload(); render(); scheduleSync(); }
+    return { asked, withSignals, strong };
+  }
+  window.fillTodayIntel = fillTodayIntel;   // 後台、測試用
 
   function renderRemindBar() {
     renderFeedBar();
@@ -3429,6 +3454,9 @@
     const today = todayISO();
     if (!more && window.Holidays && !window.Holidays.isWorkday(today)) return { picked: 0, holiday: true, day: today };
     if (!force && !more && registryPref('daily-feed-on') === today) return { picked: 0, done: true, day: today };
+    // 後台三天內挑過（feed-backend-last，只有後台會寫）：這台裝置的自動挑不跑，不然網站開著跨過 0:00 就先挑了 15 家沒查訊號的，
+    // 後台 05:30 來看到排滿就不挑（10/12 第一次正式跑就是這樣，版本 331）。使用者自己按「再補」照常。
+    if (!force && !more && !BACKEND_RUN && feedBackendActive()) return { picked: 0, backend: true, day: today };
     if (!state.records.length && !more) return { picked: 0, empty: true };   // 還沒有主名單，先不餵
     if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return { picked: 0, notReady: true }; }
     /*
@@ -3804,6 +3832,7 @@
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。哪個來源挑進來的有四成以上（至少 3 家）被你當不是目標刪掉，那個來源的候選就排後面（是排序不是門檻）。` }));
       }
       host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:30 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -6682,7 +6711,7 @@ export default {
 
   // 這幾個設定要跟著雲端同步：在電腦上設定好，手機打開也要能用
   const SYNCED_PREFS = new Set(['registry-proxy-url', 'registry-dataset-url', 'registry-dataset-taxid-url',
-    'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary', 'registry-backend-last',
+    'registry-mirror', 'registry-auto', 'registry-auto-last', 'registry-auto-summary', 'registry-backend-last', 'feed-backend-last',
     // 商工登記查到一半的那一輪：另一台打開也接著查剩下的
     'registry-round',
     // 欄位改版的記號也同步：某台已經重查完、資料也同步過來了，另一台就不用再查一次
@@ -6879,6 +6908,11 @@ export default {
    * 套用；一路失敗就停下來，當天不再重試，把原因記在設定視窗裡。
    */
   /** 後台（registry-drive.mjs）三天內查過：這台裝置就不用自己跑（版本 330） */
+  /** 後台（feed-drive.mjs）三天內挑過新名單：這台裝置的自動挑就不用跑（版本 331） */
+  const feedBackendActive = () => {
+    const d = registryPref('feed-backend-last');
+    return !!d && (Date.parse(todayISO()) - Date.parse(d)) / 86400000 <= 3;
+  };
   const registryBackendActive = () => {
     const d = registryPref('registry-backend-last');
     return !!d && (Date.parse(todayISO()) - Date.parse(d)) / 86400000 <= 3;
