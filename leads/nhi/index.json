@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-10-01T14:56:04.199Z",
+ "generatedAt": "2026-10-12T08:17:21.609Z",
  "source": "https://data.gov.tw/api/v2/rest/dataset/26769",
  "cities": [
   "新北市",
@@ -7,7 +7,7 @@
  ],
  "months": 6,
  "total": 7384,
- "withPhone": 698,
+ "withPhone": 704,
  "latestYm": "2026/09",
  "byYm": {
   "202605": 1427,
@@ -63,5 +63,5 @@
    "rows": 7384
   }
  ],
- "foundedAt": "2026-10-01T14:56:04.199Z"
+ "foundedAt": "2026-10-12T08:17:21.609Z"
 }
