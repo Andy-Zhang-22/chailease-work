@@ -4548,3 +4548,15 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   Google 地圖到底查了幾家、有沒有錯，所以 `dailyFeed` 的摘要多一個 `gate`（挑名單那關 Google 查了幾家、查到幾家、第一個錯誤訊息，
   不含公司名），後台印出來。
 - 測試：`test-registry-auto.js` 的設定視窗文字改成有時間的。版號 20261013-333。
+
+## 首頁那句後面寫「Claude 約 US$」（版本 334）
+
+使用者：「每天妳上網花了多少美金我看的到嗎」→ 選了「後台把 token 和搜尋次數加總，在首頁那句後面加約 US$」。
+
+- `tools/intel.mjs`：每次回覆的 `usage`（輸入、輸出、快取讀寫、`server_tool_use.web_search_requests`）每一輪都加進 `researchCompanies` 回傳的 `usage`
+  （以前永遠是 0）。`PRICE` 是牌價：Sonnet 5.5 每百萬 token 輸入 US$2、輸出 US$10、快取讀 0.2、快取寫 2.5；網路搜尋每千次 US$10。
+  `estimateUsd(usage)` 照牌價估、取到分。改價就改 `PRICE`。
+- `tools/feed-drive.mjs`：挑名單、補查、主力客戶三處的研究都走同一個 `backendResearch`，加總後印一行
+  「Claude 約 US$x.xx（查 N 家：搜尋 S 次、輸入 ik、輸出 ok token；照牌價估，帳單以 Anthropic 後台為準）」，
+  並把「；Claude 約 US$x.xx」接在 `feed-drive-summary` 後面，首頁「今天的新名單」下面那行就看得到。沒查任何一家就不印。
+- 測試：`tests/intel.test.js` 加 `addUsage`／`estimateUsd`（跨輪加總、沒 usage 不炸、48 家的規模約 US$3）。版號 20261013-334。

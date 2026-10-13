@@ -18,3 +18,18 @@ test('parseIntel：挖出最後一段 JSON、分數夾在 0～3、沒訊號就�
   const nested = m.parseIntel('{"a":1} 後面還有 {"expansion": true, "score": 1, "summary": "官網：{新廠} 2026", "sources": []}');
   assert.equal(nested && nested.summary, '官網：{新廠} 2026', '摘要裡有大括號也拆得對');
 });
+
+test('addUsage／estimateUsd：每輪的 token 與搜尋次數加總，照牌價估美金（版本 334）', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'intel.mjs'));
+  const u = m.emptyUsage();
+  m.addUsage(u, { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 200, cache_creation_input_tokens: 100, server_tool_use: { web_search_requests: 3 } });
+  m.addUsage(u, { input_tokens: 1000, output_tokens: 500 });   // 第二輪沒搜尋、沒快取
+  m.addUsage(u, null);   // 沒 usage 也不會炸
+  assert.deepEqual(u, { input: 2000, output: 1000, cacheRead: 200, cacheWrite: 100, searches: 3 });
+  // 2000×2 + 1000×10 + 200×0.2 + 100×2.5 ＝ 14,290 微美元 ＝ 0.01429；搜尋 3×0.01 ＝ 0.03 → 0.04
+  assert.equal(m.estimateUsd(u), 0.04);
+  assert.equal(m.estimateUsd(m.emptyUsage()), 0);
+  // 真實規模：48 家、每家 4 次搜尋、輸入 8k、輸出 0.5k → 約 US$3
+  const big = { input: 48 * 8000, output: 48 * 500, cacheRead: 0, cacheWrite: 0, searches: 48 * 4 };
+  assert.equal(m.estimateUsd(big), 2.93);
+});

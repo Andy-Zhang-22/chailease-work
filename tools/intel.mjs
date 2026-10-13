@@ -13,6 +13,11 @@
  * 這個 repo 的 Actions 紀錄是公開的：這裡只印筆數。
  */
 const MODEL = 'claude-sonnet-5-5';   // 版本 324：使用者選「改用 Sonnet」省錢（約四分之一），查訊號一樣有網路搜尋
+/*
+ * 牌價（版本 334，使用者：「每天妳上網花了多少美金我看的到嗎」）：Sonnet 5.5 每百萬 token 輸入 US$2、輸出 US$10、
+ * 快取讀 US$0.2、快取寫 US$2.5；網路搜尋每千次 US$10（2026/10 的公告價）。只是估的，帳單以 Anthropic 後台為準；改價就改這裡。
+ */
+export const PRICE = { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, search: 10 / 1000 };
 const SYSTEM = [
   '你是台灣租賃公司（中租）企金業務的研究助理。給你一家台灣公司的名稱、統編、地址，請用網路搜尋查這家公司「最近一年」有沒有擴張訊號：',
   '徵才（104、1111、官網）、新廠或新廠房、新設備、搬遷擴大、政府採購得標、增資、新產品或新市場、營收成長、展店、併購。',
@@ -46,10 +51,24 @@ export function parseIntel(text) {
   return null;
 }
 
+/** 把一次回覆的 usage 加進 total（跨 pause_turn 的每一輪都要加） */
+export function addUsage(total, u) {
+  if (!u) return total;
+  total.input += Number(u.input_tokens) || 0;
+  total.output += Number(u.output_tokens) || 0;
+  total.cacheRead += Number(u.cache_read_input_tokens) || 0;
+  total.cacheWrite += Number(u.cache_creation_input_tokens) || 0;
+  total.searches += Number(u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
+  return total;
+}
+export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 });
+/** 照牌價估美金，小數兩位 */
+export const estimateUsd = (u) => Math.round(((u.input * PRICE.input + u.output * PRICE.output + u.cacheRead * PRICE.cacheRead + u.cacheWrite * PRICE.cacheWrite) / 1e6 + u.searches * PRICE.search) * 100) / 100;
+
 const textOf = (content) => (content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 
 /** 查一家；回 parseIntel 的結果，失敗回 null（呼叫端只印筆數） */
-async function researchOne(client, item, { maxSearches }) {
+async function researchOne(client, item, { maxSearches, usage }) {
   const messages = [{ role: 'user', content: `公司名稱：${item.name}\n統一編號：${item.taxId || '（不詳）'}\n地址：${item.address || '（不詳）'}` }];
   let res = null;
   for (let round = 0; round < 3; round += 1) {
@@ -61,6 +80,7 @@ async function researchOne(client, item, { maxSearches }) {
       tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches }],
       messages,
     });
+    addUsage(usage, res.usage);
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });   // 伺服器端的搜尋迴圈暫停了：原樣送回去接著跑
   }
@@ -70,11 +90,12 @@ async function researchOne(client, item, { maxSearches }) {
 
 /**
  * @param {{key:string,name:string,taxId?:string,address?:string}[]} items
- * @returns {Promise<{results: Object<string, object|null>, asked: number, withSignals: number, failed: number, usage: {input:number, output:number, searches:number}}>}
+ * @returns {Promise<{results: Object<string, object|null>, asked: number, withSignals: number, failed: number, usage: {input:number, output:number, cacheRead:number, cacheWrite:number, searches:number}}>}
+ *   usage 是這批加總的 token 與搜尋次數（失敗那家送出去的也算），呼叫端用 estimateUsd 估錢
  */
 export async function researchCompanies(items, { apiKey = '', concurrency = 3, maxSearches = 4, log = () => {} } = {}) {
   const results = {};
-  const usage = { input: 0, output: 0, searches: 0 };
+  const usage = emptyUsage();
   let withSignals = 0; let failed = 0;
   if (!items.length) return { results, asked: 0, withSignals, failed, usage };
   const { default: Anthropic } = await import('@anthropic-ai/sdk');   // 只有後台裝了套件才載；parseIntel 的測試不用
@@ -89,7 +110,7 @@ export async function researchCompanies(items, { apiKey = '', concurrency = 3, m
     while (queue.length) {
       const item = queue.shift();
       try {
-        const r = await researchOne(client, item, { maxSearches });
+        const r = await researchOne(client, item, { maxSearches, usage });
         results[item.key] = r;
         if (r && r.expansion) withSignals += 1;
         if (!r) failed += 1;
