@@ -28,7 +28,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FILE_NAME, resolveAuth, findFile, modifiedTimeOf, pinCurrentRevision } from './drive-lib.mjs';
-import { researchCompanies } from './intel.mjs';
+import { researchCompanies, emptyUsage, estimateUsd } from './intel.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,11 +104,12 @@ async function main() {
     const page = await ctx.newPage();
     page.on('pageerror', () => { pageErrors += 1; });
     // 網站挑名單時把候選丟過來，這邊用 Claude＋網路搜尋查擴張訊號（沒金鑰就不掛，網站照舊）
-    const researchStats = { asked: 0, withSignals: 0, failed: 0 };
+    const researchStats = { asked: 0, withSignals: 0, failed: 0, usage: emptyUsage() };
     if (CLAUDE_ON) {
       await page.exposeFunction('backendResearch', async (items) => {
         const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, log: (m) => console.log(`  ${m}`) });
         researchStats.asked += r.asked; researchStats.withSignals += r.withSignals; researchStats.failed += r.failed;
+        for (const k of Object.keys(researchStats.usage)) researchStats.usage[k] += r.usage[k] || 0;
         return r.results;
       });
     }
@@ -173,9 +174,17 @@ async function main() {
       }
     }
 
+    // 4c. 今天 Claude 花了多少（版本 334；使用者：「每天妳上網花了多少美金我看的到嗎」）：三處（挑名單、補查、主力客戶）加總，照牌價估
+    let costNote = '';
+    if (CLAUDE_ON && researchStats.asked) {
+      const u = researchStats.usage;
+      costNote = `Claude 約 US$${estimateUsd(u).toFixed(2)}`;
+      out(`${costNote}（查 ${researchStats.asked} 家：搜尋 ${u.searches} 次、輸入 ${Math.round((u.input + u.cacheRead + u.cacheWrite) / 1000)}k、輸出 ${Math.round(u.output / 1000)}k token；照牌價估，帳單以 Anthropic 後台為準）`);
+    }
+
     // 5. 寫回：把這次的結果留一句在同步檔的設定（網站名單最上面那條「今天的新名單」下面會顯示，三天內的才顯示），釘住雲端目前的版本，再同步一次
     if (MODE === 'write') {
-      const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}`;
+      const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}${costNote ? `；${costNote}` : ''}`;
       await page.evaluate((s) => window.Store.setSetting('feed-drive-summary', s), stamp);
       await page.evaluate((d) => window.Store.setSetting('feed-backend-last', d), today);   // 只有後台會寫：網站三天內看到就不自己挑（版本 331）
       const pinned = await pinCurrentRevision(token, file.id);
