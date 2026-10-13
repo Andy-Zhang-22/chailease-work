@@ -41,7 +41,7 @@ const REG={ '11111111':{Business_Accounting_NO:'11111111',Company_Name:'甲公�
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2500);
  chk(calls===c1 && (await pg.evaluate(()=>localStorage.getItem('registry-auto-last')))==='2000-01-01', `後台兩天前查過：這台不跑（查詢次數 ${calls} 不變）`);
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="registry"]'); await pg.waitForSelector('#autoRegistry');
- chk(/後台每天清晨查全部.*這台不會自己跑/.test(await pg.textContent('#editorBody')), '設定視窗講白：後台在查，這台不跑');
+ chk(/後台每天清晨 05:30 查全部.*這台不會自己跑/.test(await pg.textContent('#editorBody')), '設定視窗講白：後台在查，這台不跑');
  await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
  await pg.evaluate(()=>{ localStorage.setItem('registry-backend-last','2000-01-01'); });
  await pg.reload(); await pg.waitForSelector('#btnImport');

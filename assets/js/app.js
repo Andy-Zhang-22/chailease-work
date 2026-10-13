@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261012-332';
+  const APP_VERSION = '20261013-333';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3576,6 +3576,7 @@
         bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || Number(strongKey(bizKey(b[0]))) - Number(strongKey(bizKey(a[0]))) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
         if (!research) research = { asked, withSignals: [...intel.values()].filter((v) => v.expansion).length, strong: [...intel.values()].filter((v) => v.expansion && (v.score || 0) >= 2).length };
       }
+      const gate = { tried: 0, found: 0, error: '' };   // 挑名單那關 Google 地圖查了幾家、查到幾家、第一個錯（版本 333；後台印）
       if (feedNeedPhone()) {
         let budget = GATE_LOOKUPS;
         const confirm = async (name, address, known, key) => {
@@ -3584,13 +3585,14 @@
           const it = key ? intel.get(key) : null;
           if (it && it.phone && window.Normalize.extractPhones(it.phone).length) { googleHits.set(name, { phone: it.phone, name, address: address || '', maps: '', website: (it.sources || [])[0] || '', kind: 'web' }); return true; }
           if (!placesKey() || budget <= 0) return false;
-          budget -= 1;
+          budget -= 1; gate.tried += 1;
           const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
           try {
             const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
-            if (best && best.level === 'sure') { googleHits.set(name, best); return true; }
+            if (best && best.level === 'sure') { googleHits.set(name, best); gate.found += 1; return true; }
           } catch (err) {
             console.error('挑名單前找電話', name, err);
+            if (!gate.error) gate.error = String(err && err.message ? err.message : err).slice(0, 80);
             if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
           }
           return false;
@@ -3681,7 +3683,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research,
+      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research, gate,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;
@@ -3832,7 +3834,7 @@
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。哪個來源挑進來的有四成以上（至少 3 家）被你當不是目標刪掉，那個來源的候選就排後面（是排序不是門檻）。` }));
       }
       host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 6～10 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
-      if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:30 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
+      if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
       const freshOf = (d) => freshCounts.get(d) || 0;
@@ -5736,7 +5738,9 @@
           dd.append(document.createTextNode('無變更'));
         } else {
           dd.append(document.createTextNode('未查核'));
-          dd.append(el('div', { className: 'muted', textContent: '還沒查過商工登記：跨過 0:00 會自動查一次全部名單，之後新增的客戶要等明天，或用選單「從商工登記更新公司資料」馬上查。' }));
+          dd.append(el('div', { className: 'muted', textContent: registryBackendActive()
+            ? '還沒查過商工登記：後台每天清晨 05:30 查全部名單（新名單 05:00 先挑好，同一天就查得到），或用選單「從商工登記更新公司資料」馬上查。'
+            : '還沒查過商工登記：跨過 0:00 會自動查一次全部名單，之後新增的客戶要等明天，或用選單「從商工登記更新公司資料」馬上查。' }));
         }
       }
       /*
@@ -6896,7 +6900,7 @@ export default {
     const last = registryPref('registry-auto-last');
     const info = registryPref('registry-auto-summary');
     if (!last) return '還沒有自動更新過。';
-    return `上次自動更新：${dateLabel(last)}${info ? `，${info}` : ''}${registryBackendActive() ? `。後台每天清晨查全部（最近 ${dateLabel(registryPref('registry-backend-last'))}），這台不會自己跑` : ''}`;
+    return `上次自動更新：${dateLabel(last)}${info ? `，${info}` : ''}${registryBackendActive() ? `。後台每天清晨 05:30 查全部（最近 ${dateLabel(registryPref('registry-backend-last'))}），這台不會自己跑` : ''}`;
   }
 
   /*
