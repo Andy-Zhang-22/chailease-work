@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261014-335';
+  const APP_VERSION = '20261014-336';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3349,20 +3349,29 @@
     { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
   ];
   window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
-  window.mixCandidates = async () => {
-    const srcs = MIX_SOURCES.filter((x) => x.mod() && x.mod().dailyCandidates);
-    // 名單裡已經有的也列（使用者：「合併頁跟其他分頁不同，其他分頁我加入名單到重點名單後，在該分頁上還是留在上面」），卡片標「已在名單」
-    const lists = await Promise.all(srcs.map((x) => x.mod().dailyCandidates({ withMine: true }).catch((e) => { console.error(e); return []; })));
-    const merged = mergeFeed(srcs.map((x, i) => ({ key: x.key, mod: x.mod(), list: lists[i] })));
-    // 名單索引建一次（合併頁可能好幾萬家，不能每家都掃一遍名單）；比對規則跟 findCustomer、匯入比對重複一樣
+  /**
+   * 合併頁的「已在名單」比對：名單索引建一次（合併頁可能好幾萬家，不能每家都掃一遍名單）；比對規則跟 findCustomer、匯入比對重複一樣。
+   * 回一個函式：給卡片（key＝統編或來源鍵、name）回名單上那筆的摘要，沒有回 null。
+   */
+  function mixMineOf() {
     const byTax = new Map(); const byName = new Map();
     allViews().forEach((v) => { const t = taxKey(v); const n = nameKey(v); if (t && !byTax.has(t)) byTax.set(t, v); if (n && !byName.has(n)) byName.set(n, v); });
-    const mineOf = (c) => {
+    return (c) => {
       const tk = taxKey({ taxId: /^\d{8}$/.test(c.key) ? c.key : '' }); const nk = nameKey({ company: c.name });
       const byN = nk ? byName.get(nk) : null;
       const v = (tk && byTax.get(tk)) || (byN && !(tk && taxKey(byN) && taxKey(byN) !== tk) ? byN : null);
       return v ? { id: v.id, addedDate: v.addedDate || '', lastDate: v.lastDate || '', nextDate: v.nextDate || '', declined: !!(v.blocked || v.outcome === 'blocked') } : null;
     };
+  }
+  // 每次切到合併頁重新比對（版本 336；使用者：「在找名單那我新增過來到重點名單的客戶後他的狀態沒有變更」）：
+  // 以前只在第一次合併時比對一次，之後在別的分頁、別台裝置加進名單或同步拉下來的，卡片還是「加入客戶名單」
+  window.mixMine = (items) => { const mineOf = mixMineOf(); (items || []).forEach((it) => { it.mine = mineOf(it); }); };
+  window.mixCandidates = async () => {
+    const srcs = MIX_SOURCES.filter((x) => x.mod() && x.mod().dailyCandidates);
+    // 名單裡已經有的也列（使用者：「合併頁跟其他分頁不同，其他分頁我加入名單到重點名單後，在該分頁上還是留在上面」），卡片標「已在名單」
+    const lists = await Promise.all(srcs.map((x) => x.mod().dailyCandidates({ withMine: true }).catch((e) => { console.error(e); return []; })));
+    const merged = mergeFeed(srcs.map((x, i) => ({ key: x.key, mod: x.mod(), list: lists[i] })));
+    const mineOf = mixMineOf();
     return merged.map((c) => ({
       key: c.key, name: c.name, signals: [...c.signals], buy: c.buy, mine: mineOf(c),
       facts: srcs.filter((x) => c.recs[x.key]).map((x) => ({ key: x.key, tab: x.tab, label: x.label, ...(x.mod().cardFacts ? x.mod().cardFacts(c.recs[x.key]) : { name: c.name }) })),
@@ -8407,7 +8416,7 @@ export default {
 
   /* ---------------- 啟動 ---------------- */
 
-  async function reload() {
+  async function reload() {   // 同步拉下來、匯入後都走這條把名單重讀進來；window.reloadRecords 給測試模擬「別台裝置同步下來」
     touch();
     const [records, logs, states] = await Promise.all([
       window.Store.allRecords(), window.Store.allLogs(), window.Store.allStates(),
@@ -8417,6 +8426,7 @@ export default {
     state.userStates = new Map(states.map((s) => [s.recordId, s]));
     await refreshDeleted();
   }
+  window.reloadRecords = reload;   // 測試用
 
   /*
    * 刪掉的公司，各分頁一起藏（使用者：「挑進來的新名單如果我刪掉，請在其他分頁也都把他們隱藏起來，不然會重工」）。

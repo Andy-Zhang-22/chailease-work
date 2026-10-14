@@ -249,6 +249,7 @@
       return;
     }
     if ((global.srcHiddenVersion || 0) !== seenVersion) { loading = reload(); return; }
+    if (items && typeof global.mixMine === 'function') global.mixMine(items);   // 名單變了（別的分頁加的、同步拉的）重新比對（版本 336）
     render();
   }
   global.Mix = { show, reload: () => (root ? reload() : Promise.resolve()) };

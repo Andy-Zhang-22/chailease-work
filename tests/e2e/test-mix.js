@@ -77,6 +77,16 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
  const yj=pg.locator('#mix-cards .mix-card:has-text("宇駿")');
  chk((await yj.count())===1 && (await yj.locator('.badge-mine').count())===1 && (await yj.locator('.mix-add-one').count())===0, `加完留在原地、標已在名單：${(await names()).join('|')}`);
+ // 在別的地方加進名單（別的分頁、別台裝置同步下來）：切回合併頁要重新比對（版本 336；使用者：「新增過來到重點名單的客戶後他的狀態沒有變更」）
+ await pg.evaluate(async()=>{ const all=await window.Store.allRecords(); await window.Store.saveRecords([...all, {id:'x9',source:'A.csv',company:'名祿實業有限公司',aliases:[],taxId:'',grade:'',founded:'',capital:'',phoneRaw:'',phones:[],owner:'',keyman:'',industry:'',address:'',city:'',district:'',notesRaw:'',timeline:[],outcome:'new',nextDate:'',lastDate:'',addedDate:'2026-09-02'}]); await window.reloadRecords(); });
+ await pg.click('#subtabs .subtab[data-tab="biz"]'); await pg.waitForTimeout(300);
+ await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
+ const ml=pg.locator('#mix-cards .mix-card:has-text("名祿")');
+ chk((await ml.locator('.badge-mine').count())===1 && (await ml.locator('.mix-add-one').count())===0, `別處加進名單的，切回來就標已在名單：${await ml.locator('.badge-mine').textContent().catch(()=>'')}`);
+ await pg.evaluate(async()=>{ await window.Store.deleteRecord('x9'); await window.reloadRecords(); });
+ await pg.click('#subtabs .subtab[data-tab="biz"]'); await pg.waitForTimeout(300);
+ await pg.click('#subtabs .subtab[data-tab="mix"]'); await pg.waitForTimeout(800);
+ chk((await ml.locator('.mix-add-one').count())===1, '從名單拿掉又變回可以加入');
  // 跟我的名單比對：只看名單裡沒有的
  await pg.locator('#mix-fMine .chip:has-text("名單裡沒有")').click(); await pg.waitForTimeout(300);
  chk(JSON.stringify(await names())==='["名祿實業有限公司"]', `篩名單裡沒有：${(await names()).join('|')}`);
