@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261013-334';
+  const APP_VERSION = '20261014-335';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4989,7 +4989,11 @@
     const byId = new Map();
     allViews().filter((v) => !v.blocked).forEach((v) => byId.set(v.id, v));
     const today = todayISO();
-    const loggedOn = new Set(state.logs.map((l) => `${l.recordId}|${l.date}`));
+    // 哪家哪天記過紀錄 → 那些紀錄（版本 335）：約的那天要「約了之後」才記的紀錄才算去過回來記的；
+    // 當天上午約到、下午才要去，約的那通本身就是當天的紀錄，不能算去過（使用者：「拜訪時間還沒到怎麼就劃掉了」）
+    const logsOn = new Map();
+    state.logs.forEach((l) => { const k = `${l.recordId}|${l.date}`; if (!logsOn.has(k)) logsOn.set(k, []); logsOn.get(k).push(l); });
+    const loggedAfter = (k, l) => (logsOn.get(k) || []).some((o) => o.logId !== l.logId && (o.createdAt || 0) >= (l.createdAt || 0));
     const lastMeet = new Map();   // 每家最近一則勾過約到拜訪的
     state.logs.forEach((l) => { if (l.meeting && l.meetingDate) { const cur = lastMeet.get(l.recordId); if (!cur || (l.createdAt || 0) > (cur.createdAt || 0)) lastMeet.set(l.recordId, l); } });
     const seen = new Set();
@@ -5000,7 +5004,7 @@
       const k = `${l.recordId}|${l.meetingDate}`;
       if (seen.has(k)) return;
       const past = l.meetingDate < today;
-      const went = loggedOn.has(k) || (l.meetingDate === today && v.dueDoneOn === today);
+      const went = loggedAfter(k, l) || (l.meetingDate === today && v.dueDoneOn === today);
       if (!past && (lastMeet.get(l.recordId) !== l || (v.nextDate !== l.meetingDate && !went))) return;
       seen.add(k);
       const done = past || went;

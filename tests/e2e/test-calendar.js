@@ -140,6 +140,16 @@ const SEED=[
  // ?tab=cal
  await pg.goto('http://localhost:9516/index.html?tab=cal'); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(600);
  chk(await pg.locator('#paneCal').isVisible() && await pg.locator('.tab[data-tab="cal"]').evaluate(e=>e.classList.contains('is-active')), '?tab=cal 直接開行事曆');
+ // 當天約當天（版本 335；使用者：「拜訪時間還沒到怎麼就劃掉了，實際狀況是今天上午約到拜訪，下午要去找他」）：
+ // 今天記的那通「約到拜訪」本身就是今天的紀錄，不能當成去過回來記的 → 列在要跑的，不打勾
+ await pg.evaluate(async(T)=>{ const now=Date.now(); await window.Store.addLog({recordId:'5',date:T,text:'上午約到，下午三點半過去',outcome:'contacted',meeting:true,meetingDate:T,meetingDepart:'15:00',meetingArrive:'15:30',createdAt:now-1000}); await window.Store.setState({recordId:'5',nextDate:T,outcome:'contacted',updatedAt:now}); },TODAY);
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk(JSON.stringify(await evs('2026-10-05'))==='["🚗 10:00 今天拜訪乙有限公司","🚗 15:30 昨天打過有限公司","✓ 🚗 11:00 今天去過有限公司"]', `當天約當天：列在要跑的、不打勾：${JSON.stringify(await evs('2026-10-05'))}`);
+ chk(/10\/05（一）要跑 2 家，去過 1 家/.test(await pg.locator('#paneCal .cal-agenda').textContent()), '標題算進去');
+ // 下午去了、回來記一筆 → 才算去過
+ await pg.evaluate(async(T)=>{ await window.Store.addLog({recordId:'5',date:T,text:'去了，老闆要看方案',outcome:'contacted',createdAt:Date.now()}); },TODAY);
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk(JSON.stringify(await evs('2026-10-05'))==='["🚗 10:00 今天拜訪乙有限公司","✓ 🚗 11:00 今天去過有限公司","✓ 🚗 15:30 昨天打過有限公司"]', `回來記了一筆才打勾：${JSON.stringify(await evs('2026-10-05'))}`);
  if(process.env.SHOT) await pg.screenshot({path:process.env.SHOT,fullPage:true});
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

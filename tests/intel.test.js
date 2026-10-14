@@ -33,3 +33,14 @@ test('addUsage／estimateUsd：每輪的 token 與搜尋次數加總，照牌價
   const big = { input: 48 * 8000, output: 48 * 500, cacheRead: 0, cacheWrite: 0, searches: 48 * 4 };
   assert.equal(m.estimateUsd(big), 2.93);
 });
+
+test('pickModel／estimateUsd 換 Opus：牌價不同，不認得的名字回 Sonnet（版本 335）', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'intel.mjs'));
+  assert.equal(m.pickModel('opus').id, 'claude-opus-5-5');
+  assert.equal(m.pickModel('OPUS').id, 'claude-opus-5-5');
+  assert.equal(m.pickModel('').id, 'claude-sonnet-5-5');
+  assert.equal(m.pickModel('gpt').id, 'claude-sonnet-5-5');
+  const big = { input: 48 * 8000, output: 48 * 500, cacheRead: 0, cacheWrite: 0, searches: 48 * 4 };
+  assert.equal(m.estimateUsd(big, 'opus'), 3.94);   // 384k×4 + 24k×20 ＝ 2.016；搜尋 192×0.01 ＝ 1.92
+  assert.equal(m.estimateUsd(big, 'sonnet'), m.estimateUsd(big));
+});

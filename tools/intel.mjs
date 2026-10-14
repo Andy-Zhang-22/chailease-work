@@ -12,12 +12,17 @@
  * 自己拿去換短效的存取權杖，repo 裡沒有任何 sk-ant 金鑰。也接受 ANTHROPIC_API_KEY（本機測試用）。
  * 這個 repo 的 Actions 紀錄是公開的：這裡只印筆數。
  */
-const MODEL = 'claude-sonnet-5-5';   // 版本 324：使用者選「改用 Sonnet」省錢（約四分之一），查訊號一樣有網路搜尋
 /*
- * 牌價（版本 334，使用者：「每天妳上網花了多少美金我看的到嗎」）：Sonnet 5.5 每百萬 token 輸入 US$2、輸出 US$10、
- * 快取讀 US$0.2、快取寫 US$2.5；網路搜尋每千次 US$10（2026/10 的公告價）。只是估的，帳單以 Anthropic 後台為準；改價就改這裡。
+ * 模型（版本 335）：預設 Sonnet（版本 324 使用者選的，省錢）；`--model opus` 換 Opus 試一天比較（使用者 10/14：「照你說的試試看」）。
+ * 牌價（版本 334，使用者：「每天妳上網花了多少美金我看的到嗎」）：每百萬 token 輸入／輸出／快取讀／快取寫；網路搜尋每千次 US$10
+ * （2026/10 的公告價）。只是估的，帳單以 Anthropic 後台為準；改價就改這裡。
  */
-export const PRICE = { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, search: 10 / 1000 };
+export const MODELS = {
+  sonnet: { id: 'claude-sonnet-5-5', price: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, search: 10 / 1000 } },
+  opus: { id: 'claude-opus-5-5', price: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5, search: 10 / 1000 } },
+};
+export const pickModel = (name) => MODELS[String(name || '').toLowerCase()] || MODELS.sonnet;
+export const PRICE = MODELS.sonnet.price;
 const SYSTEM = [
   '你是台灣租賃公司（中租）企金業務的研究助理。給你一家台灣公司的名稱、統編、地址，請用網路搜尋查這家公司「最近一年」有沒有擴張訊號：',
   '徵才（104、1111、官網）、新廠或新廠房、新設備、搬遷擴大、政府採購得標、增資、新產品或新市場、營收成長、展店、併購。',
@@ -62,18 +67,18 @@ export function addUsage(total, u) {
   return total;
 }
 export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 });
-/** 照牌價估美金，小數兩位 */
-export const estimateUsd = (u) => Math.round(((u.input * PRICE.input + u.output * PRICE.output + u.cacheRead * PRICE.cacheRead + u.cacheWrite * PRICE.cacheWrite) / 1e6 + u.searches * PRICE.search) * 100) / 100;
+/** 照牌價估美金，小數兩位；model 是 MODELS 的 key（sonnet／opus），不給就 Sonnet */
+export const estimateUsd = (u, model = 'sonnet') => { const P = pickModel(model).price; return Math.round(((u.input * P.input + u.output * P.output + u.cacheRead * P.cacheRead + u.cacheWrite * P.cacheWrite) / 1e6 + u.searches * P.search) * 100) / 100; };
 
 const textOf = (content) => (content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 
 /** 查一家；回 parseIntel 的結果，失敗回 null（呼叫端只印筆數） */
-async function researchOne(client, item, { maxSearches, usage }) {
+async function researchOne(client, item, { maxSearches, usage, modelId }) {
   const messages = [{ role: 'user', content: `公司名稱：${item.name}\n統一編號：${item.taxId || '（不詳）'}\n地址：${item.address || '（不詳）'}` }];
   let res = null;
   for (let round = 0; round < 3; round += 1) {
     res = await client.beta.messages.create({
-      model: MODEL, max_tokens: 2000,
+      model: modelId, max_tokens: 6000,   // Opus 的思考 token 也算在 max_tokens 裡，留寬一點；只付實際輸出
       betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
       output_config: { effort: 'low' },
       system: SYSTEM,
@@ -93,7 +98,8 @@ async function researchOne(client, item, { maxSearches, usage }) {
  * @returns {Promise<{results: Object<string, object|null>, asked: number, withSignals: number, failed: number, usage: {input:number, output:number, cacheRead:number, cacheWrite:number, searches:number}}>}
  *   usage 是這批加總的 token 與搜尋次數（失敗那家送出去的也算），呼叫端用 estimateUsd 估錢
  */
-export async function researchCompanies(items, { apiKey = '', concurrency = 3, maxSearches = 4, log = () => {} } = {}) {
+export async function researchCompanies(items, { apiKey = '', concurrency = 3, maxSearches = 4, model = 'sonnet', log = () => {} } = {}) {
+  const modelId = pickModel(model).id;
   const results = {};
   const usage = emptyUsage();
   let withSignals = 0; let failed = 0;
@@ -110,7 +116,7 @@ export async function researchCompanies(items, { apiKey = '', concurrency = 3, m
     while (queue.length) {
       const item = queue.shift();
       try {
-        const r = await researchOne(client, item, { maxSearches, usage });
+        const r = await researchOne(client, item, { maxSearches, usage, modelId });
         results[item.key] = r;
         if (r && r.expansion) withSignals += 1;
         if (!r) failed += 1;

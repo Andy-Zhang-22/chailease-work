@@ -4560,3 +4560,18 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   「Claude 約 US$x.xx（查 N 家：搜尋 S 次、輸入 ik、輸出 ok token；照牌價估，帳單以 Anthropic 後台為準）」，
   並把「；Claude 約 US$x.xx」接在 `feed-drive-summary` 後面，首頁「今天的新名單」下面那行就看得到。沒查任何一家就不印。
 - 測試：`tests/intel.test.js` 加 `addUsage`／`estimateUsd`（跨輪加總、沒 usage 不炸、48 家的規模約 US$3）。版號 20261013-334。
+
+## 當天約當天的拜訪不能先劃掉；查訊號可以換 Opus 比較（版本 335）
+
+- 使用者截圖：「永錩的拜訪時間還沒到怎麼就劃掉了，實際狀況是今天上午約到拜訪，下午要去找他」→「請修正」。
+  行事曆把「約的那天有記紀錄」當成去過回來記的，但當天上午記的那通「約到拜訪」本身就是當天的紀錄，所以當天約當天一記就被當去過。
+  `calEvents` 改成只認「約了之後才記的紀錄」（同一家、同一天、`createdAt` 在那則約到拜訪之後的），按過「完成」照舊算去過。
+  `test-calendar.js` 加當天約當天（列在要跑的、不打勾）、回來記一筆才打勾。
+- 明確訊號連兩天 0（10/13 查 48 家、10/14 查 20 家），使用者：「照你說的試試看」→ 換 Opus 比較：
+  - `tools/intel.mjs`：`MODELS`（sonnet＝claude-sonnet-5-5、opus＝claude-opus-5-5，各自牌價：Opus 每百萬 token 輸入 US$4、輸出 20、快取讀 0.2、快取寫 5）、
+    `pickModel`、`researchCompanies({ model })`、`estimateUsd(usage, model)`。`max_tokens` 放寬到 6000（Opus 的思考 token 也算在裡面；只付實際輸出）。
+  - `tools/feed-drive.mjs`：`--model sonnet|opus`（或環境變數 `INTEL_MODEL`）、`--compare yes`（比較模式：不管今天挑過沒都再挑一批，
+    跟網站「再補」一樣，只能配 report 不寫回）。第一行印用哪個模型，費用那行 Opus 會標出來。
+  - `daily-feed-drive.yml` 手動跑多兩個選項 model、compare；排程還是 Sonnet。比較的做法：手動跑 mode=report、model=opus、compare=yes，
+    看同一池候選 Opus 查到幾家明確訊號，跟當天清晨 Sonnet 的數字比。要正式換就把排程的預設改成 opus（使用者點頭才改）。
+- 版號 20261014-335。
