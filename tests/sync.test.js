@@ -92,6 +92,19 @@ test('mergeState：每個欄位各自看 fieldAt——手機按的「完成」�
   assert.equal(legacy.outcome, 'y'); assert.equal(legacy.fieldAt, undefined);
 });
 
+test('mergeState：電腦用舊資料重排（欄位時間沒往前推）蓋不過手機親手改的下次聯絡日（版本 339）', () => {
+  // 手機 10/14 16:04 改成 10/21；電腦沒拉雲端，0:00 重排把它看到的 10/14 挪到 10/15（soft：fieldAt.nextDate 還是舊的 900，updatedAt 比較新）
+  const phone = { recordId: 'r', updatedAt: 1604, nextDate: '2026-10-21', outcome: 'contacted', fieldAt: { nextDate: 1604, outcome: 1604 } };
+  const pc = { recordId: 'r', updatedAt: 2400, nextDate: '2026-10-15', outcome: 'new', fieldAt: { nextDate: 900, outcome: 900 } };
+  const out = DriveSync.mergeState(phone, pc);
+  assert.equal(out.nextDate, '2026-10-21', '使用者改的贏');
+  assert.equal(out.outcome, 'contacted');
+  assert.deepEqual(DriveSync.mergeState(pc, phone), out, '順序對調結果一樣');
+  // 沒有別台改過：雲端還是舊的 10/14（同一個舊時間）→ 平手看整筆，電腦剛寫的比較新，重排的結果留著
+  const cloud = { recordId: 'r', updatedAt: 1000, nextDate: '2026-10-14', outcome: 'new', fieldAt: { nextDate: 900, outcome: 900 } };
+  assert.equal(DriveSync.mergeState(cloud, pc).nextDate, '2026-10-15');
+});
+
 test('mergeDumps：找回某天的資料——備份之後、還原之前的刪除不算，之後的刪除照常', () => {
   // 備份時間 100；200 刪了 r1 與整份名單 s2；還原在 300；350 又刪了 r3
   const backup = { records: [{ id: 'r1', source: 's', importedAt: 50 }, { id: 'r2', source: 's2', importedAt: 50 }, { id: 'r3', source: 's', importedAt: 50 }], logs: [], states: [], tombstones: {}, settings: {} };

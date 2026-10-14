@@ -31,6 +31,9 @@ const mk=(i)=>({id:`r${String(i).padStart(2,'0')}`,source:'A.csv',company:`主�
  chk(d.today.includes('r01') && d.today.includes('r02'), `固定的、約到拜訪的不動：${JSON.stringify(await pg.evaluate(()=>window.customerViews().filter(x=>x.nextDate==='2026-10-06').map(x=>x.id+':'+x.pinDate)))}`);
  chk(/已自動把 3 家最不急的往後挪/.test(await pg.textContent('#toast')), `提示：${await pg.textContent('#toast')}`);
  chk((await pg.evaluate(()=>localStorage.getItem('auto-rebalance-on')))==='2026-10-05', '記下今天跑過了');
+ // 程式自己挪的不推欄位時間（版本 339）：這台用舊資料重排，合併時才蓋不過別台使用者親手改的日期
+ const soft=await pg.evaluate(async()=>{ const moved=window.customerViews().filter(x=>x.nextDate==='2026-10-06'); const ss=await Promise.all(moved.map(x=>window.Store.getState(x.id))); return ss.map(s=>!s.fieldAt || s.fieldAt.nextDate==null); });
+ chk(soft.length===3 && soft.every(Boolean), `重排寫的 nextDate 沒有欄位時間：${JSON.stringify(soft)}`);
  // 復原
  await pg.click('#btnMenu'); await pg.click('[data-act="spread-undo"]'); await pg.waitForTimeout(800);
  d=await day();
