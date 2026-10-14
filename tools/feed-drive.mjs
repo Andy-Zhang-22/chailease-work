@@ -160,9 +160,6 @@ async function main() {
     // 3b. 照上限重排（使用者點頭的第 4 項）：照網站的設定（關著就不排、今天排過就不重排），超過上限的把最不急的往後挪
     const moved = await page.evaluate(() => window.autoRebalance());
     out(moved ? `照上限重排：往後挪了 ${moved} 家` : '照上限重排：不用動（沒超過上限、關著、或今天排過了）');
-    // 3c. 客戶新動態（使用者點頭的第 2 項）：每家客戶去各份公開資料看三個月內有沒有出現
-    const sig = await page.evaluate(() => window.customerSignals());
-    out(`客戶新動態：比對 ${sig.checked} 家，${sig.withSignals} 家最近有新動態（這次改了 ${sig.changed} 家）`);
 
     // 4. 每月一次：找不到電話的再查 Google
     if (doNoPhone) {

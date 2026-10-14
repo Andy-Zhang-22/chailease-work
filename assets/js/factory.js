@@ -57,7 +57,7 @@
     return null;
   }
   const ymLabel = (ym) => (ym ? `${ym.y}/${String(ym.m).padStart(2, '0')}` : '');
-  const ymIso = (ym) => (ym ? `${ym.y}-${String(ym.m).padStart(2, '0')}` : '');   // 給 app.js customerSignals 比月份（ymKey 另有用途）
+  const ymIso = (ym) => (ym ? `${ym.y}-${String(ym.m).padStart(2, '0')}` : '');   // factsOf 的 ym 給 app.js 比月份（ymKey 另有用途）
   /** 登記年月距今幾個月（同一個月＝0） */
   const monthsSinceYm = (ym, today) => { const t = today || new Date(); return Math.max(0, (t.getFullYear() - ym.y) * 12 + (t.getMonth() + 1 - ym.m)); };
   const whenOf = (r) => (r.regMonths == null ? 'y1' : r.regMonths < 3 ? 'm3' : r.regMonths < 6 ? 'm6' : 'y1');

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261014-336';
+  const APP_VERSION = '20261014-337';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -22,8 +22,6 @@
   /** 登記現況不是營業中（跟 tools/registry-drive.mjs 的 CLOSED_RE 同一條）：解散、撤銷、廢止、清算、停業、歇業、合併消滅 */
   const CLOSED_RE = /解散|撤銷|廢止|清算|停業|歇業|消滅|撤回/;
   const regClosed = (v) => CLOSED_RE.test(String(v.regStatus || ''));
-  /** 'YYYY-MM' 距今幾個月（0＝本月）；認不得回 999 */
-  const monthsAgo = (ym) => { const m = String(ym || '').match(/^(\d{4})-(\d{2})$/); if (!m) return 999; const t = todayISO(); return (+t.slice(0, 4) - +m[1]) * 12 + (+t.slice(5, 7) - +m[2]); };
   const REG_KIND_LABEL = {
     capitalUp: '增資', capitalDown: '減資', address: '變更登記地址', owner: '負責人異動',
     other: '其他', none: '無變更', unchecked: '未查核',
@@ -588,24 +586,6 @@
     bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `⚠ ${list.length} 家登記現況是解散／停業，看一下`,
       title: list.slice(0, 12).map((v) => `${v.company}：${v.regStatus}`).join('\n'), onclick: () => openSimpleList('登記現況不是營業中', '商工登記查到的登記現況。要不要標禁止推廣由你決定：打開那家按「禁止推廣」。', list.map((v) => ({ v, text: v.regStatus }))) }));
   }
-  /*
-   * 客戶新動態（版本 323；使用者點頭的「客戶出現在本月新資料」）：後台每天 customerSignals() 比對，三個月內出現在
-   * 新設工廠、剛開始請人、出進口、電子發票、動保、清冊、產業名單的，名單上方提一條，點開列出來；詳細頁也有一行。
-   */
-  function renderSignalBar() {
-    const bar = $('#signalBar');
-    if (!bar) return;
-    bar.textContent = '';
-    // 主力客戶每月上網查到的擴張訊號（customerIntel，版本 328）也算新動態：三個月內、不是每日新名單（新名單卡片本來就掛 🌐）
-    const webOk = (v) => v.intel && v.intel.expansion && v.intel.summary && Date.now() - (v.intel.at || 0) <= 92 * 86400000 && !FRESH_SOURCE_RE.test(String(v.source || ''));
-    const lineOf = (v) => [...(v.signals || []).map((x) => `${x.src}：${x.text}`), ...(webOk(v) ? [`網路：${v.intel.summary}`] : [])].join('；');
-    const list = allViews().filter((v) => ((v.signals && v.signals.length) || webOk(v)) && !v.blocked);
-    bar.hidden = !list.length;
-    if (!list.length) return;
-    bar.append(el('button', { className: 'btn btn-tiny', type: 'button', textContent: `📣 ${list.length} 家客戶最近三個月有新動態`,
-      title: list.slice(0, 12).map((v) => `${v.company}：${lineOf(v)}`).join('\n'),
-      onclick: () => openSimpleList('客戶新動態', '這幾家最近三個月出現在新進來的公開資料裡（後台每天比對），或後台每月上網查到擴張訊號。', list.map((v) => ({ v, text: lineOf(v) }))) }));
-  }
   /** 一個簡單的清單視窗：公司名＋一句話＋打開 */
   function openSimpleList(title, hint, rows) {
     const host = $('#editorBody');
@@ -617,35 +597,12 @@
     ]))));
     $('#editor').hidden = false;
   }
-  /**
-   * 後台每天叫的：每一家有統編的客戶，去各份公開資料（factsOf）看三個月內有沒有出現；有變動才寫進追蹤狀態 sigs。
-   * 回 { checked, withSignals, changed }。
-   */
-  async function customerSignals() {
-    if (window.ensureSourcesLoaded) await window.ensureSourcesLoaded();
-    // 登記清冊、商行的每期清單不算「新動態」（變更登記那邊已經由商工登記更新記了；剛從那頁挑進來的也會出現，等於沒資訊）
-    const srcs = MIX_SOURCES.filter((x) => !['le', 'bz'].includes(x.key) && x.mod() && x.mod().factsOf);
-    let checked = 0; let withSignals = 0; let changed = 0;
-    for (const v of allViews()) {
-      const tax = String(v.taxId || '').replace(/\D/g, '');
-      if (tax.length !== 8) continue;
-      checked += 1;
-      const sigs = srcs.map((x) => ({ x, f: x.mod().factsOf(tax) })).filter(({ f }) => f && f.ym && monthsAgo(f.ym) <= 2)
-        .map(({ x, f }) => ({ src: x.label, text: String(f.info || '').slice(0, 60), ym: f.ym }));
-      if (sigs.length) withSignals += 1;
-      const prev = (state.userStates.get(v.id) || {}).sigs || [];
-      const same = prev.length === sigs.length && prev.every((p, i) => p.src === sigs[i].src && p.ym === sigs[i].ym && p.text === sigs[i].text);
-      if (!same) { changed += 1; await saveState(v.id, { sigs: sigs.length ? sigs : undefined, sigsAt: sigs.length ? Date.now() : undefined }); }
-    }
-    if (changed) { await reload(); render(); scheduleSync(); }
-    return { checked, withSignals, changed };
-  }
-  window.customerSignals = customerSignals;   // 後台、測試用
+  // 客戶新動態（版本 323～336）拿掉了：使用者「這個對我沒有太大幫助」→「刪掉」。追蹤狀態裡舊的 sigs 留著不讀。
   /*
    * 主力客戶每月上網查一次擴張訊號（版本 328；使用者：「Claude api 金鑰還能應用在系統的哪裡？」→「主力客戶那個做」）。
    * 後台每月 1 日叫：主力名單（不是每日新名單）、沒標禁止推廣、有統編的，一個月最多 max 家；有機會的先、最近聯絡過的先；
-   * 30 天內查過的跳過。結果存進追蹤狀態 intel（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行、
-   * 名單上方「客戶新動態」那條也算進去。送出去的只有公司名、統編、地址。
+   * 30 天內查過的跳過。結果存進追蹤狀態 intel（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行。
+   * 送出去的只有公司名、統編、地址。
    */
   async function customerIntel({ max = 120 } = {}) {
     if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0, skipped: 0 };
@@ -702,7 +659,6 @@
     renderOppBar();
     renderPhoneBackBar();
     renderClosedBar();
-    renderSignalBar();
     const bar = $('#remindBar');
     if (!bar) return;
     const items = remindItems();
@@ -1046,7 +1002,6 @@
       chanceAt: (mine && mine.chanceAt) || 0,
       intel: (mine && mine.intel) || null,   // 後台用網路查到的擴張訊號（版本 322）
       regStatus: (mine && mine.regStatus) || '',   // 商工登記的登記現況（版本 323）
-      signals: ((mine && mine.sigs) || []).filter((x) => x && x.ym && monthsAgo(x.ym) <= 3),   // 客戶新動態：三個月內出現在哪份新資料（版本 323）
       edited: !!edits,
       group: groupMap().get(record.id) || '',
     };
@@ -5538,8 +5493,6 @@
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
     // 登記現況不是營業中（版本 323）：講白，禁不禁止推廣使用者決定
     if (regClosed(r)) body.append(el('p', { className: 'warn-line closed-line', textContent: `⚠ 商工登記的登記現況：${r.regStatus}。要不要標禁止推廣由你決定。` }));
-    // 客戶新動態（版本 323）
-    if (r.signals && r.signals.length) body.append(el('p', { className: 'muted signal-line', textContent: `📣 新動態：${r.signals.map((x) => `${x.src} ${x.text}`).join('；')}` }));
     // 後台挑名單時用網路查到的擴張訊號（版本 322）：那一句＋來源網址
     if (r.intel) {
       body.append(el('p', { className: 'muted intel-line' }, [
@@ -8827,7 +8780,7 @@ export default {
     render();
     if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
     if (BACKEND_RUN) {
-      // 後台模式：什麼都不自己跑，等 feed-drive.mjs 照順序叫 runSync → dailyFeed → autoRebalance → customerSignals → runSync
+      // 後台模式：什麼都不自己跑，等 feed-drive.mjs 照順序叫 runSync → dailyFeed → autoRebalance → runSync
     } else if (window.DriveSync.isConfigured()) {
       await showSyncTime();
       // 背景靜默同步，失敗就等使用者自己按；同步完才挑今天的新名單，另一台挑過的才看得到
