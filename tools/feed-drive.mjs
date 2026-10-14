@@ -16,7 +16,9 @@
  * report 模式：整套照跑，但送去雲端硬碟的「上傳」都被攔下來假裝成功，什麼都不會寫回（只看筆數對不對）。
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
- * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no]
+ * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes]
+ *   --model：查訊號用哪個模型（版本 335，預設 sonnet）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
+ *   只能配 report（不寫回），拿來看另一個模型在同一批候選上查到幾家訊號。
  *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
  *   需要：GDRIVE_ACCESS_TOKEN（或 GDRIVE_SERVICE_ACCOUNT）、PLACES_API_KEY；本機測試可設 PW_CHROMIUM 指定瀏覽器。
  *   Claude（版本 322）：有 Workload Identity 聯合的環境變數（ANTHROPIC_FEDERATION_RULE_ID…，workflow 設）或 ANTHROPIC_API_KEY，
@@ -28,7 +30,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FILE_NAME, resolveAuth, findFile, modifiedTimeOf, pinCurrentRevision } from './drive-lib.mjs';
-import { researchCompanies, emptyUsage, estimateUsd } from './intel.mjs';
+import { researchCompanies, emptyUsage, estimateUsd, pickModel } from './intel.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,6 +40,8 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[
 const MODE = opt('mode', 'report') === 'write' ? 'write' : 'report';
 const NOPHONE = opt('nophone', 'auto');
 const RECHECK = opt('recheck', 'auto');
+const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
+const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 // Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
@@ -78,7 +82,7 @@ async function main() {
   if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${saEmail || '（見設定）'}（要給「編輯者」權限）`);
   const doNoPhone = NOPHONE === 'yes' || (NOPHONE === 'auto' && taipeiDate().getUTCDate() === 1);
   const doRecheck = RECHECK === 'yes' || (RECHECK === 'auto' && taipeiDate().getUTCDate() === 1);
-  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（候選先上網查擴張訊號）` : '，沒設 Claude（不上網查訊號）'}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
+  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（候選先上網查擴張訊號；模型 ${MODEL_NAME === 'opus' ? 'Opus' : 'Sonnet'}）` : '，沒設 Claude（不上網查訊號）'}${COMPARE ? '；比較模式：再挑一批、不寫回' : ''}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
 
   const { chromium } = require('playwright');
   const { srv, port } = await serve();
@@ -107,7 +111,7 @@ async function main() {
     const researchStats = { asked: 0, withSignals: 0, failed: 0, usage: emptyUsage() };
     if (CLAUDE_ON) {
       await page.exposeFunction('backendResearch', async (items) => {
-        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, log: (m) => console.log(`  ${m}`) });
+        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, log: (m) => console.log(`  ${m}`) });
         researchStats.asked += r.asked; researchStats.withSignals += r.withSignals; researchStats.failed += r.failed;
         for (const k of Object.keys(researchStats.usage)) researchStats.usage[k] += r.usage[k] || 0;
         return r.results;
@@ -125,7 +129,7 @@ async function main() {
     out(`同步完成：名單 ${n} 筆`);
 
     // 3. 挑今天的新名單（跟網站一模一樣的那條，照使用者的設定：自動挑關著就不挑、今天挑過就不重挑），等補電話跑完
-    const res = await page.evaluate(() => window.dailyFeed({ awaitPhones: true }));
+    const res = await page.evaluate((more) => window.dailyFeed({ awaitPhones: true, more }), COMPARE);
     const today = taipeiDate().toISOString().slice(0, 10);
     let line;
     if (!res) line = `${today} 後台沒有挑（網站的每日新名單沒跑）`;
@@ -178,7 +182,7 @@ async function main() {
     let costNote = '';
     if (CLAUDE_ON && researchStats.asked) {
       const u = researchStats.usage;
-      costNote = `Claude 約 US$${estimateUsd(u).toFixed(2)}`;
+      costNote = `Claude${MODEL_NAME === 'opus' ? '（Opus）' : ''} 約 US$${estimateUsd(u, MODEL_NAME).toFixed(2)}`;
       out(`${costNote}（查 ${researchStats.asked} 家：搜尋 ${u.searches} 次、輸入 ${Math.round((u.input + u.cacheRead + u.cacheWrite) / 1000)}k、輸出 ${Math.round(u.output / 1000)}k token；照牌價估，帳單以 Anthropic 後台為準）`);
     }
 

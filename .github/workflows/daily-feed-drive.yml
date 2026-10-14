@@ -38,6 +38,18 @@ on:
         default: 'auto'
         type: choice
         options: [auto, 'yes', 'no']
+      model:
+        description: '查訊號用哪個模型：sonnet＝平常；opus＝試試看（約 2 倍價）'
+        required: false
+        default: 'sonnet'
+        type: choice
+        options: [sonnet, opus]
+      compare:
+        description: '比較模式：不管今天挑過沒再挑一批、不寫回（要配 mode=report），看另一個模型查到幾家訊號'
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'yes']
 
 permissions:
   contents: read
@@ -97,4 +109,6 @@ jobs:
           MODE: ${{ inputs.mode || 'write' }}
           NOPHONE: ${{ inputs.nophone || 'auto' }}
           RECHECK: ${{ inputs.recheck || 'auto' }}
-        run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK"
+          INTEL_MODEL: ${{ inputs.model || 'sonnet' }}
+          COMPARE: ${{ inputs.compare || 'no' }}
+        run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"
