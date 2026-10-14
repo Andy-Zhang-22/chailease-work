@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261014-337';
+  const APP_VERSION = '20261015-339';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2021,7 +2021,7 @@
     return box;
   }
 
-  async function saveState(recordId, patch) {
+  async function saveState(recordId, patch, { soft = false } = {}) {
     /*
      * 合併的底稿要用「資料庫裡當下那一列」，不能只用記憶體裡的副本。
      *
@@ -2047,7 +2047,13 @@
      */
     const now = Date.now();
     const fieldAt = { ...(base.fieldAt || {}) };
-    Object.keys(patch).forEach((k) => { fieldAt[k] = now; });
+    /*
+     * soft（版本 339）：程式自己動的（照上限重排），欄位時間不往前推。
+     * 使用者 10/14 下午在手機把下次聯絡日改成 10/21，電腦的網站開著一整天沒拉雲端，0:00 用舊資料重排，
+     * 把它看到的 10/14 挪到 10/15、欄位時間蓋成 0:00，比手機的下午新，合併時就把使用者改的洗掉了
+     * （「我填的是 10/21，但今天打開系統看怎麼又跳回 10/15」）。程式動的不蓋時間，使用者親手改的永遠比較新。
+     */
+    if (!soft) Object.keys(patch).forEach((k) => { fieldAt[k] = now; });
     const merged = { ...base, ...patch, recordId, updatedAt: now, fieldAt };
     await window.Store.setState(merged);
     state.userStates.set(recordId, merged);
@@ -3120,7 +3126,7 @@
     if (!plan.moves.length) return 0;
     const undo = [];
     for (const m of plan.moves) {
-      try { await saveState(m.id, { nextDate: m.to }); undo.push({ id: m.id, nextDate: m.from }); } catch (err) { console.error('自動重排失敗', err); break; }
+      try { await saveState(m.id, { nextDate: m.to }, { soft: true }); undo.push({ id: m.id, nextDate: m.from }); } catch (err) { console.error('自動重排失敗', err); break; }
     }
     lastSpread = undo.length ? { items: undo, at: Date.now() } : null;
     const undoBtn = $('#menu') && $('#menu').querySelector('[data-act="spread-undo"]');
@@ -8791,7 +8797,14 @@ export default {
         .then(() => phoneBackDaily()).catch(console.error);
     }
     // 跨過 0:00 沒關網站：每分鐘看一次，該挑就挑（挑過的那天只是讀一個設定就回來）；挑完再照上限重排（一天一次）
-    if (!BACKEND_RUN) setInterval(() => { dailyFeed().catch(console.error).then(() => autoRebalance()).catch(console.error); }, 60000);
+    // 跨日先拉一次雲端（版本 339）：網站開著一整天沒動就不會拉，用舊資料重排會把手機上改的下次聯絡日蓋掉
+    let tickDay = todayISO();
+    if (!BACKEND_RUN) setInterval(() => {
+      const d = todayISO();
+      const crossed = d !== tickDay; tickDay = d;
+      (crossed && window.DriveSync.isConfigured() ? runSync({ quiet: true }).catch(() => null) : Promise.resolve())
+        .then(() => dailyFeed()).catch(console.error).then(() => autoRebalance()).catch(console.error);
+    }, 60000);
     /*
      * 沒人接住的失敗至少要讓使用者看到。
      *
