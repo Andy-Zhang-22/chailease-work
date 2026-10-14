@@ -1099,7 +1099,7 @@
    *   - 取最新一則紀錄的判讀結果：舊的約訪早就過期了。
    * ------------------------------------------------------------------ */
 
-  const FOLLOWUP_HINT = /(再聯絡|再撥|再打|再約|再談|再看|再拜訪|回電|追蹤|下次|約訪|拜訪|月底|月初|月中)/;
+  const FOLLOWUP_HINT = /(再聯絡|再撥|再打|再約|再談|再看|再拜訪|回電|追蹤|下次|約訪|拜訪|月底|月初|月中|下週|下禮拜|下星期|明天|後天)/;
   const FOLLOWUP_MAX_DAYS = 550;
 
   function addDays(isoDate, days) {
@@ -1148,6 +1148,38 @@
         if (!value || value <= today || value > limit) continue;
         // 同一則裡有好幾個未來日期就取最早的：那通常才是最近一次要做的事
         if (!hit || value < hit) hit = value;
+      }
+      /*
+       * 「下週三再撥」「禮拜五回電」「明天再打」這種沒寫日期的寫法（版本 338；使用者寫在內容裡，日期欄沒改，
+       * 下次聯絡日就停在當天，跨日被「照上限重排」挪成今天：「我昨天下次聯絡日是訂下週三再撥，怎麼紀錄成今天撥打」）。
+       * 以這則的日期為準（沒有就今天）：「週三」＝接下來最近的週三（今天是週三就下週）；「下週三」＝下一週的週三
+       * （週一起算）；「下下週三」再多一週；「上週三」「前週」是在講過去，不算。「明天」「後天」照字面；「下週」「下禮拜」沒寫幾就當下週一。
+       */
+      const base = entry.date && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) ? entry.date : today;
+      const dow = (d) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7;   // 0＝週一 … 6＝週日
+      const WD = { '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6, '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6 };
+      const rel = /(上上|上|前|下下|下|這|本)?(週|禮拜|星期)([一二三四五六日天1-7])?/g;
+      while ((m = rel.exec(text)) !== null) {
+        const pre = m[1] || '';
+        if (/^(上|前)/.test(pre)) continue;   // 講過去的
+        const wd = m[3] != null ? WD[m[3]] : null;
+        let value;
+        if (wd == null) {
+          if (!/^下/.test(pre)) continue;   // 「這週」「本週」沒寫哪天，猜不到
+          value = addDays(base, 7 - dow(base) + (pre === '下下' ? 7 : 0));   // 下週一
+        } else if (/^下/.test(pre)) {
+          value = addDays(base, 7 - dow(base) + wd + (pre === '下下' ? 7 : 0));
+        } else {
+          const diff = (wd - dow(base) + 7) % 7;
+          value = addDays(base, diff === 0 ? 7 : diff);   // 「週三」：接下來最近的週三，今天就是週三就下週
+        }
+        if (value <= today || value > limit) continue;
+        if (!hit || value < hit) hit = value;
+      }
+      const day = /(明天|後天)/.exec(text);
+      if (day) {
+        const value = addDays(base, day[1] === '明天' ? 1 : 2);
+        if (value > today && value <= limit && (!hit || value < hit)) hit = value;
       }
       if (!hit) return null;
       return { iso: hit, snippet: text.replace(/\s+/g, ' ').trim().slice(0, 60), from: entry.date || null };

@@ -234,3 +234,23 @@ test('toRecords：國家不是台灣的列照欄位位置讀（英文公司名�
   const local = records.find((r) => r.company === '甲乙股份有限公司');
   assert.ok(local && local.taxId === '12345678' && /新北市/.test(local.address), '台灣的列照舊');
 });
+
+test('findFollowUp：「下週三再撥」「禮拜五回電」「明天再打」這種沒寫日期的也讀得出來（版本 338）', () => {
+  const t = '2026-10-14';   // 週三
+  const f = (s, d = t) => { const r = Normalize.findFollowUp(s, d); return r && r.iso; };
+  assert.equal(f('下週三再撥'), '2026-10-21');
+  assert.equal(f('下禮拜三再聯絡'), '2026-10-21');
+  assert.equal(f('下星期三'), '2026-10-21', '「下週」本身就算約訪字眼');
+  assert.equal(f('週三再撥'), '2026-10-21', '今天就是週三：下週');
+  assert.equal(f('週五再打'), '2026-10-16');
+  assert.equal(f('禮拜一回電'), '2026-10-19');
+  assert.equal(f('下週再打'), '2026-10-19', '沒寫幾：下週一');
+  assert.equal(f('下下週二再約'), '2026-10-27');
+  assert.equal(f('明天再打'), '2026-10-15');
+  assert.equal(f('後天回電'), '2026-10-16');
+  assert.equal(f('上週三拜訪過'), null, '講過去的不算');
+  assert.equal(f('這週'), null, '沒寫哪天猜不到');
+  assert.equal(f('老闆說可以'), null);
+  assert.equal(f('115/10/13 下週三再撥'), '2026-10-21', '以那則的日期為準');
+  assert.equal(f('114/09/01 下週三再撥'), null, '舊紀錄算出來的日期已經過了就不算');
+});
