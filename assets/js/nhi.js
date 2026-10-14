@@ -56,7 +56,7 @@
     return null;
   }
   const ymLabel = (ym) => (ym ? `${ym.y}/${String(ym.m).padStart(2, '0')}` : '');
-  const ymIso = (ym) => (ym ? `${ym.y}-${String(ym.m).padStart(2, '0')}` : '');   // 給 app.js customerSignals 比月份（ymKey 另有用途）
+  const ymIso = (ym) => (ym ? `${ym.y}-${String(ym.m).padStart(2, '0')}` : '');   // factsOf 的 ym 給 app.js 比月份（ymKey 另有用途）
   /** 投保年月距今幾個月（同一個月＝0） */
   const monthsSinceYm = (ym, today) => { const t = today || new Date(); return Math.max(0, (t.getFullYear() - ym.y) * 12 + (t.getMonth() + 1 - ym.m)); };
   const whenOf = (r) => (r.insMonths == null ? 'y1' : r.insMonths < 1 ? 'm1' : r.insMonths < 3 ? 'm3' : r.insMonths < 6 ? 'm6' : 'y1');

@@ -4584,3 +4584,13 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `app.js`：比對的索引抽成 `mixMineOf()`；新增 `window.mixMine(items)` 把每張卡的 `mine` 重算一次。`mix.js` 的 `show()` 每次切回來都先叫它再畫（名單幾百筆、卡片幾千張，很快）。
 - `window.reloadRecords`（測試用）：模擬別台裝置同步下來。`test-mix.js` 加：別處加進名單後切回來標「已在名單」、拿掉又變回可以加入。
 - 版號 20261014-336。
+
+## 拿掉「客戶新動態」（版本 337）
+
+使用者截圖那個視窗：「這個對我沒有太大幫助」→「有什麼建議嗎」→ 建議全部刪（44 家裡大多是「剛開電子發票」，老客戶申請電子發票跟要不要租設備沒關係；
+真正有用的訊號本來就在詳細頁和卡片上）→「刪掉」。
+
+- 拿掉：首頁「📣 N 家客戶最近三個月有新動態」那條與視窗（`renderSignalBar`）、詳細頁「📣 新動態」那行、`customerSignals()` 與後台每天那步、
+  `#signalBar`、view 的 `signals` 欄位、沒人用的 `monthsAgo`。追蹤狀態裡舊的 `sigs` 留著不讀（同步檔不用改）。
+- 留著：詳細頁「🌐 網路查到」、卡片來源標籤、登記現況那條（`openSimpleList` 還是它在用）。
+- 測試：`test-feed-backend.js` 改成確認那條與函式都沒了。版號 20261014-337。

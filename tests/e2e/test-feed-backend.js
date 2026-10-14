@@ -21,7 +21,7 @@ const LCSV='﻿'+[LHEAD,...LROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const LINDEX={latest:'11508',generatedAt:'2026-09-26T17:00:00.000Z',periods:{'11508':{generatedAt:'2026-09-26T17:00:00.000Z',period:'11508',files:[{city:'新北市',type:'change',path:'11508/新北市-change.csv',rows:4,capitalUp:4}]}}};
 const NHEAD='統編,名稱,地址,行業代號,行業,成立日期,投保年月,電話,資本額';
 const NROWS=[
- ['99999991','主力客戶一有限公司','新北市新莊區中正路9號','4582','運動用品、器材批發業','104/09/03','202609','02-2222-3333','3000000'],   // 已在名單：不會被挑，但會變成「新動態」
+ ['99999991','主力客戶一有限公司','新北市新莊區中正路9號','4582','運動用品、器材批發業','104/09/03','202609','02-2222-3333','3000000'],   // 已在名單：不會被挑
 ];
 const NCSV='\uFEFF'+[NHEAD,...NROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const NINDEX={generatedAt:'2026-10-02T20:00:00.000Z',cities:['新北市'],months:6,total:1,withPhone:1,latestYm:'2026/09',files:[{path:'nhi.csv',rows:1}]};
@@ -126,18 +126,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  chk(/戊五範例有限公司/.test(ex) && /Google 地圖/.test(ex), `「已排除的公司」標出 Google 查到的：${ex.match(/戊五.{0,80}/)?.[0]}`);
  // ===== 版本 323 =====
  await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
- // 客戶新動態：主力客戶一這個月出現在健保新投保（2026-09，距今 1 個月）→ 名單上方提一條、詳細頁一行；再叫一次沒變動
- const sig=await pg.evaluate(()=>window.customerSignals());
- chk(sig && sig.checked>=1 && sig.withSignals===1 && sig.changed===1, `customerSignals：比對、1 家有新動態、改了 1 家：${JSON.stringify(sig)}`);
- chk(/1 家客戶最近三個月有新動態/.test(await pg.textContent('#signalBar')), `名單上方：${await pg.textContent('#signalBar')}`);
- const sig2=await pg.evaluate(()=>window.customerSignals());
- chk(sig2 && sig2.changed===0, `再叫一次沒變動就不寫：${JSON.stringify(sig2)}`);
- await pg.locator('#cards .card:has-text("主力客戶一") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
- chk(/📣 新動態：剛開始請人 2026\/09 成立投保單位/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), `詳細頁一行新動態：${(await pg.textContent('#drawerBody .signal-line')||'').trim()}`);
- await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
- await pg.click('#signalBar button'); await pg.waitForTimeout(300);
- chk(/客戶新動態/.test(await pg.textContent('#editorBody')) && (await pg.locator('#editorBody .simple-open').count())===1, '點開列出那一家');
- await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
+ // 客戶新動態（版本 323）在版本 337 拿掉了：#signalBar、customerSignals、詳細頁那行都沒有了
+ chk((await pg.locator('#signalBar').count())===0 && (await pg.evaluate(()=>typeof window.customerSignals))==='undefined', '客戶新動態拿掉了');
  // 登記現況：商工登記查到「解散」→ 名單上方提一條、詳細頁講白；標了禁止推廣的不算
  await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='主力客戶一有限公司'); await window.Store.setState({recordId:v.id,regStatus:'解散',regAt:Date.now(),updatedAt:Date.now()}); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
@@ -148,16 +138,13 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  const tomb2=await pg.evaluate(async()=>{ const v=window.customerViews().find(v=>v.company==='主力客戶一有限公司'); return v.blocked; });
  chk(tomb2===false, '沒自動標禁止推廣');
  // ===== 版本 328 =====
- // 主力客戶每月上網查擴張訊號：只查主力名單（每日新名單不算）、有統編、沒禁止推廣的 → 主力客戶一；存進 intel、卡片掛 🌐、新動態那條有「網路：…」；30 天內查過的下次跳過
+ // 主力客戶每月上網查擴張訊號：只查主力名單（每日新名單不算）、有統編、沒禁止推廣的 → 主力客戶一；存進 intel、卡片掛 🌐、詳細頁一行；30 天內查過的下次跳過
  const before328=researched.length;
  const ci=await pg.evaluate(()=>window.customerIntel());
  chk(ci && ci.asked===1 && ci.withSignals===1 && ci.strong===1 && ci.skipped===0, `customerIntel：只查主力客戶一：${JSON.stringify(ci)}`);
  chk(researched.length===before328+1 && researched[before328].length===1 && /主力客戶一有限公司\|99999991\|/.test(researched[before328][0]), `送出去的是公司名、統編、地址：${researched[before328]}`);
  await pg.waitForTimeout(500);
  chk((await pg.locator('#cards .card:has-text("主力客戶一") .badge-intel').count())===1, '卡片掛「🌐 網路有擴張訊號」');
- await pg.click('#signalBar button'); await pg.waitForTimeout(300);
- chk(/網路：官網：2026\/09 新廠動工/.test(await pg.textContent('#editorBody')), `新動態清單有網路那句：${(await pg.textContent('#editorBody')).replace(/\s+/g,' ').slice(0,160)}`);
- await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
  await pg.locator('#cards .card:has-text("主力客戶一") .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  chk(/🌐 .*網路查到：官網：2026\/09 新廠動工/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), '詳細頁一行網路查到');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
