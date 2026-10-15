@@ -865,6 +865,22 @@
     return 3;
   }
 
+  /*
+   * 行業加減分（版本 341；使用者要我以企金業務的角度建議篩選指標 →「試試看吧」）：
+   * 有設備、有廠房的行業（製造、營造、運輸物流、食品、印刷包裝、機械金屬…）排前面＝0；
+   * 沒東西可擔保的（貿易、顧問、投資、仲介、人力、廣告行銷、金融不動產…）排後面＝2；其他、不知道＝1。
+   * 是排序不是門檻。先看有沒有設備類的字，「機械設備批發」算有設備。
+   */
+  const IND_GOOD = /製造|營造|工程|運輸|物流|倉儲|貨運|食品|印刷|包裝|機械|金屬|塑膠|橡膠|電子|零組件|模具|加工|鑄造|沖壓|車輛|汽車|紡織|木業|家具|建材|冷凍|農產|飼料|化學|醫療器材|土木|水電|裝潢|裝修|廢棄物|環保|清運|砂石|混凝土|鋼鐵|鋼構|五金|玻璃|陶瓷|紙業|製藥|電機|自動化|工廠/;
+  const IND_BAD = /貿易|顧問|投資|仲介|人力|派遣|資產管理|租賃|廣告|行銷|保險|證券|不動產|房屋|地產|經紀|控股|企管|公關|媒體|軟體|資訊服務|電子商務|網路購物|專業服務|金融|文教育樂|補習|教育|餐飲|小吃|美容|美髮/;
+  function industryRank(text) {
+    const t = String(text || '').trim();
+    if (!t) return 1;
+    if (IND_GOOD.test(t)) return 0;
+    if (IND_BAD.test(t)) return 2;
+    return 1;
+  }
+
   /* ---------------- 規則之間怎麼串起來（分析） ---------------- */
 
   const ANALYSIS = {
@@ -949,7 +965,7 @@
 
   global.Rules = {
     RULES, ANALYSIS, evaluate, assessControl, buildCheckpoints, parseSchedule, fmt,
-    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, branchRank, NEAR, ageRank, AGE_SWEET, BRANCH_AREAS, COMMON_AREAS,
+    shareSplit, routeCustomer, SHARE_SCENARIOS, branchOf, branchRank, NEAR, ageRank, AGE_SWEET, industryRank, BRANCH_AREAS, COMMON_AREAS,
     checkDeal, parseBalance, HANDOVER_MIN_LEASE, PASSIVE_MIN_YIELD,
     EXCLUDING, CONTROLLED_COLLATERAL, IRREGULAR_METHODS,
     MICRO_CAPITAL_LIMIT, LARGE_CAPITAL_LIMIT, MICRO_CREDIT_LIMIT, MICRO_SHARE_CAP, MICRO_MIN_SPREAD,
