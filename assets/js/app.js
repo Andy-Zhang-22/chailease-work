@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261015-340';
+  const APP_VERSION = '20261015-341';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3241,8 +3241,13 @@
   /**
    * 五頁的候選依統編合成一家：各頁看到的訊號聯集（本期增資／擴張、剛做進出口、剛開始請人、剛開電子發票），
    * 再用動保清冊補「最近買設備（6 個月內）」「跟同業借」——不管這家是從哪一頁進來的。
-   * 排法：訊號越多越前面 → 最近買設備越近 → 成立 5～7 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近 → 原本在各頁的名次。
+   * 排法（版本 341 照企金業務的角度調過）：缺錢的訊號越多越前面（剛開始請人、剛開電子發票只是「有在動」，不算，只當最後的補位）
+   * → 動保 6～12 個月前買過設備的先、沒動保的次之、半年內剛做過的排後（額度剛滿）→ 行業有設備廠房的先、貿易顧問類的後
+   * → 成立 5～7 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近 → 弱訊號 → 原本在各頁的名次。
    */
+  const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票)$/;
+  const strongSignals = (c) => [...c.signals].filter((x) => !WEAK_SIGNAL_RE.test(x)).length;
+  const buyRank = (c) => (c.buy.grade <= 1 ? 2 : c.buy.grade === 2 ? 0 : 1);
   function mergeFeed(sources) {
     const byKey = new Map();
     sources.forEach((src) => {
@@ -3250,7 +3255,7 @@
         const f = src.mod.dailyFacts ? src.mod.dailyFacts(r) : null;
         if (!f || !f.key) return;
         let c = byKey.get(f.key);
-        if (!c) { c = { key: f.key, name: f.name, recs: {}, signals: new Set(), ageRank: f.ageRank, capOk: f.capOk, phone: f.phone, branchRank: f.branchRank, order: idx }; byKey.set(f.key, c); }
+        if (!c) { c = { key: f.key, name: f.name, recs: {}, signals: new Set(), ageRank: f.ageRank, capOk: f.capOk, phone: f.phone, branchRank: f.branchRank, order: idx, industry: '', indRank: 1 }; byKey.set(f.key, c); }
         if (c.recs[src.key]) return;   // 動保一家好幾件：留在那一頁排最前面的那件
         c.recs[src.key] = r;
         f.signals.forEach((x) => c.signals.add(x));
@@ -3259,6 +3264,8 @@
         c.phone = c.phone || f.phone;
         c.branchRank = Math.min(c.branchRank, f.branchRank);
         c.order = Math.min(c.order, idx);
+        // 行業：哪一頁有寫就用哪一頁的，幾頁都有就取最好的那級
+        if (f.industry) { const ir = window.Rules && window.Rules.industryRank ? window.Rules.industryRank(f.industry) : 1; if (!c.industry || ir < c.indRank) { c.industry = f.industry; c.indRank = ir; } }
       });
     });
     const out = [...byKey.values()];
@@ -3269,12 +3276,13 @@
       c.demote = demo.size > 0 && Object.keys(c.recs).every((k) => demo.has(labelOf(k)));
       const tax = /^\d{8}$/.test(c.key) ? c.key : '';
       c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
-      if (c.buy.grade <= 1) c.signals.add(`最近買設備（${c.buy.ym}）`);
+      // 半年內剛做過動保的額度多半滿了，不加訊號、排後面（buyRank）；6～12 個月前買過的才是機會
+      if (c.buy.grade === 2) c.signals.add(`買過設備（${c.buy.ym}）`);
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
     });
-    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || b.signals.size - a.signals.size || a.buy.grade - b.buy.grade || a.ageRank - b.ageRank
-      || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || a.order - b.order);
+    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+      || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
   /** 每頁先保底一家（那一頁裡總排名最前面、還沒被挑的），剩下照總排名挑滿 n 家 */
