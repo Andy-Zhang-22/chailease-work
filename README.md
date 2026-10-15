@@ -4641,4 +4641,5 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   買過設備…）的數量，弱訊號只在最後當平手時的加分。
 - **動保半年內剛做過的排後面**：額度多半滿了。`buyRank`：6～12 個月前買過＝0（訊號改寫「買過設備（年月）」）、沒動保＝1、半年內＝2（不加訊號）。
 - 新順序：缺錢訊號多 → 動保遠近 → 行業 → 成立 5～7 年 → 資本額 → 有電話 → 分公司 → 弱訊號 → 各頁名次。找名單頁同一套。
-- 測試：`rules.test.js` 加 `industryRank`；`test-daily-feed.js`、`test-mix.js`、`test-feed-backend.js` 照舊通過。版號 20261015-341。
+- 測試：`rules.test.js` 加 `industryRank`；`test-feed-merge.js` 的動保案件改成 1 月（半年內剛做的現在會排後面，訊號改寫「買過設備」）；
+  `test-daily-feed.js`、`test-mix.js`、`test-feed-backend.js` 照舊通過。版號 20261015-341。
