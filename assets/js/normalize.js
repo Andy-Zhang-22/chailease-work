@@ -1698,13 +1698,13 @@
    * 以前出進口、健保、電子發票三個分頁不分公司商業一律連結果頁，使用者要求
    * 「所有名單的公司名只要點進去都是要連結這樣的畫面」——公司一律直達。
    * 沒統編的回 ''（寧可不連也不要連錯家）。
+   * 版本 342：使用者要改回 g0v 的公司頁（company.g0v.ronny.tw/id/統編），公司、商業一律這條；上面 findbiz 的分法留著當歷史。
    */
   function findbizUrl(taxId, name) {
     const tax = String(taxId || '').replace(/\D/g, '');
     if (!tax) return '';
-    const n = String(name || '').replace(/\s/g, '');
-    if (/公司$/.test(n) && !/分公司$/.test(n)) return `https://findbiz.nat.gov.tw/fts/company/${tax}`;
-    return `https://findbiz.nat.gov.tw/fts/query/QueryList/queryList.do?qryCond=${tax}&infoType=D&qryType=cmpyType&cmpyType=true&brCmpyType=true&busmType=true&factType=true&lmtdType=true&isAlive=all`;
+    void name;   // 版本 342：公司、商業、分公司都連 g0v 的公司頁（使用者：「請改回以下的網站 company.g0v.ronny.tw/id/統編」），不用再分
+    return `https://company.g0v.ronny.tw/id/${tax}`;
   }
 
   global.Normalize = {

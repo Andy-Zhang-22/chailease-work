@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261015-341';
+  const APP_VERSION = '20261015-342';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -4508,7 +4508,7 @@
     if (!r.taxId) return document.createTextNode(r.company);
     return el('a', {
       className: 'company-link',
-      href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r.taxId)}`,
+      href: window.Normalize.findbizUrl(r.taxId, r.company),
       target: '_blank',
       rel: 'noopener noreferrer',
       title: `在商工登記公示資料看「${r.company}」的登記內容（開新分頁）`,
@@ -5440,7 +5440,7 @@
        * 公司名稱按下去＝開商工登記公示資料（新分頁）。
        *
        * 要看登記細節（資本總額、實收、所營事業、歷次變更）時，本來得自己複製名稱
-       * 再去查；現在點一下就到。網址用統編那一種（/fts/company/統編）——那是唯一
+       * 再去查；現在點一下就到。網址用統編那一種（g0v 公司頁 /id/統編，版本 342 改回）——那是唯一
        * 不會認錯公司的鍵，同名公司很多。沒統編的就不連，寧可不連也不要連到錯的公司。
        *
        * 複製鈕放在 h2 裡面，字級才跟著公司名稱走（點＝那行字的一半）。

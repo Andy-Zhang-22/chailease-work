@@ -4643,3 +4643,11 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 新順序：缺錢訊號多 → 動保遠近 → 行業 → 成立 5～7 年 → 資本額 → 有電話 → 分公司 → 弱訊號 → 各頁名次。找名單頁同一套。
 - 測試：`rules.test.js` 加 `industryRank`；`test-feed-merge.js` 的動保案件改成 1 月（半年內剛做的現在會排後面，訊號改寫「買過設備」）；
   `test-daily-feed.js`、`test-mix.js`、`test-feed-backend.js` 照舊通過。版號 20261015-341。
+
+## 公司名改連 g0v 的公司頁（版本 342）
+
+使用者：「原本公司名字點下去是連結到商工登記的網站，請改回以下的網站 https://company.g0v.ronny.tw/id/統編」。
+
+- `Normalize.findbizUrl(taxId)`：有統編一律回 `https://company.g0v.ronny.tw/id/統編`，公司、商業、分公司不再分（findbiz 的直達頁／查詢頁分法留在註解當歷史）。
+- 詳細頁的公司名（app.js）、登記清冊、上市櫃原本各自寫死 findbiz 網址，改成都走 `findbizUrl`；商行、出進口、健保、電子發票、工廠、產業名單、合併頁本來就走它。
+- 測試：`normalize.test.js` 的 findbizUrl 改成新網址；`test-nhi`、`test-factory`、`test-chattel`、`test-trade` 的連結檢查跟著改。版號 20261015-342。

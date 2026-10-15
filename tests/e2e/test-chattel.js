@@ -70,7 +70,7 @@ const SEED=[mk('1','昱昌汽車貨運股份有限公司','53217846',{outcome:'n
  chk(await first.evaluate(e=>e.classList.contains('is-overdue')), '30 天內到期的卡片左邊是紅色');
  const meta=(await first.locator('.card-meta').textContent()).replace(/\s+/g,' ');
  chk(/擔保 1,200 萬/.test(meta) && /2023\/10\/15 → 2026\/10\/14/.test(meta) && /112新經動字第004821號/.test(meta), `金額、契約起迄、登記編號：${meta}`);
- chk(await first.locator('.card-name a[href="https://findbiz.nat.gov.tw/fts/company/28451237"]').count()===1, '公司名連到商工登記');
+ chk(await first.locator('.card-name a[href="https://company.g0v.ronny.tw/id/28451237"]').count()===1, '公司名連到商工登記');
  chk(/成立 101\/10\/01（13 年）/.test(meta), `成立年（民國＋滿幾年）：${meta}`);
  chk(/2 家還沒查到成立年/.test((await pg.textContent('#chattel-count'))), `寫還有幾家沒查到成立年：${await pg.textContent('#chattel-count')}`);
 

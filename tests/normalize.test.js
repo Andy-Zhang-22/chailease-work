@@ -181,14 +181,12 @@ test('splitCompanyNames：靠公司型態字尾切開黏在一起的關係企業
   assert.deepEqual(names, ['甲乙股份有限公司', '丙丁有限公司']);
 });
 
-test('findbizUrl：公司直達登記頁、商業與分公司連用統編查的結果頁、沒統編不連', () => {
-  assert.equal(Normalize.findbizUrl('60418429', '穩基機械有限公司'), 'https://findbiz.nat.gov.tw/fts/company/60418429');
-  assert.equal(Normalize.findbizUrl('12345678', '台積電股份有限公司'), 'https://findbiz.nat.gov.tw/fts/company/12345678');
-  assert.match(Normalize.findbizUrl('91712817', '協玖裝潢企業社'), /^https:\/\/findbiz\.nat\.gov\.tw\/fts\/query\/QueryList\/queryList\.do\?qryCond=91712817&/);
-  assert.match(Normalize.findbizUrl('91712817', '樹德醫療器材行'), /queryList\.do\?qryCond=91712817&/);
-  assert.match(Normalize.findbizUrl('87654321', '某某股份有限公司新莊分公司'), /queryList\.do\?qryCond=87654321&/, '分公司沒有 /fts/company 直達頁');
+test('findbizUrl：有統編就連 g0v 公司頁，公司、商業、分公司都一樣；沒統編不連（版本 342）', () => {
+  assert.equal(Normalize.findbizUrl('60418429', '穩基機械有限公司'), 'https://company.g0v.ronny.tw/id/60418429');
+  assert.equal(Normalize.findbizUrl('91712817', '協玖裝潢企業社'), 'https://company.g0v.ronny.tw/id/91712817');
+  assert.equal(Normalize.findbizUrl('87654321', '某某股份有限公司新莊分公司'), 'https://company.g0v.ronny.tw/id/87654321');
   assert.equal(Normalize.findbizUrl('', '穩基機械有限公司'), '');
-  assert.equal(Normalize.findbizUrl('6041-8429', ' 穩基機械 有限公司 '), 'https://findbiz.nat.gov.tw/fts/company/60418429', '統編只留數字、名稱去空白');
+  assert.equal(Normalize.findbizUrl('6041-8429', ' 穩基機械 有限公司 '), 'https://company.g0v.ronny.tw/id/60418429', '統編只留數字');
 });
 
 test('parseKeyValue：分身讀名片回的格式（Markdown、聯絡人＋職稱、電話＋手機、沒有的欄位）', () => {
