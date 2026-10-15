@@ -442,7 +442,7 @@
         : r.rk === 'down' ? el('span', { className: 'badge badge-down', textContent: r.reason })
           : el('span', { className: 'badge', textContent: r.reason || '變更' });
     const name = el('span', { className: 'card-name' }, [r['統一編號']
-      ? el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(r['統一編號'])}`, target: '_blank', rel: 'noopener', textContent: r['公司名稱'] })
+      ? el('a', { href: global.Normalize.findbizUrl(r['統一編號'], r['公司名稱']), target: '_blank', rel: 'noopener', textContent: r['公司名稱'] })
       : document.createTextNode(r['公司名稱']), copyName(r['公司名稱'] || '')]);
     const inds = r.classes.filter((c) => IND[c]).slice(0, 2).map((c) => el('span', { className: 'badge badge-ind', textContent: IND[c] }));
     const items = (r['營業項目'] || '').split('；').filter(Boolean);

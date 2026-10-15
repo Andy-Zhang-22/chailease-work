@@ -229,7 +229,7 @@
   const deletedOf = (name, tax) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(name, tax) : false);
   const restoreBtn = (name, tax) => el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來（名單刪過）', title: '這家你在名單上刪過，匯入與每日挑選都會跳過；放回來就收回排除', onclick: async () => { if (typeof global.liftCompany === 'function') await global.liftCompany(name, tax); render(); toast('放回來了，之後匯入與每日挑選會再出現'); } });
 
-  const findbiz = (taxId, text, title) => el('a', { href: `https://findbiz.nat.gov.tw/fts/company/${encodeURIComponent(taxId)}`, target: '_blank', rel: 'noopener', textContent: text, title: title || '商工登記公示資料' });
+  const findbiz = (taxId, text, title) => el('a', { href: global.Normalize.findbizUrl(taxId, text), target: '_blank', rel: 'noopener', textContent: text, title: title || '商工登記公示資料' });
 
   function investRow(x, r, c) {
     const mine = mineOfTax(x.taxId, x.name, c.cm);
