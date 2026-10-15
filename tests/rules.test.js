@@ -111,12 +111,12 @@ test('branchRank：我的分公司 0、共用的共同區 1、鄰近照順序、
   assert.equal(rk('新北市', '新莊區', '新北'), 2);
 });
 
-test('ageRank：離成立 5～7 年多遠（5～7 年最前，4／8～9 其次，10 以上，不到 4 年，不知道最後；版本 340）', () => {
+test('ageRank：5～7 年最前，4／8～9 其次，不到 4 年第三，不知道第四，10 年以上最後（版本 343）', () => {
   assert.deepEqual([5, 6, 7].map(Rules.ageRank), [0, 0, 0]);
   assert.deepEqual([4, 8, 9].map(Rules.ageRank), [1, 1, 1]);
-  assert.equal(Rules.ageRank(10), 2); assert.equal(Rules.ageRank(30), 2);
-  assert.equal(Rules.ageRank(3), 3); assert.equal(Rules.ageRank(0), 3);
-  assert.equal(Rules.ageRank(null), 4); assert.equal(Rules.ageRank(undefined), 4);
+  assert.equal(Rules.ageRank(3), 2); assert.equal(Rules.ageRank(0), 2);
+  assert.equal(Rules.ageRank(null), 3); assert.equal(Rules.ageRank(undefined), 3);
+  assert.equal(Rules.ageRank(10), 4); assert.equal(Rules.ageRank(30), 4);
 });
 
 test('industryRank：有設備廠房的行業 0、貿易顧問類 2、其他或不知道 1（版本 341）', () => {

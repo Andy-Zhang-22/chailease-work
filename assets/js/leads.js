@@ -667,7 +667,7 @@
     hasPhone(r),
     r.capital >= 5000000 && r.capital <= 60000000,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
-    ageRankOf(r),   // 離成立 7～8 年多遠：0＝5～7 年 … 4＝不知道
+    ageRankOf(r),   // 離成立 5～7 年多遠：0＝5～7 年 … 4＝10 年以上（版本 343）
   ];
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.foundedDate ? yearsSince(r.foundedDate) : null) : (ageOf(r) === 'ge5' ? 0 : 3));
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));

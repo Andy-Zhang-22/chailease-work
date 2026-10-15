@@ -4651,3 +4651,10 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `Normalize.findbizUrl(taxId)`：有統編一律回 `https://company.g0v.ronny.tw/id/統編`，公司、商業、分公司不再分（findbiz 的直達頁／查詢頁分法留在註解當歷史）。
 - 詳細頁的公司名（app.js）、登記清冊、上市櫃原本各自寫死 findbiz 網址，改成都走 `findbizUrl`；商行、出進口、健保、電子發票、工廠、產業名單、合併頁本來就走它。
 - 測試：`normalize.test.js` 的 findbizUrl 改成新網址；`test-nhi`、`test-factory`、`test-chattel`、`test-trade` 的連結檢查跟著改。版號 20261015-342。
+
+## 成立年 10 年以上的排最後（版本 343）
+
+使用者看完篩選順序：「成立年10年以上的排最後」。
+
+- `Rules.ageRank`：5～7 年 0；4 年、8～9 年 1；不到 4 年 2；不知道 3；10 年以上 4（最後）。還是排序不是門檻。規則頁說明跟著改。
+- 測試：`rules.test.js` 改成新分級。版號 20261015-343。
