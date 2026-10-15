@@ -853,15 +853,15 @@
 
   /*
    * 成立年數離「最常成交的年紀」多遠（每日新名單挑的時候用）。
-   * 使用者：「案件成交金額都是 1000 萬、利率 8%-14%、成立 7-8 年的公司」。7～8 年最好，前後放寬到 6～10 年排第一級；
-   * 5 年、11～12 年第二；13 年以上第三；不到 5 年第四；不知道成立年排最後。是遠近，不是門檻。
+   * 使用者：「案件成交金額都是 1000 萬、利率 8%-14%、成立 7-8 年的公司」→ 版本 340 使用者改成「成立年改成 5-7 年」：
+   * 5～7 年排第一級；4 年、8～9 年第二；10 年以上第三；不到 4 年第四；不知道成立年排最後。是遠近，不是門檻。
    */
-  const AGE_SWEET = { from: 6, to: 10 };
+  const AGE_SWEET = { from: 5, to: 7 };
   function ageRank(years) {
     if (years == null || !Number.isFinite(years)) return 4;
     if (years >= AGE_SWEET.from && years <= AGE_SWEET.to) return 0;
-    if (years === 5 || (years >= 11 && years <= 12)) return 1;
-    if (years >= 13) return 2;
+    if (years === AGE_SWEET.from - 1 || (years >= AGE_SWEET.to + 1 && years <= AGE_SWEET.to + 2)) return 1;
+    if (years > AGE_SWEET.to + 2) return 2;
     return 3;
   }
 
