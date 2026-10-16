@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261015-344';
+  const APP_VERSION = '20261016-345';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3282,7 +3282,8 @@
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
     });
-    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    // 成立 10 年以上的真的排最後（版本 345；使用者：「今天給我的名單為甚麼都是成立年非新公司」——以前只是第 7 順位的比較條件，有訊號的老公司照樣排前面）
+    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || Number(a.ageRank === 4) - Number(b.ageRank === 4) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -3498,6 +3499,9 @@
       const bizKey = (r) => String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, '');
       const bzSeen = new Set();
       let bz = bzAll.filter((r) => { const k = bizKey(r); if (!k || bzSeen.has(k) || mergedKeys.has(k) || !notBuried(r.name, r.taxId)) return false; bzSeen.add(k); return true; });
+      // 商行也一樣：成立 10 年以上排最後（版本 345），商行頁自己的四級順序在各級裡照舊
+      const oldBiz = (r) => Number(r.years) >= 10;
+      bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || a[1] - b[1]).map(([r]) => r);
       /*
        * 只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
        * 這是每日新名單唯一的門檻（合併頁、各分頁照舊都看得到）：沒電話的先用 Google 地圖查一次（名稱、地址都對得上才算），
@@ -3552,7 +3556,7 @@
         } catch (err) { console.error('網路查擴張訊號', err); research = { asked, withSignals: 0, strong: 0, error: String(err && err.message ? err.message : err) }; }
         const score = (k) => { const v = intel.get(k); return v && v.expansion ? (v.score || 1) : 0; };
         merged = merged.map((c, i) => [c, i]).sort((a, b) => Number(rulesOkM(b[0])) - Number(rulesOkM(a[0])) || Number(strongKey(b[0].key)) - Number(strongKey(a[0].key)) || score(b[0].key) - score(a[0].key) || a[1] - b[1]).map(([c]) => c);
-        bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || Number(strongKey(bizKey(b[0]))) - Number(strongKey(bizKey(a[0]))) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
+        bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || Number(strongKey(bizKey(b[0]))) - Number(strongKey(bizKey(a[0]))) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
         if (!research) research = { asked, withSignals: [...intel.values()].filter((v) => v.expansion).length, strong: [...intel.values()].filter((v) => v.expansion && (v.score || 0) >= 2).length };
       }
       const gate = { tried: 0, found: 0, error: '' };   // 挑名單那關 Google 地圖查了幾家、查到幾家、第一個錯（版本 333；後台印）

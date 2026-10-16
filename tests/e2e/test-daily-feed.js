@@ -31,7 +31,7 @@ const BROWS=[
  ['61111111','新莊好商行','獨資','12000000','2023/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','12000000','Y'],
  ['62222222','板橋企業社','合夥','1500000','2010/05/01','新北市板橋區文化路1號','472','五金','','','Y','李板橋','1500000','Y'],
  ['64444444','新設小商行','獨資','3000000','2024/01/01','新北市新莊區中正路2號','471','雜貨','','','N','','3000000','N'],
- ['63333333','只有稅籍商行','獨資','60000000','2003/08/01','新北市新莊區中正路1號','481','水電','','','N','','60000000','N'],
+ ['63333333','只有稅籍商行','獨資','60000000','2018/08/01','新北市新莊區中正路1號','481','水電','','','N','','60000000','N'],
 ];
 const BCSV='\uFEFF'+[BHEAD,...BROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const BINDEX={generatedAt:'2026-09-29T13:00:00.000Z',fileDate:'29-SEP-26',cities:['新北市'],minCapital:500000,total:3,byOrg:{'獨資':2,'合夥':1},byDist:{'新莊區':2,'板橋區':1},withOwner:2,taxOnly:1,files:[{path:'biz.csv',rows:3}]};
@@ -104,7 +104,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
  const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
  chk(cg && /每日新名單，符合：剛做進出口(\n|$)/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
- chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>/板橋企業社|只有稅籍商行|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 23 年的只有稅籍商行前面）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
+ chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>/板橋企業社|只有稅籍商行|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 8 年的只有稅籍商行前面；成立 10 年以上的會沉到最後（版本 345），所以它設 8 年）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：資本額 500 萬以上＋成立 5 年內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行落在第一級，寫在訪談內容');
  const bc=await pg.evaluate(async()=>(await window.Biz.dailyCandidates()).map(r=>r.name+'|'+r._why));
  chk(JSON.stringify(bc)===JSON.stringify(['只有稅籍商行|符合：資本額 500 萬以上＋成立 5 年以上','新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行的順序只看資本額跟成立年：${bc.join(' / ')}`);
