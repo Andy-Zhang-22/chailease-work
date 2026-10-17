@@ -73,7 +73,7 @@ concurrency:
 jobs:
   feed:
     runs-on: ubuntu-latest
-    timeout-minutes: 40   # 每月 1 日多查主力客戶 120 家，約 10 分鐘
+    timeout-minutes: 90   # 每月 1 日多查主力客戶 120 家約 10 分鐘；手動一次查 380 家（Opus）要 45 分鐘以上（版本 350）
     steps:
       - uses: actions/checkout@v5
 

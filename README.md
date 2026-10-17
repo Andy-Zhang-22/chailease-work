@@ -4715,3 +4715,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - **3. 切回網站先拉雲端**：`visibilitychange` 回到前景時，有設雲端同步且 5 分鐘內沒同步過，就靜默 `runSync` 一次。
 - **5. Actions 的 Node 20 警告**：14 支 workflow 的 `actions/checkout@v5`、`actions/setup-node@v5`、`google-github-actions/auth@v3`。auth 要等後台下次跑才驗證。
 - 第 2 項（兩週不改排序）是使用者配合。測試：`test-auto-phones.js` 加本月次數。版號 20261017-349。
+
+## 後台挑名單的 workflow 逾時放寬到 90 分鐘（版本 350）
+
+手動一次查 380 家主力客戶（Opus）約 45 分鐘，原本 `timeout-minutes: 40` 會被砍掉。排程的每天跑只要 7 分鐘，不受影響。版號 20261017-350。
