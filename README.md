@@ -4693,3 +4693,11 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 八份來源的 `dailyFacts` 多一個 `mobile`（各頁本來就有的 phoneKinds／phoneKindsOf 的「M」：稅籍、出進口電話表、Google 查到的手機）。
 - `mergeFeed`：有手機的排在訊號前面（刪太多的來源、成立 10 年以上之後）；商行也一樣。找名單頁同一套。
 - 測試：`test-feed-merge.js` 訊號最多那家的出進口電話改成假手機號，不然會被有手機的超過去。版號 20261017-347。
+
+## 主力客戶一次查幾家做成手動選項（版本 348）
+
+使用者：「我的 claude api 點數還有 70 多塊美金還沒用，明天就作廢了，可以幫我用在系統上嗎」→ 用在主力客戶的擴張訊號：
+手動跑 `recheck=yes、model=opus、recheckmax=380`，查到的存進每家的 intel（詳細頁「🌐 網路查到」）。
+
+- `feed-drive.mjs`：`--recheck-max`／環境變數 `RECHECK_MAX`（預設 120，上限 2000）；`daily-feed-drive.yml` 手動跑多 `recheckmax` 選項。排程照舊 120。
+- 版號 20261017-348。
