@@ -30,7 +30,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FILE_NAME, resolveAuth, findFile, modifiedTimeOf, pinCurrentRevision } from './drive-lib.mjs';
-import { researchCompanies, emptyUsage, estimateUsd, pickModel } from './intel.mjs';
+import { researchCompanies, findPhones, emptyUsage, estimateUsd, pickModel } from './intel.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -125,6 +125,16 @@ async function main() {
         return r.results;
       });
     }
+    // 第四關找電話（版本 352）：名單來源、Google 地圖都沒有的，讓 Claude 上網找；跟每日新名單要不要查訊號（RESEARCH）無關
+    const huntStats = { asked: 0, found: 0, usage: emptyUsage() };
+    if (CLAUDE_ON) {
+      await page.exposeFunction('backendPhoneHunt', async (items) => {
+        const r = await findPhones(items || [], { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, log: (m) => console.log(`  ${m}`) });
+        huntStats.asked += r.asked; huntStats.found += r.found;
+        for (const k of Object.keys(huntStats.usage)) huntStats.usage[k] += r.usage[k] || 0;
+        return r.results;
+      });
+    }
     page.on('dialog', (d) => d.accept());
     await page.goto(`http://127.0.0.1:${port}/index.html`);
     await page.waitForFunction(() => typeof window.dailyFeed === 'function' && typeof window.runSync === 'function' && window.Store, null, { timeout: 60000 });
@@ -157,6 +167,7 @@ async function main() {
         + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}${res.skippedNoPhone ? `；沒電話的跳過 ${res.skippedNoPhone} 家` : ''}`
         + `${ph.trade ? `；出進口電話表對到 ${ph.trade.found}/${ph.trade.tried}` : ''}${ph.google ? `，Google 地圖找到 ${ph.google.found}/${ph.google.tried}` : ''}`
         + `${res.gate ? `；挑的時候 Google 地圖查了 ${res.gate.tried} 家、查到 ${res.gate.found} 家${res.gate.error ? `（第一個錯：${res.gate.error}）` : ''}` : ''}`
+        + `${res.hunt && res.hunt.tried ? `；Claude 找電話查了 ${res.hunt.tried} 家、找到 ${res.hunt.found} 家` : ''}`
         + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
@@ -195,6 +206,7 @@ async function main() {
       out(`${costNote}（查 ${researchStats.asked} 家：搜尋 ${u.searches} 次、輸入 ${Math.round((u.input + u.cacheRead + u.cacheWrite) / 1000)}k、輸出 ${Math.round(u.output / 1000)}k token；照牌價估，帳單以 Anthropic 後台為準）`);
     }
 
+    if (huntStats.asked) out(`Claude 找電話約 US$${estimateUsd(huntStats.usage, MODEL_NAME).toFixed(2)}（${huntStats.asked} 家：搜尋 ${huntStats.usage.searches} 次）`);
     // 4d. Google 地圖本月查了幾次（版本 349）
     const gm = await page.evaluate(() => (window.googleMonth ? window.googleMonth() : null));
     if (gm && gm.n) out(`Google 地圖本月查了 ${gm.n}／1,000 次（免費額度）`);

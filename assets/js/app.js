@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-351';
+  const APP_VERSION = '20261017-352';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3207,6 +3207,7 @@
   /** 每日新名單只進有電話的（版本 318）；feed-need-phone＝'0' 關掉（測試用）。一天最多用 Google 地圖查 GATE_LOOKUPS 家 */
   const feedNeedPhone = () => { try { return localStorage.getItem('feed-need-phone') !== '0'; } catch (e) { return true; } };
   const GATE_LOOKUPS = 40;
+  const HUNT_LOOKUPS = 20;   // 第四關 Claude 找電話一天最多幾家（版本 352；一家約 US$0.09）
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
   /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
@@ -3264,7 +3265,8 @@
   // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
   const BUY_MIN = 3000000;
   const buyBig = (c) => (c.buy.amount || 0) >= BUY_MIN;
-  const buyRank = (c) => (!buyBig(c) ? 2 : c.buy.grade <= 1 ? 0 : c.buy.grade === 2 ? 1 : 2);
+  // 金主是銀行的也挑，但要半年內的（版本 352 使用者：「銀行當金主的也可以挑給我，但就是要最近半年內有的」）：半年到一年的只有同業（租賃／融資）才算
+  const buyRank = (c) => (!buyBig(c) ? 2 : c.buy.grade <= 1 ? 0 : c.buy.grade === 2 && c.buy.peer ? 1 : 2);
   function mergeFeed(sources) {
     const byKey = new Map();
     sources.forEach((src) => {
@@ -3580,23 +3582,39 @@
         if (!research) research = { asked, withSignals: [...intel.values()].filter((v) => v.expansion).length, strong: [...intel.values()].filter((v) => v.expansion && (v.score || 0) >= 2).length };
       }
       const gate = { tried: 0, found: 0, error: '' };   // 挑名單那關 Google 地圖查了幾家、查到幾家、第一個錯（版本 333；後台印）
+      const hunt = { tried: 0, found: 0 };   // 第三關 Claude 找電話（版本 352）：查了幾家、找到幾家
       if (feedNeedPhone()) {
         let budget = GATE_LOOKUPS;
+        /*
+         * 沒電話的定義（版本 352 使用者：「你有用過 Google 地圖、Claude api、名單來源裡都查過，都沒有才算」）：
+         * 1 名單來源（公開資料的電話表）→ 2 上網查訊號時順便看到的 → 3 Google 地圖 → 4 Claude 上網找電話（只有後台有，一天最多 HUNT_LOOKUPS 家）
+         * 四關都沒有才算沒電話、跳過。
+         */
         const confirm = async (name, address, known, key) => {
           if (known) return true;
           // 2 → 3：上網查訊號時順便在官網、104 看到的電話，直接用（匯入後跟 Google 查到的一樣填進去，來源標「網路」）
           const it = key ? intel.get(key) : null;
           if (it && it.phone && window.Normalize.extractPhones(it.phone).length) { googleHits.set(name, { phone: it.phone, name, address: address || '', maps: '', website: (it.sources || [])[0] || '', kind: 'web' }); return true; }
-          if (!placesKey() || budget <= 0) return false;
-          budget -= 1; gate.tried += 1;
-          const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
-          try {
-            const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
-            if (best && best.level === 'sure') { googleHits.set(name, best); gate.found += 1; return true; }
-          } catch (err) {
-            console.error('挑名單前找電話', name, err);
-            if (!gate.error) gate.error = String(err && err.message ? err.message : err).slice(0, 80);
-            if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
+          if (placesKey() && budget > 0) {
+            budget -= 1; gate.tried += 1;
+            const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
+            try {
+              const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
+              if (best && best.level === 'sure') { googleHits.set(name, best); gate.found += 1; return true; }
+            } catch (err) {
+              console.error('挑名單前找電話', name, err);
+              if (!gate.error) gate.error = String(err && err.message ? err.message : err).slice(0, 80);
+              if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
+            }
+          }
+          if (typeof window.backendPhoneHunt === 'function' && hunt.tried < HUNT_LOOKUPS) {
+            hunt.tried += 1;
+            const k = key || name;
+            try {
+              const got = (await window.backendPhoneHunt([{ key: k, name, taxId: /^\d{8}$/.test(String(k)) ? String(k) : '', address: address || '' }])) || {};
+              const p = got[k];
+              if (p && p.phone && window.Normalize.extractPhones(p.phone).length) { googleHits.set(name, { phone: p.phone, name, address: address || '', maps: '', website: p.source || '', kind: 'web' }); hunt.found += 1; return true; }
+            } catch (err) { console.error('挑名單前 Claude 找電話', err); }
           }
           return false;
         };
@@ -3686,7 +3704,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research, gate,
+      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;

@@ -4729,3 +4729,15 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `feed-drive.mjs`：`--recheck-model`／`RECHECK_MODEL`（預設 opus）跟每日新名單的 `--model` 分開；主力客戶那段的費用另外印一行。
   `--recheck-max` 預設 260。`daily-feed-drive.yml` 手動跑多 `recheckmodel`。
 - `customerIntel`：跳過的視窗 30 → 60 天。版號 20261017-351。
+
+## 沒電話＝三關都查過才算；動保金主是銀行的半年內也算（版本 352）
+
+使用者重新設定挑名單的邏輯（「我是中租的業務，就是服務那些銀行沒辦法服務的客戶」），這版先做兩條：
+
+- **沒有電話的定義**：「你有用過 Google 地圖、Claude api、名單來源裡都查過，都沒有才算喔」。
+  挑名單那關改成四道：1 名單來源的電話 → 2 上網查訊號時順便看到的 → 3 Google 地圖（一天 40 家）→ 4 Claude 上網找電話（一天 20 家，`HUNT_LOOKUPS`）。
+  四關都沒有才跳過。`tools/intel.mjs` 新增 `findPhones`／`parsePhoneAnswer`（只收台灣市話、手機，+886 轉 0 開頭），後台掛 `window.backendPhoneHunt`，
+  跟每日新名單要不要查訊號（`RESEARCH`）無關。找到的電話來源標「網路」，附來源網址。後台摘要多印「Claude 找電話查了 x 家、找到 y 家」與費用。
+- **動保金主是銀行的也挑**：「但就是要最近半年內有的」。`recentBuyOf` 多回 `peer`／`bank`；半年內的不管金主是誰都算「最近買設備」排最前，
+  半年到一年的只有同業（租賃／融資）才排第二級，銀行的當沒動保。
+- 測試：`intel.test.js` 加 `parsePhoneAnswer`；`test-feed-backend.js` 掛假的 `backendPhoneHunt`，確認名單來源、Google 都沒有的才問。版號 20261017-352。

@@ -44,3 +44,14 @@ test('pickModel／estimateUsd 換 Opus：牌價不同，不認得的名字回 So
   assert.equal(m.estimateUsd(big, 'opus'), 3.94);   // 384k×4 + 24k×20 ＝ 2.016；搜尋 192×0.01 ＝ 1.92
   assert.equal(m.estimateUsd(big, 'sonnet'), m.estimateUsd(big));
 });
+
+test('parsePhoneAnswer：台灣市話／手機才收，+886 轉 0 開頭，沒電話或格式怪回 null（版本 352）', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'intel.mjs'));
+  assert.deepEqual(m.parsePhoneAnswer('{"phone":"02-2299-1234","kind":"landline","source":"https://x.tw/c","who":"總機"}'), { phone: '02-2299-1234', kind: 'landline', source: 'https://x.tw/c', who: '總機' });
+  assert.equal(m.parsePhoneAnswer('{"phone":"0912-345-678"}').kind, 'mobile');
+  assert.equal(m.parsePhoneAnswer('{"phone":"+886 2 2299 1234"}').kind, 'landline');
+  assert.equal(m.parsePhoneAnswer('{"phone":"02-2299-1234","source":"不是網址"}').source, '');
+  assert.equal(m.parsePhoneAnswer('{"phone":""}'), null);
+  assert.equal(m.parsePhoneAnswer('{"phone":"12345"}'), null);
+  assert.equal(m.parsePhoneAnswer('查不到'), null);
+});
