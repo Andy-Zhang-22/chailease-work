@@ -4700,4 +4700,5 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 手動跑 `recheck=yes、model=opus、recheckmax=380`，查到的存進每家的 intel（詳細頁「🌐 網路查到」）。
 
 - `feed-drive.mjs`：`--recheck-max`／環境變數 `RECHECK_MAX`（預設 120，上限 2000）；`daily-feed-drive.yml` 手動跑多 `recheckmax` 選項。排程照舊 120。
+- `customerIntel` 的池子排除「中租往來」（dealingKind active，首頁預設隱藏的那 268 家）：使用者「主力客戶不是 525 家嗎」。第一次手動跑沒排除，跑 3 分鐘就取消重跑。
 - 版號 20261017-348。
