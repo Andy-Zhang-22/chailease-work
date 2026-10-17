@@ -17,7 +17,7 @@
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
  * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes]
- *   --model：查訊號用哪個模型（版本 335，預設 sonnet）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
+ *   --model：查訊號用哪個模型（版本 335，預設 sonnet）。--recheck-max：主力客戶一次查幾家（預設 120；版本 348 使用者要把到期的點數用掉）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
  *   只能配 report（不寫回），拿來看另一個模型在同一批候選上查到幾家訊號。
  *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
  *   需要：GDRIVE_ACCESS_TOKEN（或 GDRIVE_SERVICE_ACCOUNT）、PLACES_API_KEY；本機測試可設 PW_CHROMIUM 指定瀏覽器。
@@ -42,6 +42,7 @@ const NOPHONE = opt('nophone', 'auto');
 const RECHECK = opt('recheck', 'auto');
 const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
 const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
+const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '120')) || 120));   // 主力客戶一次查幾家（版本 348）
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 // Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
@@ -170,7 +171,7 @@ async function main() {
     if (doRecheck) {
       if (!CLAUDE_ON) out('主力客戶查訊號：沒設 Claude，跳過');
       else {
-        const ci = await page.evaluate(() => window.customerIntel({ max: 120 }));
+        const ci = await page.evaluate((max) => window.customerIntel({ max }), RECHECK_MAX);
         out(`主力客戶查訊號：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；30 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
       }
     }

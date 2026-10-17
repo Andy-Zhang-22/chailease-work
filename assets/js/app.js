@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-347';
+  const APP_VERSION = '20261017-348';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -607,7 +607,8 @@
   async function customerIntel({ max = 120 } = {}) {
     if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0, skipped: 0 };
     const recent = Date.now() - 30 * 86400000;
-    const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !v.blocked && !FRESH_SOURCE_RE.test(String(v.source || '')));
+    // 中租往來的（dealingKind active，首頁預設隱藏的那群）不查（版本 348；使用者：「主力客戶不是 525 家嗎」）
+    const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !v.blocked && v.dealingKind !== 'active' && !FRESH_SOURCE_RE.test(String(v.source || '')));
     const fresh = pool.filter((v) => !(v.intel && v.intel.at > recent));
     fresh.sort((a, b) => Number(b.chance === 'yes') - Number(a.chance === 'yes') || String(b.lastDate || '').localeCompare(String(a.lastDate || '')));
     const batchItems = fresh.slice(0, max);

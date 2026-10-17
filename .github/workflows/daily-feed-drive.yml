@@ -38,6 +38,11 @@ on:
         default: 'auto'
         type: choice
         options: [auto, 'yes', 'no']
+      recheckmax:
+        description: '主力客戶一次查幾家（配 recheck=yes；預設 120）'
+        required: false
+        default: '120'
+        type: string
       model:
         description: '查訊號用哪個模型：sonnet＝平常；opus＝試試看（約 2 倍價）'
         required: false
@@ -111,4 +116,5 @@ jobs:
           RECHECK: ${{ inputs.recheck || 'auto' }}
           INTEL_MODEL: ${{ inputs.model || 'sonnet' }}
           COMPARE: ${{ inputs.compare || 'no' }}
+          RECHECK_MAX: ${{ inputs.recheckmax || '120' }}
         run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"
