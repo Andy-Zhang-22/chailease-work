@@ -97,7 +97,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
  chk(fed.length===5, `額度 5：六頁輪流拿，排最後的剛開電子發票這輪沒輪到（動產擔保、登記清冊、商行、出進口、剛開始請人各 1）：${fed.map(f=>f.company).join('|')}`);
  const ec=await pg.evaluate(async()=>(await window.Einv.dailyCandidates()).map(r=>r.name+'|'+r._why));
- chk(ec.length===2 && /^新開發票有限公司\|符合：利率不敏感（剛開電子發票）、有電話、資本額 300～6,000 萬、我的分公司、成立 5～7 年、剛導入 3 個月內$/.test(ec[0]), `剛開電子發票的候選照優先順序、寫符合哪幾條：${ec.join(' / ')}`);
+ chk(ec.length===2 && /^新開發票有限公司\|符合：利率不敏感（剛開電子發票）、有電話、資本額 300～6,000 萬、我的分公司、成立 2～7 年、剛導入 3 個月內$/.test(ec[0]), `剛開電子發票的候選照優先順序、寫符合哪幾條：${ec.join(' / ')}`);
  chk(JSON.stringify(await pg.evaluate(()=>window.splitEvenly([9,9,9,9,9,9],25)))==='[5,4,4,4,4,4]', '六頁分 25：前面的多拿');
  chk(fed.some(f=>f.company==='名祿實業有限公司') && !fed.some(f=>f.company==='沒電話請人有限公司'), `剛開始請人挑 1 家、有電話且全符合的先：${fed.filter(f=>/請人|名祿/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/每日新名單，符合：剛開始請人(\n|$)/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿：訪談內容只寫訊號（其他條件、保底不寫）');
