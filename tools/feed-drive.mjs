@@ -17,7 +17,7 @@
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
  * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes]
- *   --model：查訊號用哪個模型（版本 335，預設 sonnet）。--recheck-max：主力客戶一次查幾家（預設 120；版本 348 使用者要把到期的點數用掉）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
+ *   --research yes：每日新名單候選上網查擴張訊號（版本 349 起預設不查）。--model：查訊號用哪個模型（版本 335，預設 sonnet）。--recheck-max：主力客戶一次查幾家（預設 120；版本 348 使用者要把到期的點數用掉）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
  *   只能配 report（不寫回），拿來看另一個模型在同一批候選上查到幾家訊號。
  *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
  *   需要：GDRIVE_ACCESS_TOKEN（或 GDRIVE_SERVICE_ACCOUNT）、PLACES_API_KEY；本機測試可設 PW_CHROMIUM 指定瀏覽器。
@@ -42,6 +42,7 @@ const NOPHONE = opt('nophone', 'auto');
 const RECHECK = opt('recheck', 'auto');
 const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
 const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
+const RESEARCH = (process.env.RESEARCH || opt('research', 'no')).toLowerCase() === 'yes';   // 每日新名單要不要上網查（版本 349 預設不查）
 const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '120')) || 120));   // 主力客戶一次查幾家（版本 348）
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
@@ -83,7 +84,7 @@ async function main() {
   if (!file) throw new Error(`雲端硬碟裡找不到「${FILE_NAME}」，或還沒分享給服務帳號 ${saEmail || '（見設定）'}（要給「編輯者」權限）`);
   const doNoPhone = NOPHONE === 'yes' || (NOPHONE === 'auto' && taipeiDate().getUTCDate() === 1);
   const doRecheck = RECHECK === 'yes' || (RECHECK === 'auto' && taipeiDate().getUTCDate() === 1);
-  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（候選先上網查擴張訊號；模型 ${MODEL_NAME === 'opus' ? 'Opus' : 'Sonnet'}）` : '，沒設 Claude（不上網查訊號）'}${COMPARE ? '；比較模式：再挑一批、不寫回' : ''}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
+  out(`同步檔雲端最後修改 ${file.modifiedTime}；模式 ${MODE}${PLACES_KEY ? '，有 Google 金鑰' : '，沒有 Google 金鑰（沒電話的只能靠公開資料）'}${CLAUDE_ON ? `，Claude 用${ANTHROPIC_WIF ? '身分聯合' : '金鑰'}（${RESEARCH ? '候選先上網查擴張訊號' : '每日新名單不上網查，research=yes 才查'}；模型 ${MODEL_NAME === 'opus' ? 'Opus' : 'Sonnet'}）` : '，沒設 Claude（不上網查訊號）'}${COMPARE ? '；比較模式：再挑一批、不寫回' : ''}${doNoPhone ? '，這次順便幫找不到電話的再查 Google' : ''}`);
 
   const { chromium } = require('playwright');
   const { srv, port } = await serve();
@@ -130,6 +131,7 @@ async function main() {
     out(`同步完成：名單 ${n} 筆`);
 
     // 3. 挑今天的新名單（跟網站一模一樣的那條，照使用者的設定：自動挑關著就不挑、今天挑過就不重挑），等補電話跑完
+    await page.evaluate((on) => { window.researchDaily = on; }, CLAUDE_ON && RESEARCH);
     const res = await page.evaluate((more) => window.dailyFeed({ awaitPhones: true, more }), COMPARE);
     const today = taipeiDate().toISOString().slice(0, 10);
     let line;
@@ -153,7 +155,7 @@ async function main() {
     }
     out(line);
     // 3a. 今天排著的新名單裡還沒查過訊號的補查（版本 331：額度被別處挑的排滿時，後台沒挑也沒查，10/12 第一次正式跑就是這樣）
-    if (CLAUDE_ON) {
+    if (CLAUDE_ON && RESEARCH) {
       const fi = await page.evaluate(() => window.fillTodayIntel());
       if (fi.asked) out(`今天排著、還沒查過訊號的 ${fi.asked} 家補查：${fi.withSignals} 家有擴張訊號（明確 ${fi.strong}）`);
     }
@@ -183,6 +185,10 @@ async function main() {
       costNote = `Claude${MODEL_NAME === 'opus' ? '（Opus）' : ''} 約 US$${estimateUsd(u, MODEL_NAME).toFixed(2)}`;
       out(`${costNote}（查 ${researchStats.asked} 家：搜尋 ${u.searches} 次、輸入 ${Math.round((u.input + u.cacheRead + u.cacheWrite) / 1000)}k、輸出 ${Math.round(u.output / 1000)}k token；照牌價估，帳單以 Anthropic 後台為準）`);
     }
+
+    // 4d. Google 地圖本月查了幾次（版本 349）
+    const gm = await page.evaluate(() => (window.googleMonth ? window.googleMonth() : null));
+    if (gm && gm.n) out(`Google 地圖本月查了 ${gm.n}／1,000 次（免費額度）`);
 
     // 5. 寫回：把這次的結果留一句在同步檔的設定（網站名單最上面那條「今天的新名單」下面會顯示，三天內的才顯示），釘住雲端目前的版本，再同步一次
     if (MODE === 'write') {

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-348';
+  const APP_VERSION = '20261017-350';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -486,6 +486,9 @@
       const days = Math.round((Date.parse(today) - Date.parse(iso > today ? `${y - 1}-${m[1]}-${m[2]}` : iso)) / 86400000);
       if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: `後台 ${stamp}` }));
     }
+    // Google 地圖本月查了幾次（版本 349）：免費 1,000 次，超過每次約 NT$1
+    const gm = googleMonth();
+    if (gm.n > 0) bar.append(el('div', { className: 'feed-google muted', textContent: `Google 地圖本月查了 ${gm.n}／1,000 次（免費額度，超過每次約 NT$1）` }));
     bar.hidden = false;
   }
 
@@ -634,7 +637,7 @@
    * 讓卡片掛 🌐、詳細頁看得到那句。只存 intel，不改訪談內容、不改順序。
    */
   async function fillTodayIntel() {
-    if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0 };
+    if (typeof window.backendResearch !== 'function' || window.researchDaily === false) return { off: true, asked: 0, withSignals: 0, strong: 0 };
     const today = todayISO();
     const list = allViews().filter((v) => isFreshLead(v) && v.nextDate === today && !v.blocked && !v.intel);
     let withSignals = 0; let strong = 0; let asked = 0;
@@ -1509,6 +1512,13 @@
     return { best: best && best.level !== 'none' ? best : null, candidates: places };
   }
 
+  /*
+   * Google 地圖本月查了幾次（版本 349；使用者：「4 的部分你有顯示出來給我嗎」）：每次真的打 Places API 就加一，
+   * 存在會同步的設定 google-month（{ym, n}），手機、電腦、後台加總；跨月歸零。免費額度每月 1,000 次，超過每次約 NT$1。
+   */
+  const googleMonth = () => { try { const o = JSON.parse(registryPref('google-month') || '{}'); return o && o.ym === todayISO().slice(0, 7) ? { ym: o.ym, n: Number(o.n) || 0 } : { ym: todayISO().slice(0, 7), n: 0 }; } catch (e) { return { ym: todayISO().slice(0, 7), n: 0 }; } };
+  const bumpGoogleCount = () => { const g = googleMonth(); registryPref('google-month', JSON.stringify({ ym: g.ym, n: g.n + 1 })); };
+  window.googleMonth = googleMonth;   // 後台印、測試用
   const placesCache = new Map();   // 同一家同一個地址這次開著網站只查一次：挑名單前查過的，匯入後不用再付一次
   async function placesLookup(r) {
     const key = placesKey();
@@ -1532,6 +1542,7 @@
       if (res.status === 403 || res.status === 400) why += '。多半是金鑰沒開 Places API (New)，或「網站限制」沒填這個網址。';
       throw new Error(why);
     }
+    bumpGoogleCount();   // 版本 349：本月查了幾次（免費 1,000 次），首頁那行顯示
     const data = await res.json();
     const places = (data.places || []).map((p) => ({
       id: p.id, name: (p.displayName && p.displayName.text) || '', address: p.formattedAddress || '',
@@ -3540,16 +3551,17 @@
       /*
        * 使用者：「這 15 通要符合網路有明確的擴張訊號，如果在網路上沒有符合擴張訊號就挑其他名單給我」：
        * 一批一批查（一批＝額度），算「明確訊號（分數 2 以上）又大概有電話（公開資料有、或官網上看到）」的夠不夠額度，
-       * 不夠就查下一批，最多查到額度的 4 倍（RESEARCH_CAP）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
+       * 不夠就查下一批，最多查到額度的 2 倍（版本 349 從 4 倍降下來）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
        */
       const strongKey = (k) => { const v = intel.get(k); return !!(v && v.expansion && (v.score || 0) >= 2); };
-      if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
+      // 版本 349：每日新名單預設不上網查（使用者：「先關掉不做，這我發現好像沒幫助」）；後台 research=yes 手動跑才查。主力客戶每月那條另外算
+      if (typeof window.backendResearch === 'function' && window.researchDaily !== false && (merged.length || bz.length)) {
         const taxOf = (k) => (/^\d{8}$/.test(k) ? k : '');
         const queue = [
           ...merged.filter(rulesOkM).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c), known: !!c.phone })),
           ...bz.filter(rulesOkB).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '', known: !!(window.Biz.dailyFacts ? (window.Biz.dailyFacts(r) || {}).phone : false) })),
         ];
-        const cap = Math.max(need * 4, 20);
+        const cap = Math.max(need * 2, 20);   // 版本 349：4 倍 → 2 倍（額度 15 → 最多查 30 家）。一天查 60 家約 US$5.5 但明確訊號只有 0～2 家，先減半看訊號數有沒有差
         let asked = 0;
         const likely = () => queue.researched.filter((it) => strongKey(it.key) && (it.known || (intel.get(it.key).phone && window.Normalize.extractPhones(intel.get(it.key).phone).length))).length;
         queue.researched = [];
@@ -6718,6 +6730,8 @@ export default {
     'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
     // 後台每月用 Google 地圖幫「找不到電話」的再查一次的結果：各台裝置都要看得到
     'phone-back-google',
+    // Google 地圖本月查了幾次（版本 349）：各台加總
+    'google-month',
     // 每天自動照上限重排：開關、今天跑過了沒
     'auto-rebalance', 'auto-rebalance-on',
     // Claude 分身專案的網址：電腦設好，手機也能直接開
@@ -8876,6 +8890,10 @@ export default {
       resumeCall();   // 剛才按了電話撥出去，回來就開那家的通話紀錄
       checkForUpdate();
       autoRegistryTick();   // 手機鎖了一整晚，解鎖回來就該補跑
+      // 切回來先拉一次雲端（版本 349）：網站只在開啟、自己改東西、按同步時才拉，電腦手機交替用，另一台看到的是舊的；5 分鐘內同步過就不拉
+      if (!BACKEND_RUN && window.DriveSync && window.DriveSync.isConfigured()) {
+        window.Store.getMeta('lastSyncAt').then((at) => { if (Date.now() - (Number(at) || 0) > 5 * 60000) return runSync({ quiet: true }); return null; }).catch(() => null);
+      }
     });
     window.addEventListener('focus', resumeCall);   // 電腦上按 tel: 跳去別的程式再回來
     if (!state.records.length) $('#importer').hidden = false;

@@ -29,6 +29,10 @@ const mk=(id,company,address,phoneRaw='')=>({id,source:SRC,company,aliases:[],ta
  const ph=await pg.evaluate(()=>Object.fromEntries(window.customerViews().map(v=>[v.company,(v.phones[0]||{}).dial||''])));
  chk(ph['甲一精密有限公司']==='0229901111', `名稱、地址都對得上才填：${JSON.stringify(ph)}`);
  chk(ph['乙二機械有限公司']==='', '對不上的（隔壁店）不填');
+ // Google 地圖本月查了幾次（版本 349）：打了 2 次 API 就記 2，首頁那條顯示
+ const gm=await pg.evaluate(()=>window.googleMonth());
+ chk(gm.n===2 && /^\d{4}-\d{2}$/.test(gm.ym), `本月次數記 2：${JSON.stringify(gm)}`);
+ chk(/Google 地圖本月查了 2／1,000 次/.test(await pg.textContent('#feedBar').catch(()=>'')), `首頁那條顯示本月次數：${(await pg.textContent('#feedBar').catch(()=>'')).replace(/\s+/g,' ').slice(0,200)}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'全部通過');
  await br.close(); srv.close();
