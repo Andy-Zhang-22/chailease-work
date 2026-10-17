@@ -30,7 +30,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FILE_NAME, resolveAuth, findFile, modifiedTimeOf, pinCurrentRevision } from './drive-lib.mjs';
-import { researchCompanies, emptyUsage, estimateUsd, pickModel } from './intel.mjs';
+import { researchCompanies, findPhones, emptyUsage, estimateUsd, pickModel } from './intel.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,7 +43,9 @@ const RECHECK = opt('recheck', 'auto');
 const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
 const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
 const RESEARCH = (process.env.RESEARCH || opt('research', 'no')).toLowerCase() === 'yes';   // 每日新名單要不要上網查（版本 349 預設不查）
-const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '120')) || 120));   // 主力客戶一次查幾家（版本 348）
+const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '260')) || 260));   // 主力客戶一次查幾家（版本 348；版本 351 預設 260）
+// 主力客戶用哪個模型（版本 351；使用者選「做 2」：主力客戶改用 Opus）：預設 opus，跟每日新名單的 --model 分開
+const RECHECK_MODEL = (process.env.RECHECK_MODEL || opt('recheck-model', 'opus')).toLowerCase() === 'sonnet' ? 'sonnet' : 'opus';
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 // Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
@@ -111,11 +113,25 @@ async function main() {
     page.on('pageerror', () => { pageErrors += 1; });
     // 網站挑名單時把候選丟過來，這邊用 Claude＋網路搜尋查擴張訊號（沒金鑰就不掛，網站照舊）
     const researchStats = { asked: 0, withSignals: 0, failed: 0, usage: emptyUsage() };
+    let researchModel = MODEL_NAME;   // 主力客戶那段切成 RECHECK_MODEL（版本 351），費用各自算
+    const recheckStats = { asked: 0, usage: emptyUsage() };
     if (CLAUDE_ON) {
       await page.exposeFunction('backendResearch', async (items) => {
-        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, log: (m) => console.log(`  ${m}`) });
-        researchStats.asked += r.asked; researchStats.withSignals += r.withSignals; researchStats.failed += r.failed;
-        for (const k of Object.keys(researchStats.usage)) researchStats.usage[k] += r.usage[k] || 0;
+        const model = researchModel;
+        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, model, log: (m) => console.log(`  ${m}`) });
+        const stats = model === RECHECK_MODEL && researchModel !== MODEL_NAME ? recheckStats : researchStats;
+        stats.asked += r.asked; if (stats === researchStats) { researchStats.withSignals += r.withSignals; researchStats.failed += r.failed; }
+        for (const k of Object.keys(stats.usage)) stats.usage[k] += r.usage[k] || 0;
+        return r.results;
+      });
+    }
+    // 第四關找電話（版本 352）：名單來源、Google 地圖都沒有的，讓 Claude 上網找；跟每日新名單要不要查訊號（RESEARCH）無關
+    const huntStats = { asked: 0, found: 0, usage: emptyUsage() };
+    if (CLAUDE_ON) {
+      await page.exposeFunction('backendPhoneHunt', async (items) => {
+        const r = await findPhones(items || [], { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, log: (m) => console.log(`  ${m}`) });
+        huntStats.asked += r.asked; huntStats.found += r.found;
+        for (const k of Object.keys(huntStats.usage)) huntStats.usage[k] += r.usage[k] || 0;
         return r.results;
       });
     }
@@ -151,6 +167,7 @@ async function main() {
         + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}${res.skippedNoPhone ? `；沒電話的跳過 ${res.skippedNoPhone} 家` : ''}`
         + `${ph.trade ? `；出進口電話表對到 ${ph.trade.found}/${ph.trade.tried}` : ''}${ph.google ? `，Google 地圖找到 ${ph.google.found}/${ph.google.tried}` : ''}`
         + `${res.gate ? `；挑的時候 Google 地圖查了 ${res.gate.tried} 家、查到 ${res.gate.found} 家${res.gate.error ? `（第一個錯：${res.gate.error}）` : ''}` : ''}`
+        + `${res.hunt && res.hunt.tried ? `；Claude 找電話查了 ${res.hunt.tried} 家、找到 ${res.hunt.found} 家` : ''}`
         + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
@@ -173,8 +190,24 @@ async function main() {
     if (doRecheck) {
       if (!CLAUDE_ON) out('主力客戶查訊號：沒設 Claude，跳過');
       else {
-        const ci = await page.evaluate((max) => window.customerIntel({ max }), RECHECK_MAX);
-        out(`主力客戶查訊號：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；30 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
+        researchModel = RECHECK_MODEL;
+        /*
+         * 一次 40 家、查完就寫回雲端再查下一批（版本 353）：後台模式下網站自己排的同步不會跑（busy），只有這裡叫 runSync 才寫。
+         * 10/17 用 Opus 查 380 家，40 分鐘逾時被砍，查到的一家都沒存到、點數白花。現在被砍最多丟 40 家。
+         */
+        const ci = { asked: 0, withSignals: 0, strong: 0, skipped: 0, left: 0 };
+        for (let left = RECHECK_MAX; left > 0;) {
+          const n = Math.min(40, left);
+          const part = await page.evaluate((max) => window.customerIntel({ max }), n);
+          ci.asked += part.asked || 0; ci.withSignals += part.withSignals || 0; ci.strong += part.strong || 0; ci.skipped = part.skipped || ci.skipped; ci.left = part.left || 0;
+          if (!part.asked) break;
+          left -= part.asked;
+          if (MODE === 'write') { const ok = await page.evaluate(() => window.runSync({ quiet: true }).then((r) => !!r)); console.log(`  主力客戶查到 ${ci.asked} 家，${ok ? '已' : '沒'}寫回雲端`); }
+          if (!part.left) break;
+        }
+        researchModel = MODEL_NAME;
+        out(`主力客戶查訊號（${RECHECK_MODEL === 'opus' ? 'Opus' : 'Sonnet'}）：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；60 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
+        if (recheckStats.asked) out(`主力客戶這段 Claude 約 US$${estimateUsd(recheckStats.usage, RECHECK_MODEL).toFixed(2)}（${recheckStats.asked} 家：搜尋 ${recheckStats.usage.searches} 次）`);
       }
     }
 
@@ -186,6 +219,7 @@ async function main() {
       out(`${costNote}（查 ${researchStats.asked} 家：搜尋 ${u.searches} 次、輸入 ${Math.round((u.input + u.cacheRead + u.cacheWrite) / 1000)}k、輸出 ${Math.round(u.output / 1000)}k token；照牌價估，帳單以 Anthropic 後台為準）`);
     }
 
+    if (huntStats.asked) out(`Claude 找電話約 US$${estimateUsd(huntStats.usage, MODEL_NAME).toFixed(2)}（${huntStats.asked} 家：搜尋 ${huntStats.usage.searches} 次）`);
     // 4d. Google 地圖本月查了幾次（版本 349）
     const gm = await page.evaluate(() => (window.googleMonth ? window.googleMonth() : null));
     if (gm && gm.n) out(`Google 地圖本月查了 ${gm.n}／1,000 次（免費額度）`);

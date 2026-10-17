@@ -111,16 +111,16 @@ test('branchRank：我的分公司 0、共用的共同區 1、鄰近照順序、
   assert.equal(rk('新北市', '新莊區', '新北'), 2);
 });
 
-test('ageRank：5～7 年最前，4／8～9 其次，不到 4 年第三，不知道第四，10 年以上最後（版本 343）', () => {
-  assert.deepEqual([5, 6, 7].map(Rules.ageRank), [0, 0, 0]);
-  assert.deepEqual([4, 8, 9].map(Rules.ageRank), [1, 1, 1]);
-  assert.equal(Rules.ageRank(3), 2); assert.equal(Rules.ageRank(0), 2);
+test('ageRank：2～7 年最前，1／8～9 其次，不到 1 年第三，不知道第四，10 年以上最後（版本 358）', () => {
+  assert.deepEqual([2, 5, 7].map(Rules.ageRank), [0, 0, 0]);
+  assert.deepEqual([1, 8, 9].map(Rules.ageRank), [1, 1, 1]);
+  assert.equal(Rules.ageRank(0), 2); assert.equal(Rules.ageRank(0.5), 2);
   assert.equal(Rules.ageRank(null), 3); assert.equal(Rules.ageRank(undefined), 3);
   assert.equal(Rules.ageRank(10), 4); assert.equal(Rules.ageRank(30), 4);
 });
 
 test('industryRank：有設備廠房的行業 0、貿易顧問類 2、其他或不知道 1（版本 341）', () => {
-  assert.deepEqual(['金屬製品製造業', '營造業', '汽車貨運業', '食品批發', '機械設備批發', '製造業、批發零售'].map(Rules.industryRank), [0, 0, 0, 0, 0, 0]);
-  assert.deepEqual(['國際貿易業', '管理顧問業', '投資公司', '人力派遣', '專業服務', '不動產經紀'].map(Rules.industryRank), [2, 2, 2, 2, 2, 2]);
+  assert.deepEqual(['金屬製品製造業', '營造業', '汽車貨運業', '食品批發', '機械設備批發', '製造業、批發零售', '國際貿易業'].map(Rules.industryRank), [0, 0, 0, 0, 0, 0, 0], '貿易也算優先（版本 357）');
+  assert.deepEqual(['管理顧問業', '投資公司', '人力派遣', '專業服務', '不動產經紀'].map(Rules.industryRank), [2, 2, 2, 2, 2]);
   assert.deepEqual(['批發零售', '', null, '其他'].map(Rules.industryRank), [1, 1, 1, 1]);
 });

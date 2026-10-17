@@ -630,7 +630,7 @@
 
   /*
    * 每日自動挑名單的優先順序（使用者定的，跟畫面上的篩選無關；是順序不是門檻）：
-   *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 有電話（貿易署電話表對得到）→ 資本額 500～6,000 萬 → 我的分公司 → 成立 5～7 年
+   *   本期 → 增資 → 擴張（遷址／加營業項目／設分公司）→ 有電話（貿易署電話表對得到）→ 資本額 300～6,000 萬 → 我的分公司 → 成立 2～7 年
    *   （成立年原本是「5 年以上」；使用者說成交的多半是成立 7～8 年、案件 1,000 萬，改成離 7～8 年多遠：Rules.ageRank）
    *   （第三條原本是「製造／營造、投資控股不算」——那是買設備的看法。使用者說成交多半是
    *   營運週轉金跟投資額度、買設備的少、要成長快的公司，所以改看擴張訊號）
@@ -642,7 +642,7 @@
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
   // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面的是：動產擔保上跟同業（租賃／融資，不含銀行）
   // 借的，或本期剛增資／擴張的（成長快的時候缺的是錢，不是便宜的錢）
-  const DAILY_PRIORITY = ['利率不敏感', '本期', '增資', '擴張', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 5～7 年'];
+  const DAILY_PRIORITY = ['利率不敏感', '本期', '增資', '擴張', '有電話', '資本額 300～6,000 萬', '我的分公司', '成立 2～7 年'];
   const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
   const rateFreeOf = (r, latest) => {
     const peer = peerOf(r['統一編號']);
@@ -665,9 +665,9 @@
     r.rk === 'up',
     EXPAND_RE.test(r.reason),   // 遷址、加營業項目、設分公司：在長大的公司才會動這些
     hasPhone(r),
-    r.capital >= 5000000 && r.capital <= 60000000,
+    r.capital >= 3000000 && r.capital <= 60000000,
     branchRank(r),   // 分公司遠近：我的 0 → 共同區 1 → 鄰近 2… → 其他 9（新莊挑完接新北）
-    ageRankOf(r),   // 離成立 5～7 年多遠：0＝5～7 年 … 4＝10 年以上（版本 343）
+    ageRankOf(r),   // 離成立 2～7 年多遠：0＝2～7 年 … 4＝10 年以上（版本 343）
   ];
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.foundedDate ? yearsSince(r.foundedDate) : null) : (ageOf(r) === 'ge5' ? 0 : 3));
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
@@ -808,7 +808,7 @@
     $('#leads-founded-btn').onclick = toggleHunt;
     $('#leads-reset').onclick = async () => {
       f.types.clear(); f.types.add('change'); f.cities.clear(); f.reasons.clear(); f.reasons.add('up'); f.inds.clear(); f.branches.clear(); f.ages.clear(); f.mine.clear(); f.phone.clear(); f.rate.clear(); rateDefault().forEach((k) => f.rate.add(k)); f.q = ''; showHidden = false;
-      $('#leads-q').value = ''; $('#leads-capMin').value = '500'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
+      $('#leads-q').value = ''; $('#leads-capMin').value = '300'; $('#leads-capMax').value = '6000'; $('#leads-skipHolding').checked = true;
       await rerender();
     };
     /*
@@ -852,7 +852,7 @@
     if (now && r.rk === 'up') signals.push('本期增資');
     if (now && EXPAND_RE.test(r.reason || '')) signals.push('本期擴張');
     return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
-      ageRank: ageRankOf(r), capOk: r.capital >= 5000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r),
+      ageRank: ageRankOf(r), capOk: r.capital >= 3000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r),
       industry: (r.classes || []).map((c) => IND[c]).filter(Boolean).join('、'),
       mobile: !!(global.Trade && global.Trade.phoneKindsOf && global.Trade.phoneKindsOf(r['統一編號']).has('M')) };
   }

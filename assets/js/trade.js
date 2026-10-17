@@ -357,10 +357,10 @@
 
   /*
    * 使用者：「補上後一樣幫我加上自動新增名單的功能，跟其他分頁一樣給我 5 間，每天自動給我五間，共 20 間」。
-   * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 500～6,000 萬 → 我的分公司（遠近，新莊挑完接新北）→ 成立 5～7 年
+   * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 300～6,000 萬 → 我的分公司（遠近，新莊挑完接新北）→ 成立 2～7 年
    * （Rules.ageRank，成交多半 7～8 年）→ 原始登記 1 年內（剛開始做進出口，週轉金需求）→ 進口＋出口；全一樣最新登記的先。
    */
-  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 5～7 年', '登記 1 年內', '進口＋出口'];
+  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 300～6,000 萬', '我的分公司', '成立 2～7 年', '登記 1 年內', '進口＋出口'];
   // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛做進出口的（擴張期缺的是錢，不是便宜的錢）
   const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
   const rateFreeOf = (r) => {
@@ -371,7 +371,7 @@
   };
   // 分頁篩選的「利率不敏感」：跟每日新名單同一套
   const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
-  const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);   // 使用者：「照你的建議做」——1,000 萬的案子落在一般組
+  const capRank = (r) => (r.capital >= 3000000 && r.capital <= 60000000 ? 0 : 1);   // 使用者：「照你的建議做」——1,000 萬的案子落在一般組
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
   const dailyChecks = (r) => [!!rateFreeOf(r), !!r.tel, capRank(r), branchRank(r), ageRankOf(r), r.firstMonths != null && r.firstMonths < 12, r.imp && r.exp];
@@ -425,7 +425,7 @@
       forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
     const filters = el('details', { className: 'leads-filters', id: 'trade-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
-      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。預設篩資本額 500～6,000 萬、有電話、我的分公司；要看全部就把數字清掉、籤按掉。' }),
+      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。預設篩資本額 300～6,000 萬、有電話、我的分公司；要看全部就把數字清掉、籤按掉。' }),
       group('歸屬分公司（同「規則」的劃分表）', el('div', { className: 'chips', id: 'trade-fBranch' })),
       group('區', el('div', { className: 'chips', id: 'trade-fDistrict' })),
       group('原始登記（開始做進出口）', el('div', { className: 'chips', id: 'trade-fWhen' })),
@@ -512,13 +512,13 @@
       $('#trade-more').onclick = () => { limit += PAGE; render(); };
       $('#trade-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
       /*
-       * 預設就篩成最值得打的那批（使用者：「照你的建議做」）：資本額 500～6,000 萬（1,000 萬的案子落在一般組）、有電話、
+       * 預設就篩成最值得打的那批（使用者：「照你的建議做」）：資本額 300～6,000 萬（1,000 萬的案子落在一般組）、有電話、
        * 我的分公司。要看全部就把數字清掉、籤按掉；「清除篩選」回到這組預設，不是回到全部。
        */
       const defaults = () => {
         Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         f.phone.add('Y'); f.branches.add(myBranch());
-        $('#trade-q').value = ''; $('#trade-capMin').value = '500'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'capital'; showHidden = false;
+        $('#trade-q').value = ''; $('#trade-capMin').value = '300'; $('#trade-capMax').value = '6000'; $('#trade-sort').value = 'capital'; showHidden = false;
       };
       $('#trade-reset').onclick = () => { defaults(); rerender(); };
       $('#trade-reset').textContent = '回到預設篩選';

@@ -31,7 +31,7 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForSelector('#industry-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#industry-sub')).replace(/\s+/g,' ');
  chk(/新北市 4 家/.test(sub) && /營造工地 1/.test(sub) && /起算 2026\/10/.test(sub), `標題：${sub}`);
- // 預設：資本額 500～6,000 萬、我的分公司（新莊）→ 宇駿、鼎築、名祿；照資本額排
+ // 預設：資本額 300～6,000 萬、我的分公司（新莊）→ 宇駿、鼎築、名祿；照資本額排
  let names=await pg.$$eval('#industry-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===3 && /宇駿/.test(names[0]) && /鼎築/.test(names[1]) && /名祿/.test(names[2]), `預設篩選後照資本額排：${names.join(' | ')}`);
  const cs=(await pg.locator('#industry-cards .card:has-text("鼎築")').textContent()).replace(/\s+/g,' ');

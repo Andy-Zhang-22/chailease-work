@@ -52,6 +52,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  const pg=await ctx.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  // 假的後台研究：乙二有擴張訊號；丙三沒訊號但官網上有電話（跟真的一樣：key 是統編，回 { expansion, score, summary, sources, phone }）
  const researched=[];
+ // 第四關 Claude 找電話（版本 352）：名單來源、Google 都沒有的才問；這裡都回找不到，只記問了誰
+ const hunted=[];
+ await pg.exposeFunction('backendPhoneHunt', async(items)=>{ items.forEach(i=>hunted.push(`${i.name}|${i.taxId}`)); return {}; });
  await pg.exposeFunction('backendResearch', async(items)=>{ researched.push(items.map(i=>`${i.name}|${i.taxId}|${i.address}`)); const out={}; items.forEach(i=>{ out[i.key]= i.taxId==='22222222'?{expansion:true,score:2,summary:'104 正在徵 8 名作業員（2026/09）',sources:['https://www.104.com.tw/x'],phone:''}
    : i.taxId==='33333333'?{expansion:false,score:0,summary:'',sources:['https://example.com/c'],phone:'02-2299-3333'}
    : i.taxId==='44444444'?{expansion:true,score:3,summary:'（不該被問到）',sources:[],phone:'02-0000-4444'}
@@ -84,6 +87,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  // 自動挑關著（daily-feed-auto=0），後台用 force 叫：回摘要、等補電話跑完
  const res=await pg.evaluate(()=>window.dailyFeed({force:true,awaitPhones:true}));
  chk(res && res.picked===3 && res.skippedNoPhone===1 && res.day===TODAY && res.quota===3 && res.bySrc && res.bySrc['登記清冊']===3, `摘要：挑 3 家（丙三的電話是上網查到的；找電話那關會多看到額度兩倍，丁四沒電話算跳過 1 家，但它不符合規則本來就排最後）：${JSON.stringify(res)}`);
+ chk(hunted.some(x=>/丁四/.test(x)) && !hunted.some(x=>/乙二|戊五/.test(x)) && res.hunt && res.hunt.tried>=1 && res.hunt.found===0, `名單來源、Google 都沒有的才問 Claude 找電話（丁四），Google 查到的不問：${hunted.join(' | ')}／${JSON.stringify(res.hunt)}`);
  chk(res && res.phones && res.phones.trade && typeof res.phones.trade.tried==='number' && res.phones.google && typeof res.phones.google.tried==='number', `補電話的結果一起回（awaitPhones）：${JSON.stringify(res && res.phones)}`);
  chk(res && res.research && res.research.asked===3 && res.research.withSignals===1, `網路查的筆數一起回：${JSON.stringify(res && res.research)}`);
  const fed=await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單/.test(v.source)).map(v=>v.company+'|'+v.phones.map(p=>String(p.digits||p.dial||p.display||'').replace(/\D/g,'')).join(',')).sort());
@@ -149,7 +153,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  chk(/🌐 .*網路查到：官網：2026\/09 新廠動工/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), '詳細頁一行網路查到');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  const ci2=await pg.evaluate(()=>window.customerIntel());
- chk(ci2 && ci2.asked===0 && ci2.skipped===1, `30 天內查過的跳過：${JSON.stringify(ci2)}`);
+ chk(ci2 && ci2.asked===0 && ci2.skipped===1, `60 天內查過的跳過（版本 351）：${JSON.stringify(ci2)}`);
  // ===== 版本 331 =====
  // 今天排著、還沒查過訊號的新名單補查：丁四是別處挑進來排在今天的（沒 intel）→ fillTodayIntel 只問它、存 intel、卡片掛 🌐；再叫一次沒得問
  await pg.evaluate(async()=>{ await window.Store.saveRecords([{id:'9',source:'每日新名單-2026-10-05.csv',company:'丁四大企業股份有限公司',aliases:[],taxId:'44444444',grade:'',founded:'2019',capital:'150,000',phoneRaw:'02-0000-4444',phones:[{digits:'0200004444',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路4號',city:'新北市',district:'新莊區',notesRaw:'每日新名單，符合：我的分公司',nextDate:'2026-10-05',lastDate:null,addedDate:'2026-10-05',country:'台灣'}]); });

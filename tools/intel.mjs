@@ -70,10 +70,42 @@ export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite
 /** 照牌價估美金，小數兩位；model 是 MODELS 的 key（sonnet／opus），不給就 Sonnet */
 export const estimateUsd = (u, model = 'sonnet') => { const P = pickModel(model).price; return Math.round(((u.input * P.input + u.output * P.output + u.cacheRead * P.cacheRead + u.cacheWrite * P.cacheWrite) / 1e6 + u.searches * P.search) * 100) / 100; };
 
+/*
+ * 找電話（版本 352；使用者：「沒有電話的定義是你有用過 Google 地圖、Claude api、名單來源裡都查過，都沒有才算」）：
+ * 名單來源沒有、Google 地圖也查不到的，最後讓 Claude 上網找這家公司的電話。只送公司名、統編、地址。
+ */
+const PHONE_SYSTEM = [
+  '你是台灣租賃公司的研究助理。給你一家台灣公司的名稱、統編、地址，請用網路搜尋找這家公司「現在用的」聯絡電話：',
+  '官網的聯絡我們、104／1111 徵才頁的聯絡電話、經濟部商工登記、黃頁或商業名錄、Google 商家。手機或直線優先，總機也可以。',
+  '同名公司很多，要用統編或地址確認是同一家，確認不了就當沒有。查不到就老實說沒有。',
+  '最後只回一段 JSON，不要其他文字：',
+  '{"phone": "台灣格式，例如 02-2299-1234 或 0912-345-678，沒有就空字串", "kind": "mobile 或 landline 或空字串", "source": "網址", "who": "這支是誰的，例如 負責人／總機／業務，不知道就空字串"}',
+].join('\n');
+
+/** 把找電話的回覆拆成 { phone, kind, source, who }；沒電話或格式不對回 null */
+export function parsePhoneAnswer(text) {
+  const s = String(text || '');
+  const start = s.lastIndexOf('{'); const end = s.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  for (let i = start; i >= 0; i = s.lastIndexOf('{', i - 1)) {
+    try {
+      const o = JSON.parse(s.slice(i, end + 1));
+      if (!o || typeof o !== 'object') continue;
+      const raw = String(o.phone || '').replace(/[^\d+#\-－() ]/g, '').trim();
+      let digits = raw.replace(/\D/g, '');
+      if (digits.startsWith('886')) digits = `0${digits.slice(3)}`;
+      if (!/^0\d{8,9}$/.test(digits.replace(/#.*$/, ''))) return null;   // 台灣市話 9～10 碼、手機 10 碼；其他當沒有
+      const kind = /^09\d{8}$/.test(digits) ? 'mobile' : 'landline';
+      return { phone: raw.slice(0, 24), kind, source: /^https?:\/\//.test(String(o.source || '')) ? String(o.source) : '', who: String(o.who || '').slice(0, 20) };
+    } catch (e) { if (i === 0) break; }
+  }
+  return null;
+}
+
 const textOf = (content) => (content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 
-/** 查一家；回 parseIntel 的結果，失敗回 null（呼叫端只印筆數） */
-async function researchOne(client, item, { maxSearches, usage, modelId }) {
+/** 跟 Claude 問一家（system 決定是查訊號還是找電話）；回最後的回覆文字，拒答回 '' */
+async function askOne(client, item, { maxSearches, usage, modelId, system }) {
   const messages = [{ role: 'user', content: `公司名稱：${item.name}\n統一編號：${item.taxId || '（不詳）'}\n地址：${item.address || '（不詳）'}` }];
   let res = null;
   for (let round = 0; round < 3; round += 1) {
@@ -81,7 +113,7 @@ async function researchOne(client, item, { maxSearches, usage, modelId }) {
       model: modelId, max_tokens: 6000,   // Opus 的思考 token 也算在 max_tokens 裡，留寬一點；只付實際輸出
       betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
       output_config: { effort: 'low' },
-      system: SYSTEM,
+      system,
       tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches }],
       messages,
     });
@@ -89,8 +121,52 @@ async function researchOne(client, item, { maxSearches, usage, modelId }) {
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });   // 伺服器端的搜尋迴圈暫停了：原樣送回去接著跑
   }
-  if (!res || res.stop_reason === 'refusal') return null;
-  return parseIntel(textOf(res.content));
+  if (!res || res.stop_reason === 'refusal') return '';
+  return textOf(res.content);
+}
+/** 查一家；回 parseIntel 的結果，失敗回 null（呼叫端只印筆數） */
+async function researchOne(client, item, opts) {
+  const text = await askOne(client, item, { ...opts, system: SYSTEM });
+  return text ? parseIntel(text) : null;
+}
+
+function makeClient(Anthropic, apiKey) {
+  // 沒給金鑰就不帶 apiKey：SDK 會自己從環境變數走 Workload Identity 聯合（或 ANTHROPIC_API_KEY）。
+  // workflow 沒設的變數會是空字串，SDK 可能當成「有設」（空的 ANTHROPIC_API_KEY 會壓過聯合），先清掉
+  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_PROFILE', 'ANTHROPIC_WORKSPACE_ID', 'ANTHROPIC_IDENTITY_TOKEN_FILE', 'ANTHROPIC_IDENTITY_TOKEN']) {
+    if (process.env[k] !== undefined && !String(process.env[k]).trim()) delete process.env[k];
+  }
+  return new Anthropic({ ...(apiKey ? { apiKey } : {}), maxRetries: 2, timeout: 120000 });
+}
+
+/**
+ * 找電話（版本 352）：每家問一次，回 { results: {key → {phone, kind, source, who}|null}, asked, found, failed, usage }
+ * @param {{key:string,name:string,taxId?:string,address?:string}[]} items
+ */
+export async function findPhones(items, { apiKey = '', concurrency = 3, maxSearches = 4, model = 'sonnet', log = () => {} } = {}) {
+  const results = {}; const usage = emptyUsage(); let found = 0; let failed = 0;
+  if (!items.length) return { results, asked: 0, found, failed, usage };
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
+  const client = makeClient(Anthropic, apiKey);
+  const modelId = pickModel(model).id;
+  const queue = items.slice();
+  const worker = async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      try {
+        const text = await askOne(client, item, { maxSearches, usage, modelId, system: PHONE_SYSTEM });
+        const r = text ? parsePhoneAnswer(text) : null;
+        results[item.key] = r;
+        if (r) found += 1;
+      } catch (err) {
+        failed += 1; results[item.key] = null;
+        log(`找一家電話失敗：${String(err && err.message ? err.message : err).slice(0, 80)}`);   // 不印公司名
+        if (err && (err.status === 401 || err.status === 403)) { queue.length = 0; log('金鑰不對或沒權限，這輪停止'); }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return { results, asked: items.length, found, failed, usage };
 }
 
 /**
@@ -105,12 +181,7 @@ export async function researchCompanies(items, { apiKey = '', concurrency = 3, m
   let withSignals = 0; let failed = 0;
   if (!items.length) return { results, asked: 0, withSignals, failed, usage };
   const { default: Anthropic } = await import('@anthropic-ai/sdk');   // 只有後台裝了套件才載；parseIntel 的測試不用
-  // 沒給金鑰就不帶 apiKey：SDK 會自己從環境變數走 Workload Identity 聯合（或 ANTHROPIC_API_KEY）。
-  // workflow 沒設的變數會是空字串，SDK 可能當成「有設」（空的 ANTHROPIC_API_KEY 會壓過聯合），先清掉
-  for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_PROFILE', 'ANTHROPIC_WORKSPACE_ID', 'ANTHROPIC_IDENTITY_TOKEN_FILE', 'ANTHROPIC_IDENTITY_TOKEN']) {
-    if (process.env[k] !== undefined && !String(process.env[k]).trim()) delete process.env[k];
-  }
-  const client = new Anthropic({ ...(apiKey ? { apiKey } : {}), maxRetries: 2, timeout: 120000 });
+  const client = makeClient(Anthropic, apiKey);
   const queue = items.slice();
   const worker = async () => {
     while (queue.length) {
