@@ -69,9 +69,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40   # 每月 1 日多查主力客戶 120 家，約 10 分鐘
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -82,7 +82,7 @@ jobs:
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
         if: vars.GCP_WIF_PROVIDER != ''
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}

@@ -4702,3 +4702,13 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `feed-drive.mjs`：`--recheck-max`／環境變數 `RECHECK_MAX`（預設 120，上限 2000）；`daily-feed-drive.yml` 手動跑多 `recheckmax` 選項。排程照舊 120。
 - `customerIntel` 的池子排除「中租往來」（dealingKind active，首頁預設隱藏的那 268 家）：使用者「主力客戶不是 525 家嗎」。第一次手動跑沒排除，跑 3 分鐘就取消重跑。
 - 版號 20261017-348。
+
+## 上網查的上限減半、切回網站先拉雲端、Actions 換新版（版本 349）
+
+使用者看了「系統執行到現在還有什麼問題」那份清單：「這個有改了嗎？」→ 做 1、3、5。
+
+- **1. Claude 上網查的上限**：額度的 4 倍 → 2 倍（額度 15 → 最多查 30 家）。最近三天每天查 60 家約 US$5.5，明確訊號只有 0～2 家，先減半看訊號數有沒有差。
+- **3. 切回網站先拉雲端**：`visibilitychange` 回到前景時，有設雲端同步且 5 分鐘內沒同步過，就靜默 `runSync` 一次。電腦手機交替用，另一台改的才看得到。
+- **5. Actions 的 Node 20 警告**：14 支 workflow 的 `actions/checkout@v4`→`v5`、`actions/setup-node@v4`→`v5`、`google-github-actions/auth@v2`→`v3`。
+  CI 跑 checkout、setup-node；auth 要等後台下次跑才驗證。
+- 第 2 項（兩週不改排序）是使用者配合；第 4 項（Google 額度月底貼近 1,000）只是提醒。版號 20261017-349。

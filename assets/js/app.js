@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-348';
+  const APP_VERSION = '20261017-349';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3540,7 +3540,7 @@
       /*
        * 使用者：「這 15 通要符合網路有明確的擴張訊號，如果在網路上沒有符合擴張訊號就挑其他名單給我」：
        * 一批一批查（一批＝額度），算「明確訊號（分數 2 以上）又大概有電話（公開資料有、或官網上看到）」的夠不夠額度，
-       * 不夠就查下一批，最多查到額度的 4 倍（RESEARCH_CAP）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
+       * 不夠就查下一批，最多查到額度的 2 倍（版本 349 從 4 倍降下來）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
        */
       const strongKey = (k) => { const v = intel.get(k); return !!(v && v.expansion && (v.score || 0) >= 2); };
       if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
@@ -3549,7 +3549,7 @@
           ...merged.filter(rulesOkM).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c), known: !!c.phone })),
           ...bz.filter(rulesOkB).map((r) => ({ key: bizKey(r), name: r.name, taxId: String(r.taxId || '').replace(/\D/g, ''), address: r.address || '', known: !!(window.Biz.dailyFacts ? (window.Biz.dailyFacts(r) || {}).phone : false) })),
         ];
-        const cap = Math.max(need * 4, 20);
+        const cap = Math.max(need * 2, 20);   // 版本 349：4 倍 → 2 倍（額度 15 → 最多查 30 家）。一天查 60 家約 US$5.5 但明確訊號只有 0～2 家，先減半看訊號數有沒有差
         let asked = 0;
         const likely = () => queue.researched.filter((it) => strongKey(it.key) && (it.known || (intel.get(it.key).phone && window.Normalize.extractPhones(intel.get(it.key).phone).length))).length;
         queue.researched = [];
@@ -8876,6 +8876,10 @@ export default {
       resumeCall();   // 剛才按了電話撥出去，回來就開那家的通話紀錄
       checkForUpdate();
       autoRegistryTick();   // 手機鎖了一整晚，解鎖回來就該補跑
+      // 切回來先拉一次雲端（版本 349）：網站只在開啟、自己改東西、按同步時才拉，電腦手機交替用，另一台看到的是舊的；5 分鐘內同步過就不拉
+      if (!BACKEND_RUN && window.DriveSync && window.DriveSync.isConfigured()) {
+        window.Store.getMeta('lastSyncAt').then((at) => { if (Date.now() - (Number(at) || 0) > 5 * 60000) return runSync({ quiet: true }); return null; }).catch(() => null);
+      }
     });
     window.addEventListener('focus', resumeCall);   // 電腦上按 tel: 跳去別的程式再回來
     if (!state.records.length) $('#importer').hidden = false;
