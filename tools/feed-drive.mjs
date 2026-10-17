@@ -191,7 +191,20 @@ async function main() {
       if (!CLAUDE_ON) out('主力客戶查訊號：沒設 Claude，跳過');
       else {
         researchModel = RECHECK_MODEL;
-        const ci = await page.evaluate((max) => window.customerIntel({ max }), RECHECK_MAX);
+        /*
+         * 一次 40 家、查完就寫回雲端再查下一批（版本 353）：後台模式下網站自己排的同步不會跑（busy），只有這裡叫 runSync 才寫。
+         * 10/17 用 Opus 查 380 家，40 分鐘逾時被砍，查到的一家都沒存到、點數白花。現在被砍最多丟 40 家。
+         */
+        const ci = { asked: 0, withSignals: 0, strong: 0, skipped: 0, left: 0 };
+        for (let left = RECHECK_MAX; left > 0;) {
+          const n = Math.min(40, left);
+          const part = await page.evaluate((max) => window.customerIntel({ max }), n);
+          ci.asked += part.asked || 0; ci.withSignals += part.withSignals || 0; ci.strong += part.strong || 0; ci.skipped = part.skipped || ci.skipped; ci.left = part.left || 0;
+          if (!part.asked) break;
+          left -= part.asked;
+          if (MODE === 'write') { const ok = await page.evaluate(() => window.runSync({ quiet: true }).then((r) => !!r)); console.log(`  主力客戶查到 ${ci.asked} 家，${ok ? '已' : '沒'}寫回雲端`); }
+          if (!part.left) break;
+        }
         researchModel = MODEL_NAME;
         out(`主力客戶查訊號（${RECHECK_MODEL === 'opus' ? 'Opus' : 'Sonnet'}）：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；60 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
         if (recheckStats.asked) out(`主力客戶這段 Claude 約 US$${estimateUsd(recheckStats.usage, RECHECK_MODEL).toFixed(2)}（${recheckStats.asked} 家：搜尋 ${recheckStats.usage.searches} 次）`);

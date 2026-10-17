@@ -4741,3 +4741,9 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - **動保金主是銀行的也挑**：「但就是要最近半年內有的」。`recentBuyOf` 多回 `peer`／`bank`；半年內的不管金主是誰都算「最近買設備」排最前，
   半年到一年的只有同業（租賃／融資）才排第二級，銀行的當沒動保。
 - 測試：`intel.test.js` 加 `parsePhoneAnswer`；`test-feed-backend.js` 掛假的 `backendPhoneHunt`，確認名單來源、Google 都沒有的才問。版號 20261017-352。
+
+## 主力客戶查訊號每 40 家寫回一次（版本 353）
+
+10/17 用到期點數讓 Opus 查 380 家主力客戶，流程 40 分鐘逾時被砍（版本 350 才放寬到 90 分鐘），事後看同步檔：查到的一家都沒存到。
+原因：後台模式下網站自己排的同步不會跑（busy），只有 `feed-drive.mjs` 最後叫的 `runSync` 才寫回。
+改成 `customerIntel` 一次 40 家、`MODE=write` 時每批查完就 `runSync` 一次再查下一批，被砍最多丟 40 家。版號 20261017-353。
