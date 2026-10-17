@@ -566,7 +566,7 @@
     const sig = !d ? [] : d.kind === '設立' ? ['剛設立商行'] : reasonKind(d.reason || '') === 'up' ? ['本期增資'] : [];
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: sig,
       ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 3, capOk: r.capital >= 5000000 && r.capital <= 60000000,
-      phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r), industry: (r.inds || []).join('、') };
+      phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r), industry: (r.inds || []).join('、'), mobile: phoneKindsOf(r).has('M') };
   }
   // withMine：合併頁要連名單裡已經有的也列（卡片標「已在名單」）；每日新名單照舊不要
   async function dailyCandidates({ withMine = false } = {}) {

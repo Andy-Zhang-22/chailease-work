@@ -517,7 +517,7 @@
     if (isFresh(r)) signals.push(r.kinds.some((k) => VEHICLE.test(k)) ? '剛做車輛業' : '剛出現在產業名單');
     if (isNewSite(r)) signals.push(`剛有${r.newSite.what}`);
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals,
-      ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry || (r.kinds || []).join('、') };
+      ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry || (r.kinds || []).join('、'), mobile: phoneKinds(r).has('M') };
   }
   /*
    * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，

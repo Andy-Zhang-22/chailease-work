@@ -4685,3 +4685,11 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 刪除理由第三個從「其他原因」改成「總機不轉接給老闆」（key 還是 `other`，舊資料照舊）；已排除頁的標籤跟著改。
   之後就看得出哪份來源的電話多半是總機，再決定要不要讓有手機號碼的排前面。
 - 測試：`test-phone-back`、`test-deleted-exclude`、`test-deleted-hide` 的選項文字改掉。版號 20261017-346。
+
+## 有手機號碼的名單排前面（版本 347）
+
+使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」。
+
+- 八份來源的 `dailyFacts` 多一個 `mobile`（各頁本來就有的 phoneKinds／phoneKindsOf 的「M」：稅籍、出進口電話表、Google 查到的手機）。
+- `mergeFeed`：有手機的排在訊號前面（刪太多的來源、成立 10 年以上之後）；商行也一樣。找名單頁同一套。
+- 測試：`test-feed-merge.js` 訊號最多那家的出進口電話改成假手機號，不然會被有手機的超過去。版號 20261017-347。

@@ -755,7 +755,7 @@
    */
   function dailyFacts(r) {
     return { key: String(r.cust.id || '').replace(/\D/g, '') || String(r.cust.name || '').replace(/\s/g, ''), name: r.cust.name, signals: [],
-      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r) };
+      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r), mobile: phoneKindsOf(r).has('M') };
   }
   /** 統編 → 這家最近一次買設備（契約起，日期不合理改用登記核准日）：grade 0＝3 個月內、1＝6 個月內、2＝1 年內、3＝更早或沒有 */
   function recentBuyOf(taxId) {
