@@ -758,6 +758,12 @@
       ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r), mobile: phoneKindsOf(r).has('M') };
   }
   /** 統編 → 這家最近一次買設備（契約起，日期不合理改用登記核准日）：grade 0＝3 個月內、1＝6 個月內、2＝1 年內、3＝更早或沒有 */
+  /** 這家動保明細裡有幾家不同的金主（租賃、銀行都算，中租自己不算；版本 354 使用者：「明細內有 2 間租賃或銀行的也優先給我」） */
+  function lenderCountOf(taxId) {
+    const names = new Set();
+    casesOf(taxId).forEach((c) => { if (c.family !== 'chailease' && c.lender && c.lender.name) names.add(lenderShort(c.lender.name)); });
+    return names.size;
+  }
   function recentBuyOf(taxId) {
     let best = null;
     casesOf(taxId).forEach((c) => {
@@ -787,5 +793,5 @@
     const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
     return r ? cardFacts(r) : null;
   }
-  global.Chattel = { show, dailyFacts, cardFacts, factsOf, recentBuyOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
+  global.Chattel = { show, dailyFacts, cardFacts, factsOf, recentBuyOf, lenderCountOf, ensureData, casesOf, isPeerCase, peerLenderOf, lenderShort, dailyCandidates, DAILY_PRIORITY, toStandardCsv, wantedDate, parseYmd, daysLeft, dueOf, lenderFamily, lenderLabel, typeShort, noteFor, toRecord, toCsv, parseFounded, yearsSince, LENDER_RE };
 })(window);

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-353';
+  const APP_VERSION = '20261017-355';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3211,9 +3211,11 @@
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
   /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
+  // 沒設的預設（版本 355 使用者：「商行企業社的比例拉高可以」）：商行 2、其他 1（15 家裡商行約 3 家，以前平分約 2 家）
+  const DEFAULT_SHARES = [1, 1, 2, 1, 1, 1, 1, 1];
   function feedShares() {
     const raw = registryPref('feed-shares');
-    if (!raw) return null;
+    if (!raw) return DEFAULT_SHARES.slice();
     const a = String(raw).split(',').map((x) => Math.max(0, Math.round(Number(x) || 0)));
     if (a.length === 6) a.push(a[4]);
     if (a.length === 7) a.push(a[6]);
@@ -3258,7 +3260,7 @@
    * 排法（版本 341 照企金業務的角度調過）：缺錢的訊號越多越前面（剛開始請人、剛開電子發票只是「有在動」，不算，只當最後的補位）
    * → 動保半年內剛買設備的先（使用者：「代表他是有需求才買設備，可能會有周轉金需求」，版本 344）、6～12 個月前的次之、沒動保的後
    * → 行業有設備廠房的先、貿易顧問類的後
-   * → 成立 5～7 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近 → 弱訊號 → 原本在各頁的名次。
+   * → 成立 5～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近 → 弱訊號 → 原本在各頁的名次。
    */
   const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票)$/;
   const strongSignals = (c) => [...c.signals].filter((x) => !WEAK_SIGNAL_RE.test(x)).length;
@@ -3300,6 +3302,9 @@
       if (c.buy.grade <= 1 && buyBig(c)) c.signals.add(`最近買設備（${c.buy.ym}）`);
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
+      // 動保明細裡有兩家以上金主（租賃、銀行都算）＝很會用融資的公司，當強訊號（版本 354 使用者：「明細內有 2 間租賃或銀行的也優先給我」）
+      const lenders = tax && window.Chattel.lenderCountOf ? window.Chattel.lenderCountOf(tax) : 0;
+      if (lenders >= 2) c.signals.add(`動保 ${lenders} 家金主`);
     });
     // 成立 10 年以上的真的排最後（版本 345；使用者：「今天給我的名單為甚麼都是成立年非新公司」——以前只是第 7 順位的比較條件，有訊號的老公司照樣排前面）
     // 有手機號碼的排前面（版本 347；使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）：排在訊號前面
@@ -3543,7 +3548,7 @@
        */
       /*
        * 跟使用者的規則怎麼合（使用者：「最後是有效的名單要滿足我的規則」→ 選 A）：規則優先、訊號其次。
-       * 符合規則＝資本額 500～6,000 萬 且 我的分公司（利率不敏感本來就是排序裡的訊號）。只拿符合規則的去上網查，
+       * 符合規則＝資本額 300～6,000 萬 且 我的分公司（利率不敏感本來就是排序裡的訊號）。只拿符合規則的去上網查，
        * 排序是「符合規則的在前 → 有訊號的在前 → 原本的名次」；符合規則的不夠額度才用不符合的補（排序不是門檻，額度一定補滿）。
        */
       const intel = new Map();
@@ -3654,7 +3659,7 @@
         const r = c.recs[k];
         const also = SRC.filter((x) => x.key !== k && c.recs[x.key]).map((x) => x.label);
         const sig = [...c.signals];
-        const extra = [c.ageRank === 0 ? '成立 5～7 年' : '', c.capOk ? '資本額 500～6,000 萬' : '', c.phone ? '有電話' : '', c.branchRank === 0 ? '我的分公司' : ''].filter(Boolean);
+        const extra = [c.ageRank === 0 ? '成立 5～7 年' : '', c.capOk ? '資本額 300～6,000 萬' : '', c.phone ? '有電話' : '', c.branchRank === 0 ? '我的分公司' : ''].filter(Boolean);
         // 訪談紀錄只留重點（使用者：「在訪談紀錄那的文字有點太多，能盡量給我重點就好嘛」）：其他條件、也在哪幾份、保底不寫
         void extra; void also; void via;
         r._why = sig.length ? `符合：${sig.join('、')}` : '沒有擴張或同業訊號，補位';
@@ -3854,7 +3859,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家${demo.has(o) ? '（排後面）' : ''}`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。哪個來源挑進來的有四成以上（至少 3 家）被你當不是目標刪掉，那個來源的候選就排後面（是排序不是門檻）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 5～7 年 → 資本額 500～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 5～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);

@@ -316,10 +316,10 @@
   /* ---------------- 每日挑選（給 app.js 的每日新名單用） ---------------- */
 
   /*
-   * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 500～6,000 萬 → 我的分公司（遠近）→ 成立 5～7 年
+   * 優先順序（是順序不是門檻）：有電話（沒電話等於沒用）→ 資本額 300～6,000 萬 → 我的分公司（遠近）→ 成立 5～7 年
    * （Rules.ageRank，成交多半 7～8 年）→ 最近 3 個月才導入；全一樣最近導入的先。
    */
-  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 500～6,000 萬', '我的分公司', '成立 5～7 年', '剛導入 3 個月內'];
+  const DAILY_PRIORITY = ['利率不敏感', '有電話', '資本額 300～6,000 萬', '我的分公司', '成立 5～7 年', '剛導入 3 個月內'];
   // 使用者：「每天補給我的名單優先給我加入利率不敏感的客群」——排最前面：動產擔保上跟同業（租賃／融資，不含銀行）借的，或剛開電子發票的（擴張期缺的是錢，不是便宜的錢）
   const peerOf = (id) => (global.Chattel && global.Chattel.peerLenderOf ? global.Chattel.peerLenderOf(id) : '');
   const rateFreeOf = (r) => {
@@ -330,7 +330,7 @@
   };
   // 分頁篩選的「利率不敏感」：跟每日新名單同一套
   const rateKey = (r) => (rateFreeOf(r) ? 'Y' : 'N');
-  const capRank = (r) => (r.capital >= 5000000 && r.capital <= 60000000 ? 0 : 1);
+  const capRank = (r) => (r.capital >= 3000000 && r.capital <= 60000000 ? 0 : 1);
   const branchRank = (r) => (global.Rules && global.Rules.branchRank ? global.Rules.branchRank(r.branch.b, myBranch()) : (r.branch.key === myBranch() ? 0 : 9));
   const ageRankOf = (r) => (global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : (ageOf(r) === '5to10' ? 0 : 3));
   const dailyChecks = (r) => [!!rateFreeOf(r), !!r.tel, capRank(r), branchRank(r), ageRankOf(r), !!(r.isNew && r.firstMonths != null && r.firstMonths < 3)];
@@ -370,7 +370,7 @@
       forId ? el('label', { htmlFor: forId, textContent: label }) : el('span', { className: 'lbl', textContent: label }), node]);
     const filters = el('details', { className: 'leads-filters', id: 'einv-filters' }, [
       el('summary', {}, [el('strong', { textContent: '篩選' })]),
-      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。預設篩資本額 500～6,000 萬、公司、我的分公司；要看全部就把數字清掉、籤按掉。「剛導入」要等起算之後下個月的資料才有。' }),
+      el('p', { className: 'muted leads-hint', textContent: '籤上的數字＝套用其他條件後這一顆會剩幾家。預設篩資本額 300～6,000 萬、公司、我的分公司；要看全部就把數字清掉、籤按掉。「剛導入」要等起算之後下個月的資料才有。' }),
       group('歸屬分公司（同「規則」的劃分表）', el('div', { className: 'chips', id: 'einv-fBranch' })),
       group('區', el('div', { className: 'chips', id: 'einv-fDistrict' })),
       group('什麼時候導入電子發票（第一次出現在清單）', el('div', { className: 'chips', id: 'einv-fWhen' })),
@@ -457,11 +457,11 @@
       $('#einv-q').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; rerender(); }, 120); };
       $('#einv-more').onclick = () => { limit += PAGE; render(); };
       $('#einv-hidden').onclick = () => { showHidden = !showHidden; rerender(); };
-      // 預設篩成最值得打的那批：資本額 500～6,000 萬、公司（商行多半小）、我的分公司。電話不預設篩：這份對到電話的本來就少
+      // 預設篩成最值得打的那批：資本額 300～6,000 萬、公司（商行多半小）、我的分公司。電話不預設篩：這份對到電話的本來就少
       const defaults = () => {
         Object.values(f).forEach((v) => { if (v instanceof Set) v.clear(); }); f.q = ''; rateDefault().forEach((k) => f.rate.add(k));
         f.org.add('company'); f.branches.add(myBranch());
-        $('#einv-q').value = ''; $('#einv-capMin').value = '500'; $('#einv-capMax').value = '6000'; $('#einv-sort').value = 'capital'; showHidden = false;
+        $('#einv-q').value = ''; $('#einv-capMin').value = '300'; $('#einv-capMax').value = '6000'; $('#einv-sort').value = 'capital'; showHidden = false;
       };
       $('#einv-reset').onclick = () => { defaults(); rerender(); };
       $('#einv-reset').textContent = '回到預設篩選';

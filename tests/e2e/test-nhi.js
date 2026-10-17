@@ -34,7 +34,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.evaluate(()=>window.switchTab('nhi')); await pg.waitForSelector('#nhi-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#nhi-sub')).replace(/\s+/g,' ');
  chk(/新北市最近 6 個月新成立的投保單位 4 家（對到電話 2）/.test(sub) && /資料到 2026\/09/.test(sub), `標題：${sub}`);
- // 預設篩選：資本額 500～6,000 萬、公司、我的分公司 → 名祿（新莊、1,200 萬）；老客戶 5,000 萬也在新莊但已在名單（還是列，標已在名單）
+ // 預設篩選：資本額 300～6,000 萬、公司、我的分公司 → 名祿（新莊、1,200 萬）；老客戶 5,000 萬也在新莊但已在名單（還是列，標已在名單）
  let names=await pg.$$eval('#nhi-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
  chk(names.length===2 && /名祿/.test(names[1]) && /老客戶/.test(names[0]), `預設篩選後照資本額排：${names.join(' | ')}`);
  chk((await pg.locator('#nhi-cards .card:has-text("老客戶") .badge-mine').count())===1, '已在名單的標出來');

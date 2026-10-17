@@ -73,7 +73,7 @@
   const COND = [
     ['branch', '我的分公司', (it) => it.d.branchKey === myBranch()],
     ['age', '成立 5～7 年', (it) => it.d.years != null && it.d.years >= 5 && it.d.years <= 7],
-    ['cap', '資本額 500～6,000 萬', (it) => it.d.capital >= 5e6 && it.d.capital <= 6e7],
+    ['cap', '資本額 300～6,000 萬', (it) => it.d.capital >= 3e6 && it.d.capital <= 6e7],
   ];
   /*
    * 電話篩選（使用者：「新增一個篩選，有電話、有手機、無電話」）：跟各頁一樣，籤是「或」的關係；
