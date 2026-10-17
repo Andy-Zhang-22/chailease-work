@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-355';
+  const APP_VERSION = '20261017-356';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3291,11 +3291,8 @@
       });
     });
     const out = [...byKey.values()];
-    const demo = demotedOrigins();
-    const labelOf = (k) => (MIX_SOURCES.find((x) => x.key === k) || {}).label || '';
     out.forEach((c) => {
-      // 這家看到的每一份名單都是「不是目標」太多的來源 → 排後面（版本 326）
-      c.demote = demo.size > 0 && Object.keys(c.recs).every((k) => demo.has(labelOf(k)));
+      // 版本 356：「不是目標」太多的來源排後面那條拿掉了（使用者：「2 不行」）；demotedOrigins 只留在設定視窗當提醒
       const tax = /^\d{8}$/.test(c.key) ? c.key : '';
       c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
       // 半年內剛買設備＝有需求才買，可能有週轉金需求（版本 344 使用者更正）：算訊號、排前面；6～12 個月前的只靠 buyRank 排次之
@@ -3308,7 +3305,7 @@
     });
     // 成立 10 年以上的真的排最後（版本 345；使用者：「今天給我的名單為甚麼都是成立年非新公司」——以前只是第 7 順位的比較條件，有訊號的老公司照樣排前面）
     // 有手機號碼的排前面（版本 347；使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）：排在訊號前面
-    out.sort((a, b) => Number(!!a.demote) - Number(!!b.demote) || Number(a.ageRank === 4) - Number(b.ageRank === 4) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -3855,9 +3852,8 @@
         ]));
       }
       {
-        const demo = demotedOrigins();
-        const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家${demo.has(o) ? '（排後面）' : ''}`);
-        if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。哪個來源挑進來的有四成以上（至少 3 家）被你當不是目標刪掉，那個來源的候選就排後面（是排序不是門檻）。` }));
+        const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
+        if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
       host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單挑 ${quota} 家進名單（八頁平分，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的七頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；分數一樣再比最近買設備多近 → 成立 5～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
