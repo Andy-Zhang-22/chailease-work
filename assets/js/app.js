@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261017-350';
+  const APP_VERSION = '20261017-351';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -603,13 +603,13 @@
   // 客戶新動態（版本 323～336）拿掉了：使用者「這個對我沒有太大幫助」→「刪掉」。追蹤狀態裡舊的 sigs 留著不讀。
   /*
    * 主力客戶每月上網查一次擴張訊號（版本 328；使用者：「Claude api 金鑰還能應用在系統的哪裡？」→「主力客戶那個做」）。
-   * 後台每月 1 日叫：主力名單（不是每日新名單）、沒標禁止推廣、有統編的，一個月最多 max 家；有機會的先、最近聯絡過的先；
-   * 30 天內查過的跳過。結果存進追蹤狀態 intel（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行。
+   * 後台每月 1 日叫：主力名單（不是每日新名單）、沒標禁止推廣、有統編、不是中租往來的，一個月最多 max 家（版本 351 預設 260、Opus）；
+   * 有機會的先、最近聯絡過的先；60 天內查過的跳過。結果存進追蹤狀態 intel（跟新名單同一格）：卡片掛「🌐 網路有擴張訊號」、詳細頁一行。
    * 送出去的只有公司名、統編、地址。
    */
   async function customerIntel({ max = 120 } = {}) {
     if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0, skipped: 0 };
-    const recent = Date.now() - 30 * 86400000;
+    const recent = Date.now() - 60 * 86400000;   // 版本 351：30 → 60 天（每月 260 家輪一遍要兩個月，Opus 一家約 US$0.17）
     // 中租往來的（dealingKind active，首頁預設隱藏的那群）不查（版本 348；使用者：「主力客戶不是 525 家嗎」）
     const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !v.blocked && v.dealingKind !== 'active' && !FRESH_SOURCE_RE.test(String(v.source || '')));
     const fresh = pool.filter((v) => !(v.intel && v.intel.at > recent));

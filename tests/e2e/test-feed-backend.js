@@ -149,7 +149,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  chk(/🌐 .*網路查到：官網：2026\/09 新廠動工/.test((await pg.textContent('#drawerBody')).replace(/\s+/g,' ')), '詳細頁一行網路查到');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
  const ci2=await pg.evaluate(()=>window.customerIntel());
- chk(ci2 && ci2.asked===0 && ci2.skipped===1, `30 天內查過的跳過：${JSON.stringify(ci2)}`);
+ chk(ci2 && ci2.asked===0 && ci2.skipped===1, `60 天內查過的跳過（版本 351）：${JSON.stringify(ci2)}`);
  // ===== 版本 331 =====
  // 今天排著、還沒查過訊號的新名單補查：丁四是別處挑進來排在今天的（沒 intel）→ fillTodayIntel 只問它、存 intel、卡片掛 🌐；再叫一次沒得問
  await pg.evaluate(async()=>{ await window.Store.saveRecords([{id:'9',source:'每日新名單-2026-10-05.csv',company:'丁四大企業股份有限公司',aliases:[],taxId:'44444444',grade:'',founded:'2019',capital:'150,000',phoneRaw:'02-0000-4444',phones:[{digits:'0200004444',ext:'',note:''}],owner:'',keyman:'',industry:'',address:'新北市新莊區中正路4號',city:'新北市',district:'新莊區',notesRaw:'每日新名單，符合：我的分公司',nextDate:'2026-10-05',lastDate:null,addedDate:'2026-10-05',country:'台灣'}]); });

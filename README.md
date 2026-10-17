@@ -4719,3 +4719,13 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 ## 後台挑名單的 workflow 逾時放寬到 90 分鐘（版本 350）
 
 手動一次查 380 家主力客戶（Opus）約 45 分鐘，原本 `timeout-minutes: 40` 會被砍掉。排程的每天跑只要 7 分鐘，不受影響。版號 20261017-350。
+
+## 主力客戶每月改用 Opus 查、一次 260 家、60 天內查過跳過（版本 351）
+
+使用者：「claude api 還有什麼地方可以運用，我每月會有 100 美金的額度」→ 列了四項 →「做 2 好了」。
+
+- 每月 1 日的主力客戶查訊號改用 Opus（Sonnet 68 家查到 0 家明確、Opus 60 家查到 4 家），一次最多 260 家，60 天內查過的跳過：
+  525 家兩個月輪一遍，一家約 US$0.17，一個月約 US$25～45。10/17 已經用到期點數查了 380 家，11/1 會補剩下的。
+- `feed-drive.mjs`：`--recheck-model`／`RECHECK_MODEL`（預設 opus）跟每日新名單的 `--model` 分開；主力客戶那段的費用另外印一行。
+  `--recheck-max` 預設 260。`daily-feed-drive.yml` 手動跑多 `recheckmodel`。
+- `customerIntel`：跳過的視窗 30 → 60 天。版號 20261017-351。

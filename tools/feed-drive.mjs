@@ -43,7 +43,9 @@ const RECHECK = opt('recheck', 'auto');
 const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
 const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
 const RESEARCH = (process.env.RESEARCH || opt('research', 'no')).toLowerCase() === 'yes';   // 每日新名單要不要上網查（版本 349 預設不查）
-const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '120')) || 120));   // 主力客戶一次查幾家（版本 348）
+const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '260')) || 260));   // 主力客戶一次查幾家（版本 348；版本 351 預設 260）
+// 主力客戶用哪個模型（版本 351；使用者選「做 2」：主力客戶改用 Opus）：預設 opus，跟每日新名單的 --model 分開
+const RECHECK_MODEL = (process.env.RECHECK_MODEL || opt('recheck-model', 'opus')).toLowerCase() === 'sonnet' ? 'sonnet' : 'opus';
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 // Workload Identity 聯合（不用金鑰）：四個變數都有才算設好；SDK 自己拿 OIDC token 去換存取權杖
@@ -111,11 +113,15 @@ async function main() {
     page.on('pageerror', () => { pageErrors += 1; });
     // 網站挑名單時把候選丟過來，這邊用 Claude＋網路搜尋查擴張訊號（沒金鑰就不掛，網站照舊）
     const researchStats = { asked: 0, withSignals: 0, failed: 0, usage: emptyUsage() };
+    let researchModel = MODEL_NAME;   // 主力客戶那段切成 RECHECK_MODEL（版本 351），費用各自算
+    const recheckStats = { asked: 0, usage: emptyUsage() };
     if (CLAUDE_ON) {
       await page.exposeFunction('backendResearch', async (items) => {
-        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, log: (m) => console.log(`  ${m}`) });
-        researchStats.asked += r.asked; researchStats.withSignals += r.withSignals; researchStats.failed += r.failed;
-        for (const k of Object.keys(researchStats.usage)) researchStats.usage[k] += r.usage[k] || 0;
+        const model = researchModel;
+        const r = await researchCompanies(items || [], { apiKey: ANTHROPIC_KEY, model, log: (m) => console.log(`  ${m}`) });
+        const stats = model === RECHECK_MODEL && researchModel !== MODEL_NAME ? recheckStats : researchStats;
+        stats.asked += r.asked; if (stats === researchStats) { researchStats.withSignals += r.withSignals; researchStats.failed += r.failed; }
+        for (const k of Object.keys(stats.usage)) stats.usage[k] += r.usage[k] || 0;
         return r.results;
       });
     }
@@ -173,8 +179,11 @@ async function main() {
     if (doRecheck) {
       if (!CLAUDE_ON) out('主力客戶查訊號：沒設 Claude，跳過');
       else {
+        researchModel = RECHECK_MODEL;
         const ci = await page.evaluate((max) => window.customerIntel({ max }), RECHECK_MAX);
-        out(`主力客戶查訊號：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；30 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
+        researchModel = MODEL_NAME;
+        out(`主力客戶查訊號（${RECHECK_MODEL === 'opus' ? 'Opus' : 'Sonnet'}）：查了 ${ci.asked} 家，${ci.withSignals} 家有擴張訊號（明確 ${ci.strong}）；60 天內查過跳過 ${ci.skipped} 家${ci.left ? `，還有 ${ci.left} 家下個月輪到` : ''}`);
+        if (recheckStats.asked) out(`主力客戶這段 Claude 約 US$${estimateUsd(recheckStats.usage, RECHECK_MODEL).toFixed(2)}（${recheckStats.asked} 家：搜尋 ${recheckStats.usage.searches} 次）`);
       }
     }
 
