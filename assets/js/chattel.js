@@ -764,7 +764,7 @@
       const g = RECENT_GRADE[c.recent] == null ? 3 : RECENT_GRADE[c.recent];
       if (!best || g < best.grade || (g === best.grade && startKey(c) > startKey(best.c))) best = { grade: g, c };
     });
-    return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name) } : { grade: 3, ym: '', lender: '' };
+    return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name), amount: best.c.amount || 0 } : { grade: 3, ym: '', lender: '', amount: 0 };
   }
   /*
    * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，

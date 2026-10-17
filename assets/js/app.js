@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261016-345';
+  const APP_VERSION = '20261017-346';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1262,8 +1262,9 @@
   }
 
   const NO_PHONE_PICK = '找不到電話，先收起來（之後查到電話會提醒你）';
-  const DELETE_REASONS = [['target', '不是目標（行業、規模不對）'], ['customer', '已是客戶／跟中租有往來'], ['other', '其他原因，刪掉']];
-  const REASON_BADGE = { target: '不是目標', customer: '已是客戶', other: '其他原因' };
+  // 版本 346：「其他原因」改成「總機不轉接」——使用者說會選其他的都是總機不幫忙轉給老闆；key 不改，舊資料照舊
+  const DELETE_REASONS = [['target', '不是目標（行業、規模不對）'], ['customer', '已是客戶／跟中租有往來'], ['other', '總機不轉接給老闆，刪掉']];
+  const REASON_BADGE = { target: '不是目標', customer: '已是客戶', other: '總機不轉接' };
   function deleteBtn(r) {
     const btn = el('button', { className: 'btn btn-tiny danger', type: 'button', textContent: '刪除這筆' });
     btn.onclick = async () => {
@@ -3248,7 +3249,10 @@
    */
   const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票)$/;
   const strongSignals = (c) => [...c.signals].filter((x) => !WEAK_SIGNAL_RE.test(x)).length;
-  const buyRank = (c) => (c.buy.grade <= 1 ? 0 : c.buy.grade === 2 ? 1 : 2);
+  // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
+  const BUY_MIN = 3000000;
+  const buyBig = (c) => (c.buy.amount || 0) >= BUY_MIN;
+  const buyRank = (c) => (!buyBig(c) ? 2 : c.buy.grade <= 1 ? 0 : c.buy.grade === 2 ? 1 : 2);
   function mergeFeed(sources) {
     const byKey = new Map();
     sources.forEach((src) => {
@@ -3278,7 +3282,7 @@
       const tax = /^\d{8}$/.test(c.key) ? c.key : '';
       c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
       // 半年內剛買設備＝有需求才買，可能有週轉金需求（版本 344 使用者更正）：算訊號、排前面；6～12 個月前的只靠 buyRank 排次之
-      if (c.buy.grade <= 1) c.signals.add(`最近買設備（${c.buy.ym}）`);
+      if (c.buy.grade <= 1 && buyBig(c)) c.signals.add(`最近買設備（${c.buy.ym}）`);
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
     });
