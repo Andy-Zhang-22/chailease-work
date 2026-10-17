@@ -853,7 +853,8 @@
     if (now && EXPAND_RE.test(r.reason || '')) signals.push('本期擴張');
     return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
       ageRank: ageRankOf(r), capOk: r.capital >= 5000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r),
-      industry: (r.classes || []).map((c) => IND[c]).filter(Boolean).join('、') };
+      industry: (r.classes || []).map((c) => IND[c]).filter(Boolean).join('、'),
+      mobile: !!(global.Trade && global.Trade.phoneKindsOf && global.Trade.phoneKindsOf(r['統一編號']).has('M')) };
   }
   /*
    * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，

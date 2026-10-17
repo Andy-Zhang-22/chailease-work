@@ -755,7 +755,7 @@
    */
   function dailyFacts(r) {
     return { key: String(r.cust.id || '').replace(/\D/g, '') || String(r.cust.name || '').replace(/\s/g, ''), name: r.cust.name, signals: [],
-      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r) };
+      ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 4, capOk: null, phone: hasPhone(r), branchRank: branchRank(r), mobile: phoneKindsOf(r).has('M') };
   }
   /** 統編 → 這家最近一次買設備（契約起，日期不合理改用登記核准日）：grade 0＝3 個月內、1＝6 個月內、2＝1 年內、3＝更早或沒有 */
   function recentBuyOf(taxId) {
@@ -764,7 +764,7 @@
       const g = RECENT_GRADE[c.recent] == null ? 3 : RECENT_GRADE[c.recent];
       if (!best || g < best.grade || (g === best.grade && startKey(c) > startKey(best.c))) best = { grade: g, c };
     });
-    return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name) } : { grade: 3, ym: '', lender: '' };
+    return best ? { grade: best.grade, ym: ymOf(best.c.startUse), lender: lenderShort(best.c.lender.name), amount: best.c.amount || 0 } : { grade: 3, ym: '', lender: '', amount: 0 };
   }
   /*
    * 「新名單」合併頁用（使用者：「除了上市櫃、商行維持獨立名單外，其餘都能合併」）：這一家在這一頁的卡片資料，

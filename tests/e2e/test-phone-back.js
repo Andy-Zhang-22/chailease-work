@@ -33,10 +33,10 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
    const opts=await pg.$$eval('.ask-overlay .ask-list .btn',bs=>bs.map(b=>b.textContent));
    await pg.click(`.ask-overlay .ask-list .btn:has-text("${pick}")`); await pg.waitForTimeout(900); return opts; };
  const opts=await del('甲範例','找不到電話');
- chk(opts.length===4 && /找不到電話，先收起來/.test(opts[0]) && /不是目標/.test(opts[1]) && /已是客戶/.test(opts[2]) && /其他原因/.test(opts[3]), `沒電話的刪除有四種（版本 326）：${opts.join('｜')}`);
+ chk(opts.length===4 && /找不到電話，先收起來/.test(opts[0]) && /不是目標/.test(opts[1]) && /已是客戶/.test(opts[2]) && /總機不轉接/.test(opts[3]), `沒電話的刪除有四種（版本 326）：${opts.join('｜')}`);
  await del('乙範例','不是目標');
  await del('丙範例','找不到電話');
- await del('丁範例','其他原因');
+ await del('丁範例','總機不轉接');
  const tombs=await pg.evaluate(async()=>(await window.Store.getTombstones()).companies);
  chk(tombs['tax:11111111'].noPhone===true && !tombs['tax:22222222'].noPhone, '墓碑記著哪家是「找不到電話」');
  chk(tombs['tax:11111111'].reason==='nophone' && tombs['tax:22222222'].reason==='target' && tombs['tax:44444444'].reason==='other', `墓碑記著刪的原因：${['11111111','22222222','44444444'].map(t=>tombs['tax:'+t].reason).join('、')}`);
@@ -60,7 +60,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.click('#phoneBackBar button'); await pg.waitForSelector('#editorBody .excluded-row'); await pg.waitForTimeout(800);
  const rows=await pg.$$eval('#editorBody .excluded-row',rs=>rs.map(r=>r.textContent.replace(/\s+/g,' ')));
  chk(rows.length===7 && rows.slice(0,3).every(r=>/有電話了/.test(r)) && !/有電話了/.test(rows.slice(3).join(' ')), `選「不是目標」刪的乙，查到電話一樣標出來：${rows.map(r=>r.slice(0,20)).join('｜')}`);
- chk(rows.some(r=>/乙範例.*不是目標/.test(r)) && rows.some(r=>/丁範例.*其他原因/.test(r)), '已排除的公司標出刪的原因');
+ chk(rows.some(r=>/乙範例.*不是目標/.test(r)) && rows.some(r=>/丁範例.*總機不轉接/.test(r)), '已排除的公司標出刪的原因');
  chk(/之前找不到電話的 2 家/.test(await pg.textContent('#phoneBackBar')), '但名單上面的提醒只算「找不到電話」的那兩家');
  chk(/查到電話的 3 家全部放回名單/.test(await pg.textContent('#editorBody .excluded-all')), '有「全部放回」');
  // 搜尋：公司名、統編、電話；全部放回只算搜尋出來的
