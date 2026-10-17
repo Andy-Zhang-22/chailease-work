@@ -4703,12 +4703,15 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `customerIntel` 的池子排除「中租往來」（dealingKind active，首頁預設隱藏的那 268 家）：使用者「主力客戶不是 525 家嗎」。第一次手動跑沒排除，跑 3 分鐘就取消重跑。
 - 版號 20261017-348。
 
-## 上網查的上限減半、切回網站先拉雲端、Actions 換新版（版本 349）
+## 每日新名單不上網查、Google 本月次數顯示、切回網站先拉雲端、Actions 換新版（版本 349）
 
-使用者看了「系統執行到現在還有什麼問題」那份清單：「這個有改了嗎？」→ 做 1、3、5。
+使用者看了「系統執行到現在還有什麼問題」那份清單：「1 先關掉不做，這我發現好像沒幫助」「4 的部分你有顯示出來給我嗎」「其他照你說的做」。
 
-- **1. Claude 上網查的上限**：額度的 4 倍 → 2 倍（額度 15 → 最多查 30 家）。最近三天每天查 60 家約 US$5.5，明確訊號只有 0～2 家，先減半看訊號數有沒有差。
-- **3. 切回網站先拉雲端**：`visibilitychange` 回到前景時，有設雲端同步且 5 分鐘內沒同步過，就靜默 `runSync` 一次。電腦手機交替用，另一台改的才看得到。
-- **5. Actions 的 Node 20 警告**：14 支 workflow 的 `actions/checkout@v4`→`v5`、`actions/setup-node@v4`→`v5`、`google-github-actions/auth@v2`→`v3`。
-  CI 跑 checkout、setup-node；auth 要等後台下次跑才驗證。
-- 第 2 項（兩週不改排序）是使用者配合；第 4 項（Google 額度月底貼近 1,000）只是提醒。版號 20261017-349。
+- **1. 每日新名單不上網查**：`feed-drive.mjs` 多 `--research`／環境變數 `RESEARCH`（預設 no），後台進頁面先設 `window.researchDaily`，
+  `dailyFeed`、`fillTodayIntel` 看到 false 就不查。手動跑 `research=yes` 才查。上限同時從額度 4 倍降成 2 倍（開回來時用）。
+  主力客戶每月那條（`customerIntel`）不受影響。
+- **4. Google 地圖本月查了幾次**：`placesLookup` 每打一次 API 就把會同步的設定 `google-month`（{ym, n}）加一，手機、電腦、後台加總，跨月歸零。
+  首頁「今天的新名單」那條多一行「Google 地圖本月查了 N／1,000 次」，後台也印一行。`window.googleMonth()` 給後台、測試用。
+- **3. 切回網站先拉雲端**：`visibilitychange` 回到前景時，有設雲端同步且 5 分鐘內沒同步過，就靜默 `runSync` 一次。
+- **5. Actions 的 Node 20 警告**：14 支 workflow 的 `actions/checkout@v5`、`actions/setup-node@v5`、`google-github-actions/auth@v3`。auth 要等後台下次跑才驗證。
+- 第 2 項（兩週不改排序）是使用者配合。測試：`test-auto-phones.js` 加本月次數。版號 20261017-349。

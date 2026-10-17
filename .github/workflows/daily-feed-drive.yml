@@ -38,6 +38,12 @@ on:
         default: 'auto'
         type: choice
         options: [auto, 'yes', 'no']
+      research:
+        description: '每日新名單候選要不要上網查擴張訊號（版本 349 起預設 no）'
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'yes']
       recheckmax:
         description: '主力客戶一次查幾家（配 recheck=yes；預設 120）'
         required: false
@@ -117,4 +123,5 @@ jobs:
           INTEL_MODEL: ${{ inputs.model || 'sonnet' }}
           COMPARE: ${{ inputs.compare || 'no' }}
           RECHECK_MAX: ${{ inputs.recheckmax || '120' }}
+          RESEARCH: ${{ inputs.research || 'no' }}
         run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"

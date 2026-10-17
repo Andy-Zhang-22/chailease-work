@@ -486,6 +486,9 @@
       const days = Math.round((Date.parse(today) - Date.parse(iso > today ? `${y - 1}-${m[1]}-${m[2]}` : iso)) / 86400000);
       if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: `後台 ${stamp}` }));
     }
+    // Google 地圖本月查了幾次（版本 349）：免費 1,000 次，超過每次約 NT$1
+    const gm = googleMonth();
+    if (gm.n > 0) bar.append(el('div', { className: 'feed-google muted', textContent: `Google 地圖本月查了 ${gm.n}／1,000 次（免費額度，超過每次約 NT$1）` }));
     bar.hidden = false;
   }
 
@@ -634,7 +637,7 @@
    * 讓卡片掛 🌐、詳細頁看得到那句。只存 intel，不改訪談內容、不改順序。
    */
   async function fillTodayIntel() {
-    if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0 };
+    if (typeof window.backendResearch !== 'function' || window.researchDaily === false) return { off: true, asked: 0, withSignals: 0, strong: 0 };
     const today = todayISO();
     const list = allViews().filter((v) => isFreshLead(v) && v.nextDate === today && !v.blocked && !v.intel);
     let withSignals = 0; let strong = 0; let asked = 0;
@@ -1509,6 +1512,13 @@
     return { best: best && best.level !== 'none' ? best : null, candidates: places };
   }
 
+  /*
+   * Google 地圖本月查了幾次（版本 349；使用者：「4 的部分你有顯示出來給我嗎」）：每次真的打 Places API 就加一，
+   * 存在會同步的設定 google-month（{ym, n}），手機、電腦、後台加總；跨月歸零。免費額度每月 1,000 次，超過每次約 NT$1。
+   */
+  const googleMonth = () => { try { const o = JSON.parse(registryPref('google-month') || '{}'); return o && o.ym === todayISO().slice(0, 7) ? { ym: o.ym, n: Number(o.n) || 0 } : { ym: todayISO().slice(0, 7), n: 0 }; } catch (e) { return { ym: todayISO().slice(0, 7), n: 0 }; } };
+  const bumpGoogleCount = () => { const g = googleMonth(); registryPref('google-month', JSON.stringify({ ym: g.ym, n: g.n + 1 })); };
+  window.googleMonth = googleMonth;   // 後台印、測試用
   const placesCache = new Map();   // 同一家同一個地址這次開著網站只查一次：挑名單前查過的，匯入後不用再付一次
   async function placesLookup(r) {
     const key = placesKey();
@@ -1532,6 +1542,7 @@
       if (res.status === 403 || res.status === 400) why += '。多半是金鑰沒開 Places API (New)，或「網站限制」沒填這個網址。';
       throw new Error(why);
     }
+    bumpGoogleCount();   // 版本 349：本月查了幾次（免費 1,000 次），首頁那行顯示
     const data = await res.json();
     const places = (data.places || []).map((p) => ({
       id: p.id, name: (p.displayName && p.displayName.text) || '', address: p.formattedAddress || '',
@@ -3543,7 +3554,8 @@
        * 不夠就查下一批，最多查到額度的 2 倍（版本 349 從 4 倍降下來）就停，免得一天燒太多。挑的時候明確訊號的先進，不夠才用其他的補滿。
        */
       const strongKey = (k) => { const v = intel.get(k); return !!(v && v.expansion && (v.score || 0) >= 2); };
-      if (typeof window.backendResearch === 'function' && (merged.length || bz.length)) {
+      // 版本 349：每日新名單預設不上網查（使用者：「先關掉不做，這我發現好像沒幫助」）；後台 research=yes 手動跑才查。主力客戶每月那條另外算
+      if (typeof window.backendResearch === 'function' && window.researchDaily !== false && (merged.length || bz.length)) {
         const taxOf = (k) => (/^\d{8}$/.test(k) ? k : '');
         const queue = [
           ...merged.filter(rulesOkM).map((c) => ({ key: c.key, name: c.name, taxId: taxOf(c.key), address: addrOf(c), known: !!c.phone })),
@@ -6718,6 +6730,8 @@ export default {
     'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
     // 後台每月用 Google 地圖幫「找不到電話」的再查一次的結果：各台裝置都要看得到
     'phone-back-google',
+    // Google 地圖本月查了幾次（版本 349）：各台加總
+    'google-month',
     // 每天自動照上限重排：開關、今天跑過了沒
     'auto-rebalance', 'auto-rebalance-on',
     // Claude 分身專案的網址：電腦設好，手機也能直接開
