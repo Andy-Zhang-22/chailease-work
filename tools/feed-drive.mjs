@@ -111,6 +111,11 @@ async function main() {
     if (MODE !== 'write') await ctx.route('https://www.googleapis.com/upload/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: file.id }) }));
     const page = await ctx.newPage();
     page.on('pageerror', () => { pageErrors += 1; });
+    // 同步失敗時網站只在 console 印原因（runSync 的 catch）：留最後一句，失敗時印出來才知道是下載、合併還是寫回壞掉（版本 359）。
+    // Drive 的錯誤訊息只有 HTTP 狀態與 Google 的說明，不會有名單內容。
+    let lastConsoleError = '';
+    page.on('console', (m) => { if (m.type() === 'error') lastConsoleError = String(m.text() || '').replace(/\s+/g, ' ').slice(0, 300); });
+    const why = () => (lastConsoleError ? `：${lastConsoleError}` : '');
     // 網站挑名單時把候選丟過來，這邊用 Claude＋網路搜尋查擴張訊號（沒金鑰就不掛，網站照舊）
     const researchStats = { asked: 0, withSignals: 0, failed: 0, usage: emptyUsage() };
     let researchModel = MODEL_NAME;   // 主力客戶那段切成 RECHECK_MODEL（版本 351），費用各自算
@@ -141,7 +146,7 @@ async function main() {
 
     // 2. 先同步：把雲端的名單拉下來（網站一開也會自己同步，DriveSync 同時只跑一次）
     const first = await page.evaluate(() => window.runSync({ quiet: true }).then((r) => (r ? { ok: true, firstTime: !!r.firstTime } : { ok: false })));
-    if (!first.ok) throw new Error('雲端硬碟同步失敗（看網站的同步設定與服務帳號的分享）');
+    if (!first.ok) throw new Error(`雲端硬碟同步失敗（看網站的同步設定與服務帳號的分享）${why()}`);
     if (first.firstTime) throw new Error('網站找不到同步檔、想新建一個：服務帳號沒有儲存空間，不能這樣。請確認同步檔已分享給服務帳號');
     const n = await page.evaluate(async () => (await window.Store.allRecords()).length);
     out(`同步完成：名單 ${n} 筆`);
@@ -232,7 +237,7 @@ async function main() {
       const pinned = await pinCurrentRevision(token, file.id);
       const before = await modifiedTimeOf(token, file.id);
       const last = await page.evaluate(() => window.runSync({ quiet: true }).then((r) => !!r));
-      if (!last) throw new Error('最後寫回雲端硬碟失敗');
+      if (!last) throw new Error(`最後寫回雲端硬碟失敗${why()}`);
       // 網站匯入後自己排的那次同步（4 秒後）可能還沒跑完：等它，別關到一半
       await nap(6000);
       await page.waitForFunction(() => !document.querySelector('#btnSync.is-busy'), null, { timeout: 60000 }).catch(() => null);
