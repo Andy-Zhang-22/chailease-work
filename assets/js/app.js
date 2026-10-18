@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261019-359';
+  const APP_VERSION = '20261019-360';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -484,7 +484,8 @@
       const y = Number(today.slice(0, 4));
       const iso = `${y}-${m[1]}-${m[2]}`;
       const days = Math.round((Date.parse(today) - Date.parse(iso > today ? `${y - 1}-${m[1]}-${m[2]}` : iso)) / 86400000);
-      if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: `後台 ${stamp}` }));
+      // 不是今天的就講明（版本 360；使用者：「為什麼日期還是怪怪的」——後台兩天沒寫成，那行停在 10-17 看起來像今天的）
+      if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: days ? `後台今天還沒跑；最近一次 ${stamp}` : `後台 ${stamp}` }));
     }
     // Google 地圖本月查了幾次（版本 349）：免費 1,000 次，超過每次約 NT$1
     const gm = googleMonth();

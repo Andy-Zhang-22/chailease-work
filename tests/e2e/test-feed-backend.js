@@ -184,6 +184,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  await pg.evaluate(async()=>{ await window.Store.setSetting('feed-drive-summary','10-05 05:40 後台挑了 3 家（登記清冊 3），排在 2026-10-05；網路查了 3 家，1 家有明確擴張訊號'); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  chk(/後台 10-05 05:40 後台挑了 3 家/.test(await pg.textContent('#feedBar .feed-backend').catch(()=>'')), `名單最上面那條有後台摘要：${await pg.textContent('#feedBar')}`);
+ // 不是今天的要講明「今天還沒跑」（版本 360）
+ await pg.evaluate(async()=>{ await window.Store.setSetting('feed-drive-summary','10-03 05:40 後台挑了 3 家'); });
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ chk(/^後台今天還沒跑；最近一次 10-03 05:40 後台挑了 3 家/.test(await pg.textContent('#feedBar .feed-backend').catch(()=>'')), `前天的後台摘要講明今天還沒跑：${await pg.textContent('#feedBar .feed-backend').catch(()=>'')}`);
  await pg.evaluate(async()=>{ await window.Store.setSetting('feed-drive-summary','09-20 05:40 後台挑了 3 家'); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
  chk((await pg.locator('#feedBar .feed-backend').count())===0, '兩週前的後台摘要不顯示');
