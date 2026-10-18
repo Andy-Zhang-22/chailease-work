@@ -4797,4 +4797,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   15 GB 滿了是帳號裡別的東西（信件附件、相片）。釘住的版本一天長 3.6 MB（商工登記、每日新名單各釘一次），一年 1.3 GB，
   要不要只留最近兩週的，等使用者決定。
 - 10/17 那行寫 07:16 是因為 GitHub 的排程那天晚了兩個多小時才跑（排 05:00），不是時區錯。
+- 手機按同步跳「雲端硬碟拒絕存取，請按同步重新授權」——空間滿了 Google 回的也是 403，`sync.js` 的 driveFetch 看回應裡有
+  `storageQuotaExceeded` 就直說「Google 儲存空間滿了，寫不進雲端硬碟：到 one.google.com/storage 清一下再同步」。
+  測試 `tests/e2e/test-sync-quota.js`（假 Drive 上傳回 403）。
 版號 20261019-359。

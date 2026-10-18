@@ -406,6 +406,8 @@
         throw new Error('這個 Google Cloud 專案還沒有啟用 Google Drive API，'
           + '請到主控台的「API 和服務 → 程式庫」搜尋 Google Drive API 並啟用。');
       }
+      // Google 儲存空間滿了也是 403（版本 359；使用者的空間滿了兩天，畫面卻叫他重新授權）
+      if (/storageQuotaExceeded|quota/i.test(body)) throw new Error('Google 儲存空間滿了，寫不進雲端硬碟：到 one.google.com/storage 清一下再同步');
       throw new Error('雲端硬碟拒絕存取，請按同步重新授權');
     }
     if (!res.ok) {
