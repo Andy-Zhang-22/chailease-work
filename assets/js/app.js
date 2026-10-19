@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261019-360';
+  const APP_VERSION = '20261019-361';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -468,6 +468,7 @@
       defer.onclick = async () => {
         if (!await askConfirm(`把今天排著的 ${due.length} 家全部改到 ${dateLabel(next)}（${window.Holidays ? window.Holidays.weekLabel(next) : ''}）？今天已經處理過的、禁止推廣的不動。`, { okText: '挪到那天' })) return;
         defer.disabled = true; defer.textContent = '挪動中…';
+        if (!await freshBeforeBulkMove()) { defer.disabled = false; render(); return; }
         for (const v of due) await saveState(v.id, { nextDate: next });
         await reload(); render(); scheduleSync();
         toast(`${due.length} 家挪到 ${dateLabel(next)} 了，今天休息`);
@@ -3153,7 +3154,19 @@
   }
   window.autoRebalance = autoRebalance;   // 測試用
 
+  /*
+   * 整批改日期（挪到下個上班日、照上限重排）前先同步一次，拉不到雲端最新的就不動（版本 361）。
+   * 這種動作會把日期寫成「使用者親手改的」（時間戳往前推），在一台沒同步成功的裝置上按，
+   * 等於拿舊日期蓋掉別台剛改的：10/17 Mac 用 10/15 的舊資料一挪，手機上改好的 2027 年日期就變回 10/19。
+   */
+  async function freshBeforeBulkMove() {
+    if (!window.DriveSync || !window.DriveSync.isConfigured()) return true;
+    const ok = await runSync({ quiet: true });
+    if (!ok) toast('雲端還沒同步成功，先不改日期：不然會拿這台的舊資料蓋掉別台改的。請先按同步鍵');
+    return !!ok;
+  }
   async function applyDailyCap() {
+    if (!await freshBeforeBulkMove()) return false;
     const cm = mainCap(); const cf = newQuota();
     const plan = planDailyCap(cm, cf);
     if (!plan.total) { toast('目前沒有排定下次聯絡日的客戶'); return false; }
@@ -8252,6 +8265,7 @@ export default {
     } catch (err) {
       console.error(err);
       setSyncButton('error', String(err.message || err));
+      try { await reload(); render(); } catch (e) { /* 上傳失敗前本機可能已換成雲端的新資料（版本 361），畫面要跟上 */ }
       if (!quiet) toast(`同步失敗：${err.message || err}`);
       const status = $('#syncStatus');
       if (status && !quiet) status.textContent = `同步失敗：${err.message || err}`;

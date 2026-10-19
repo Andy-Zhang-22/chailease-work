@@ -8,7 +8,10 @@ const STUB = () => {
   window.google = { accounts: { oauth2: { initTokenClient: (cfg) => ({ requestAccessToken: () => setTimeout(() => cfg.callback({ access_token: 'fake-token', expires_in: 3600 }), 0) }) } } };
   if (location.protocol !== 'http:') return;
   const realFetch = window.fetch;
-  const dump = JSON.stringify({ records: [], logs: [], state: {}, tombstones: {}, settings: {} });
+  // 雲端裡有一家排在今天的客戶：上傳失敗也要先進本機（版本 361）
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const rec = { id: 'c1', source: 'A.csv', company: '雲端甲一有限公司', aliases: [], taxId: '', grade: '', founded: '2015', capital: '3,000', phoneRaw: '02-2222-3333', phones: [], owner: '', keyman: '', industry: '', address: '新北市新莊區中正路9號', city: '新北市', district: '新莊區', notesRaw: '', timeline: [], outcome: 'new', nextDate: today, lastDate: '', addedDate: '2026-09-01', importedAt: 1 };
+  const dump = JSON.stringify({ version: 2, records: [rec], logs: [], states: [{ recordId: 'c1', nextDate: today, updatedAt: 5, fieldAt: { nextDate: 5 } }], tombstones: {}, settings: {} });
   window.fetch = async (url, opts = {}) => {
     const u = String(url);
     if (!u.includes('googleapis.com')) return realFetch(url, opts);
@@ -33,6 +36,19 @@ const STUB = () => {
  chk(r===null, '上傳 403 時同步回 null');
  chk(/儲存空間滿了/.test(toast) && !/重新授權/.test(toast), `提示直說空間滿了：${toast}`);
  chk(/is-error|error/.test(await pg.$eval('#btnSync',b=>b.className)), '同步鍵變成錯誤狀態');
+ // 版本 361：上傳失敗，雲端的資料還是要先寫進本機（不然這台一直用舊資料）
+ const n=await pg.evaluate(async()=>(await window.Store.allRecords()).length);
+ chk(n===1, `上傳失敗，雲端那家還是進了本機：${n} 家`);
+ // 整批挪日期要先同步成功：同步失敗就不動
+ await pg.waitForTimeout(500);
+ await pg.evaluate(()=>{ const d=document.querySelector('#importer'); if (d) d.hidden = true; });   // 一開始沒名單時匯入視窗會開著，蓋住按鈕
+ const hasDefer=await pg.locator('#feedDefer').count();
+ chk(hasDefer===1, '今天排著一家，有「挪到下個上班日」');
+ await pg.click('#feedDefer'); await pg.waitForTimeout(300); await pg.click('.ask-box .btn-primary'); await pg.waitForTimeout(1500);
+ const today=await pg.evaluate(()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+ const nd=await pg.evaluate(async()=>{ const s=await window.Store.getState('c1'); return s && s.nextDate; });
+ const t2=await pg.$eval('#toast',t=>t.textContent);
+ chk(nd===today && /還沒同步成功/.test(t2), `同步失敗就不挪：nextDate ${nd}，提示：${t2}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close(); console.log(bad?`${bad} 項失敗`:'全部通過'); process.exit(bad?1:0);
 })();

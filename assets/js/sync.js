@@ -562,18 +562,26 @@
       const remote = file ? await downloadFile(file.id, token) : null;
 
       const merged = mergeDumps(local, remote);
-      const fileId = await uploadFile(file ? file.id : null, merged, token);
       /*
-       * 下載、合併、上傳要好幾秒；這段時間本機又有變動（刪掉一家、記一通電話）的話，
+       * 下載、合併要一點時間；這段時間本機又有變動（刪掉一家、記一通電話）的話，
        * 不能拿開始時的快照整個蓋回去——使用者回報「刪名單時有時都需要再重按一次」就是這個：
-       * 刪掉的被同步用刪除前的快照蓋回來。改成用當下的本機再合併一次才寫回，
+       * 刪掉的被同步用刪除前的快照蓋回來。改成用當下的本機再合併一次才寫，
        * 這些變動還沒上雲端，回報 changedDuring 讓呼叫端接著再同步一次。
        */
       const latest = await global.Store.exportAll();
-      const changedDuring = fingerprint(latest) !== fingerprint(local);
-      const final = changedDuring ? mergeDumps(latest, merged) : merged;
+      const final = fingerprint(latest) !== fingerprint(local) ? mergeDumps(latest, merged) : merged;
+      /*
+       * 先把合併結果寫進本機，再上傳（版本 361）。以前是上傳成功才寫本機：Google 儲存空間滿了那幾天，
+       * Mac 每次上傳都失敗、本機就一直停在 10/15 的舊資料，使用者在它上面按「挪到下個上班日」，
+       * 把手機上改好的 2027 年日期整批蓋回 10/19。上傳失敗還是算同步失敗（丟錯、lastSyncAt 不更新），
+       * 但本機至少拿到雲端最新的，不會拿舊資料繼續做事。
+       */
       await global.Store.replaceAll(final);
+      const base = await global.Store.exportAll();   // 寫進本機後的樣子（通話紀錄的 logId 會重編，要拿這份比才準）
+      const fileId = await uploadFile(file ? file.id : null, final, token);
       try { await weeklyBackup(final, token, false); } catch (e) { console.error('每週備份失敗', e); }   // 備份失敗不擋同步
+      // 上傳途中本機又有變動（刪掉一家、記一通電話）：已經在本機了、但還沒上雲端，回報 changedDuring 讓呼叫端接著再同步一次
+      const changedDuring = fingerprint(await global.Store.exportAll()) !== fingerprint(base);
       await global.Store.setMeta('lastSyncAt', Date.now());
       await global.Store.setMeta('driveFileId', fileId);
 
