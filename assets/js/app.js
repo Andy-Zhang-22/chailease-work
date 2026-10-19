@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261019-361';
+  const APP_VERSION = '20261019-362';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3221,6 +3221,13 @@
   /** 每日新名單只進有電話的（版本 318）；feed-need-phone＝'0' 關掉（測試用）。一天最多用 Google 地圖查 GATE_LOOKUPS 家 */
   const feedNeedPhone = () => { try { return localStorage.getItem('feed-need-phone') !== '0'; } catch (e) { return true; } };
   const GATE_LOOKUPS = 40;
+  /*
+   * 資本額門檻（版本 362；使用者：「有手機很好但同時資本額要滿足 200 萬再給我」）：每日新名單挑的時候，
+   * 資本額要滿 200 萬，有沒有手機都一樣（手機只是排前面）。資本額查不到的（0）不擋——不知道不算不合格。
+   * 這是門檻不是排序（使用者定的），合併頁、各分頁照舊都看得到。
+   */
+  const CAP_FLOOR = 2000000;
+  const capitalOk = (capital) => !capital || Number(capital) >= CAP_FLOOR;
   const HUNT_LOOKUPS = 20;   // 第四關 Claude 找電話一天最多幾家（版本 352；一家約 US$0.09）
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
   /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
@@ -3298,6 +3305,7 @@
         if (f.capOk) c.capOk = true;
         c.phone = c.phone || f.phone;
         c.mobile = c.mobile || !!f.mobile;
+        c.capital = Math.max(c.capital || 0, Number(r.capital) || 0);   // 元；哪一頁有就用哪一頁的（動保沒有）
         c.branchRank = Math.min(c.branchRank, f.branchRank);
         c.order = Math.min(c.order, idx);
         // 行業：哪一頁有寫就用哪一頁的，幾頁都有就取最好的那級
@@ -3530,7 +3538,7 @@
         { key: 'fa', label: '新設工廠', mod: window.Factory, list: faAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'in', label: '產業名單', mod: window.Industry, list: inAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
-      let merged = mergeFeed(SRC);
+      let merged = mergeFeed(SRC).filter((c) => capitalOk(c.capital));   // 資本額門檻（版本 362）
       const mergedKeys = new Set(merged.map((c) => c.key));
       const bizKey = (r) => String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, '');
       const bzSeen = new Set();
@@ -3538,6 +3546,7 @@
       // 商行也一樣：成立 10 年以上排最後（版本 345），商行頁自己的四級順序在各級裡照舊
       const oldBiz = (r) => Number(r.years) >= 10;
       const mobileB = (r) => !!((window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}).mobile;   // 有手機的先（版本 347）
+      bz = bz.filter((r) => capitalOk(r.capital));   // 商行也一樣：資本額要滿 200 萬（版本 362）
       bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || a[1] - b[1]).map(([r]) => r);
       /*
        * 只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
@@ -4014,7 +4023,7 @@
     '## 我的成交輪廓（判斷名單先後就看這個）',
     '- 案件金額多半 1,000 萬上下，利率 8%～14%。',
     '- 成立 2～7 年優先（使用者定的）；10 年以上排最後。',
-    '- 資本額 500 萬～6,000 萬（一般組範疇）最對。',
+    '- 資本額 500 萬～6,000 萬（一般組範疇）最對；200 萬以下的不挑。',
     '- 成長快的公司：要的是錢，不是便宜的錢。',
     '',
     '## 利率不敏感的客群（最優先）',
