@@ -154,6 +154,9 @@ async function main() {
     // 3. 挑今天的新名單（跟網站一模一樣的那條，照使用者的設定：自動挑關著就不挑、今天挑過就不重挑），等補電話跑完
     await page.evaluate((on) => { window.researchDaily = on; }, CLAUDE_ON && RESEARCH);
     const res = await page.evaluate((more) => window.dailyFeed({ awaitPhones: true, more }), COMPARE);
+    // 3b. 主力名單從公開資料補電話、補手機（版本 363）：清冊這裡都載好了，整份在後台跑，裝置不用每天下載清冊。只印家數。
+    const pp = await page.evaluate(() => (window.publicPhones ? window.publicPhones('') : null)).catch(() => null);
+    if (pp && (pp.found || pp.mobiles)) out(`公開資料補到電話：${pp.found} 家填了電話、${pp.mobiles} 家多了手機`);
     const today = taipeiDate().toISOString().slice(0, 10);
     let line;
     if (!res) line = `${today} 後台沒有挑（網站的每日新名單沒跑）`;

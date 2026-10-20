@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261019-362';
+  const APP_VERSION = '20261020-363';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1122,6 +1122,7 @@
     out.corpsAt = (mine && mine.corps && mine.corps.at) || 0;
     // 電話是從 Google 地圖找來的話，詳細頁要標明來源
     out.phoneSource = (mine && mine.phoneSource) || null;
+    out.mobileSource = (mine && mine.mobileSource) || null;   // 公開資料加進來的手機（版本 363）
     /*
      * 篩選要撈得到每一次查到的變更：9/16 增資、10/8 變更地址，兩個籤都該有這家。
      * regKindDate 記每一種最近那次的日期，卡片標記才寫得出「增資 9/16」。
@@ -1590,22 +1591,60 @@
    * 清冊、動保、稅籍的名單都沒電話（使用者：投資控股類「找不到電話等於沒用」），匯進來的先用統編對這張表，
    * 對得到就直接填，剩下的才去 Google 地圖。sourceName 空＝整份名單裡沒電話的都補（選單那顆）。
    */
-  async function tradePhones(sourceName, opts = {}) {
-    if (!window.Trade || !window.Trade.phoneOf) return { tried: 0, found: 0 };
-    const todo = allViews().filter((v) => (!sourceName || v.source === sourceName) && !v.phones.length && !v.blocked && String(v.taxId || '').replace(/\D/g, '').length === 8);
-    let found = 0;
-    for (const v of todo) {
-      const p = await window.Trade.phoneOf(v.taxId);
-      if (!p || !p.tel) continue;
-      const st = state.userStates.get(v.id) || {};
-      await saveState(v.id, { edits: { ...(st.edits || {}), phoneRaw: p.tel }, editsAt: Date.now(), phoneSource: { kind: 'trade', name: '出進口廠商登記', issued: p.issued || '', at: Date.now() } });
-      found += 1;
+  /*
+   * 主力名單從公開資料補電話（版本 363；使用者：「找名單的分頁就有我主力名單的手機聯繫方式，但我不知道」）。
+   * 用統編對出進口廠商登記、剛開始請人、剛開電子發票、新設工廠、產業名單（公司名不用：同名不同家的太多）：
+   *   - 沒電話的：填對到的（有手機優先），詳細頁標「電話來自 ○○」。
+   *   - 只有市話、公開資料有手機的：手機加成第二支，不蓋掉原本的，卡片就有 📱。
+   *   - 已經有手機的、禁止推廣的不動；使用者自己填的號碼永遠不蓋。
+   * 匯入新名單、每日新名單挑完各跑一次（只看那份來源）；整份每天由後台跑一次（feed-drive.mjs，清冊它都載好了，
+   * 裝置不用每天多下載十幾 MB 的清冊），補到的跟著同步檔回到每台裝置。
+   * 以前只對出進口廠商的電話表（tradePhones），併進來，舊名字留著。
+   */
+  const isMobileTel = (t) => /^09\d{8}$/.test(taxOnly(t));
+  const dialOf = (p) => String((p && (p.dial || p.digits)) || '').split(',')[0];   // 拆出來的電話：dial 是數字（有分機接在逗號後）
+  async function publicPhonesOf(tax) {
+    const out = [];
+    if (window.Trade && window.Trade.phoneOf) {
+      const p = await window.Trade.phoneOf(tax).catch(() => null);
+      if (p && p.tel) out.push({ tel: p.tel, kind: 'trade', name: '出進口廠商登記', issued: p.issued || '' });
     }
-    if (found) { await reload(); render(); scheduleSync(); }
-    if (opts.toast) toast(todo.length ? `名單裡 ${todo.length} 家沒電話（有統編的），出進口廠商登記對到 ${found} 家` : '名單裡有統編的都有電話了');
-    return { tried: todo.length, found };
+    for (const [m, label] of PHONE_SOURCES) {
+      const mod = window[m];
+      const f = mod && mod.factsOf ? mod.factsOf(tax) : null;
+      if (f && f.tel) out.push({ tel: f.tel, kind: 'public', name: label });
+    }
+    return out;
   }
-  window.tradePhones = tradePhones;   // 測試用
+  async function publicPhones(sourceName, opts = {}) {
+    if (!window.Trade || !window.Trade.phoneOf) return { tried: 0, found: 0, mobiles: 0 };
+    await loadPhoneSources();
+    const views = allViews().filter((v) => (!sourceName || v.source === sourceName) && !v.blocked && taxOnly(v.taxId).length === 8);
+    let tried = 0; let found = 0; let mobiles = 0;
+    for (const v of views) {
+      if (v.phones.length && v.phones.some((p) => isMobileTel(dialOf(p)))) continue;
+      const got = await publicPhonesOf(v.taxId);
+      const st = state.userStates.get(v.id) || {};
+      if (!v.phones.length) {
+        tried += 1;
+        const p = got.find((x) => isMobileTel(x.tel)) || got[0];
+        if (!p) continue;
+        await saveState(v.id, { edits: { ...(st.edits || {}), phoneRaw: p.tel }, editsAt: Date.now(), phoneSource: { kind: p.kind, name: p.name, issued: p.issued || '', at: Date.now() } });
+        found += 1;
+      } else {
+        const have = new Set(v.phones.map(dialOf));
+        const p = got.find((x) => isMobileTel(x.tel) && !have.has(taxOnly(x.tel)));
+        if (!p) continue;
+        await saveState(v.id, { edits: { ...(st.edits || {}), phoneRaw: `${String(v.phoneRaw || '').trim()} / ${p.tel}` }, editsAt: Date.now(), mobileSource: { name: p.name, at: Date.now() } });
+        mobiles += 1;
+      }
+    }
+    if (found || mobiles) { await reload(); render(); scheduleSync(); }
+    if (opts.toast) toast(tried || mobiles ? `名單裡 ${tried} 家沒電話（有統編的），公開資料對到 ${found} 家${mobiles ? `；另外 ${mobiles} 家多了手機` : ''}` : '名單裡有統編的都有電話了');
+    return { tried, found, mobiles };
+  }
+  const tradePhones = publicPhones;   // 舊名字：匯入、每日新名單都還叫這個
+  window.tradePhones = publicPhones; window.publicPhones = publicPhones;   // 後台（feed-drive.mjs）每天整份跑一次；測試也用
 
   /*
    * 找不到電話先收起來的公司（使用者：「我刪除的電話中目前有些是在公開資訊上找不到電話的，但可能未來會找的到」）。
@@ -1646,7 +1685,7 @@
 
   /** 統編 → 公開資料裡的電話 { tel, from }；資料要先載（loadPhoneSources） */
   const PHONE_SOURCES = [
-    ['Nhi', '剛開始請人（健保）'], ['Einv', '剛開電子發票'], ['Factory', '新設工廠'],
+    ['Nhi', '剛開始請人（健保）'], ['Einv', '剛開電子發票'], ['Factory', '新設工廠'], ['Industry', '產業名單'],
   ];
   async function loadPhoneSources() {
     await Promise.all([
@@ -5583,6 +5622,8 @@
     }
     if (r.phoneSource && r.phoneSource.kind === 'trade' && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source', textContent: `電話來自貿易署出進口廠商登記${r.phoneSource.issued ? `（核發 ${r.phoneSource.issued}）` : ''}` }));
+    } else if (r.phoneSource && r.phoneSource.kind === 'public' && r.phones.length) {
+      body.append(el('p', { className: 'muted phone-source', textContent: `電話來自${r.phoneSource.name}（公開登記）` }));
     } else if (r.phoneSource && r.phoneSource.kind === 'web' && r.phones.length) {
       body.append(el('p', { className: 'muted phone-source' }, [
         document.createTextNode('電話是上網查擴張訊號時在官網／徵才頁看到的'),
@@ -5594,6 +5635,7 @@
         r.phoneSource.maps ? el('a', { href: r.phoneSource.maps, target: '_blank', rel: 'noopener', textContent: '　開地圖' }) : '',
       ].filter(Boolean)));
     }
+    if (r.mobileSource && r.phones.length) body.append(el('p', { className: 'muted phone-source', textContent: `📱 手機來自${r.mobileSource.name}（公開登記）` }));
     if (!r.phones.length && !r.blocked) body.append(phoneFinder(r));
     else body.append(phoneSearchRow(r, { detail: true }));   // 卡片上拿掉的 Google／地圖／104／1111 在這裡
 
