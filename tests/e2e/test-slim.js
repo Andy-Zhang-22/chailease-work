@@ -21,7 +21,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
 
  await pg.click('#btnMenu');
  const vis=await pg.evaluate(()=>[...document.querySelectorAll('#menu button')].filter(b=>b.offsetParent&&b.dataset.act!=='menu-more').map(b=>b.textContent));
- chk(vis.length===3 && vis.includes('今日覆盤') && vis.includes('匯出 Excel') && vis.includes('Claude 分身') && !vis.includes('商工登記更新'), `選單外面三項：${vis.join('、')}`);
+ chk(vis.length===1 && vis.includes('匯出 Excel') && !vis.includes('今日覆盤') && !vis.includes('Claude 分身') && !vis.includes('商工登記更新'), `選單外面只剩匯出 Excel（版本 364 拿掉今日覆盤、Claude 分身）：${vis.join('、')}`);
  await pg.click('#menu [data-act="menu-more"]');
  chk(await pg.isVisible('#menu [data-act="registry"]') && await pg.isVisible('#menu [data-act="wipe"]'), '點「進階」才看得到其餘功能');
  await pg.click('#btnMenu'); await pg.click('#btnMenu');

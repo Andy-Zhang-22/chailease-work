@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261020-363';
+  const APP_VERSION = '20261021-364';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3348,7 +3348,7 @@
         c.branchRank = Math.min(c.branchRank, f.branchRank);
         c.order = Math.min(c.order, idx);
         // 行業：哪一頁有寫就用哪一頁的，幾頁都有就取最好的那級
-        if (f.industry) { const ir = window.Rules && window.Rules.industryRank ? window.Rules.industryRank(f.industry) : 1; if (!c.industry || ir < c.indRank) { c.industry = f.industry; c.indRank = ir; } }
+        if (f.industry) { const ir = Math.max(window.Rules && window.Rules.industryRank ? window.Rules.industryRank(f.industry) : 1, notTargetIndRank(f.industry)); if (!c.industry || ir < c.indRank) { c.industry = f.industry; c.indRank = ir; } }
       });
     });
     const out = [...byKey.values()];
@@ -3498,8 +3498,9 @@
     const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
     const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in'];
+    await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
-      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs) }));
+      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank }));
   };
   /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
@@ -3914,6 +3915,8 @@
         ]));
       }
       {
+        const inds = window.notTargetIndustries();
+        if (inds.length) host.append(el('p', { className: 'muted', textContent: `「不是目標」兩次以上的行業，挑新名單時排後面（版本 364）：${inds.map(([i, n]) => `${i}（${n}）`).join('、')}` }));
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
@@ -3974,76 +3977,10 @@
     $('#editor').hidden = false;
   }
 
-  /* ---------------- 今日覆盤 ---------------- */
-
-  /*
-   * 使用者：「幫我總結我今天在系統上做了什麼事的每日覆盤，比如我聯絡了幾間客戶、對談重點」、
-   * 「訪談的內容摘要可以幫我也重點出來嗎」。不用另外付費：系統照規則從訪談內容抓重點
-   * （第一句、金額、日期、「下一步：」）。「複製給 Claude 整理」版本 325 拿掉了（使用次數 1）。
-   */
+  /** 毫秒 → 2026-10-05（本機日期） */
   const isoOfMs = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  /** 一則訪談內容的重點：第一句（40 字內），加上第一句沒講到的金額、日期，和「下一步：」那行 */
-  function talkPoints(text) {
-    const lines = String(text || '').replace(/\r/g, '').split('\n').map((x) => x.trim()).filter(Boolean);
-    if (!lines.length) return '';
-    const nextLine = lines.find((l) => /^下一步[:：]/.test(l));
-    const body = lines.filter((l) => l !== nextLine).join(' ');
-    let first = (body.split(/[。；;！!？?]/)[0] || '').trim();
-    if (first.length > 40) first = `${first.slice(0, 40)}…`;
-    const parts = first ? [first] : [];
-    const money = (body.match(/\d[\d,.]*\s*(?:億|萬)/g) || []).filter((m) => !first.includes(m));
-    const dates = (body.match(/\d{1,2}\/\d{1,2}|\d{1,2}月\d{1,2}[日號]?|下(?:週|周|禮拜)[一二三四五六日天]|明天|後天/g) || []).filter((d) => !first.includes(d));
-    if (money.length) parts.push(`💰 ${[...new Set(money)].join('、')}`);
-    if (dates.length) parts.push(`📅 ${[...new Set(dates)].join('、')}`);
-    if (nextLine) parts.push(nextLine.replace(/^下一步[:：]\s*/, '下一步：'));
-    return parts.join('｜');
-  }
-  /** 某一天的覆盤資料（預設今天）：從那天的通話紀錄與狀態算 */
-  function dailyReview(day) {
-    const t = day || todayISO();
-    const views = allViews();
-    const byId = new Map(views.map((v) => [v.id, v]));
-    const norm = (o) => window.Normalize.normalizeOutcome(o);
-    const logs = state.logs.filter((l) => l.date === t && byId.has(l.recordId)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    const per = new Map();
-    logs.forEach((l) => { if (!per.has(l.recordId)) per.set(l.recordId, []); per.get(l.recordId).push(l); });
-    const companies = [...per.entries()].map(([id, ls]) => {
-      const last = ls[ls.length - 1];
-      const reached = ls.some((l) => norm(l.outcome) !== 'noanswer');
-      const texts = ls.filter((l) => norm(l.outcome) !== 'noanswer' || (l.text || '').trim()).map((l) => (l.text || '').trim()).filter(Boolean);
-      return { v: byId.get(id), logs: ls, outcome: norm(last.outcome), reached, texts, points: texts.map(talkPoints).filter(Boolean).join('；') };
-    });
-    const next = window.Holidays ? window.Holidays.nextWorkday(addDays(t, 1)).iso : addDays(t, 1);
-    return {
-      day: t, next, calls: logs.length, companies,
-      reached: companies.filter((c) => c.reached && c.outcome !== 'blocked'),
-      missed: companies.filter((c) => !c.reached),
-      blocked: companies.filter((c) => c.outcome === 'blocked'),
-      meetings: logs.filter((l) => l.meeting && l.meetingDate).map((l) => ({ v: byId.get(l.recordId), l })),
-      chance: views.filter((v) => v.chance === 'yes' && v.chanceAt && isoOfMs(v.chanceAt) === t),
-      added: views.filter((v) => v.addedDate === t),
-      left: t === todayISO() ? views.filter((v) => v.nextDate && v.nextDate <= t && !v.blocked && !per.has(v.id) && v.dueDoneOn !== t).length : null,
-      tomorrow: views.filter((v) => v.nextDate === next && !v.blocked).length,
-    };
-  }
-  window.dailyReview = (day) => { const d = dailyReview(day); return { ...d, companies: d.companies.map((c) => ({ company: c.v.company, outcome: c.outcome, reached: c.reached, points: c.points })), reached: d.reached.length, missed: d.missed.length, blocked: d.blocked.length, meetings: d.meetings.length, chance: d.chance.map((v) => v.company), added: d.added.length }; };   // 測試用
-  const meetLabel = (l) => `${dateLabel(l.meetingDate).slice(5)}${l.meetingArrive ? ` ${l.meetingArrive} 抵達` : ''}`;
-  /** 覆盤的純文字（複製用） */
-  function reviewText(d) {
-    const out = [`📋 ${dateLabel(d.day)} 覆盤`,
-      `聯絡了 ${d.companies.length} 家（打了 ${d.calls} 通）：接通 ${d.reached.length}、未接 ${d.missed.length}${d.blocked.length ? `、禁止推廣 ${d.blocked.length}` : ''}`];
-    if (d.chance.length) out.push(`⭐ 新標有機會：${d.chance.map((v) => v.company).join('、')}`);
-    if (d.meetings.length) out.push(`🚗 約到拜訪：${d.meetings.map(({ v, l }) => `${v.company}（${meetLabel(l)}）`).join('、')}`);
-    if (d.reached.length) { out.push('', '💬 對談重點'); d.reached.forEach((c) => out.push(`・${c.v.company}　${c.points || '（沒寫內容）'}`)); }
-    if (d.blocked.length) out.push('', `⛔ 禁止推廣：${d.blocked.map((c) => c.v.company).join('、')}`);
-    if (d.missed.length) out.push('', `📵 未接：${d.missed.map((c) => c.v.company).join('、')}`);
-    out.push('');
-    if (d.left != null) out.push(`今天該打的還剩 ${d.left} 家沒打`);
-    if (d.added.length) out.push(`今天加進名單 ${d.added.length} 家`);
-    out.push(`${dateLabel(d.next).slice(5)} 排了 ${d.tomorrow} 家`);
-    return out.join('\n');
-  }
-  /* ---------------- Claude 分身 ---------------- */
+
+  /* ---------------- Claude 分身（版本 364 起只剩「拍名片給分身讀」會用到的設定頁與說明書；選單入口、今日覆盤拿掉了） ---------------- */
 
   /*
    * 使用者：「有辦法生成一個跟我一樣的企金業務在系統上嗎」→ 選「AI 分身（懂你的做法）」、「系統這邊也幫我做」。
@@ -4091,30 +4028,6 @@
     '5. 每日覆盤：我貼上今天的紀錄，你總結成果、列出要追的事（哪家、什麼時候、做什麼），給明天的建議。',
     '6. 排名單：我貼一批公司，你照上面的優先順序排，每家一句理由。',
   ].join('\n');
-  /** 訪談內容裡的電話號碼遮掉（市話、手機、帶分機的） */
-  const maskPhones = (t) => String(t || '').replace(/(?:\+?886[-\s]?)?\(?0\d{1,3}\)?[-\s]?\d{3,4}[-\s]?\d{3,4}(?:\s*(?:#|轉|分機)\s*\d+)?/g, '（電話略）');
-  /** 一家客戶給分身看的資料（不含電話、負責人、KEYMAN） */
-  function twinPrompt(r) {
-    const ym = (x) => { const m = String(x || '').match(/^(\d{4})\D(\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, '0')}` : ''; };
-    const years = (() => { const y = parseInt(String(r.founded || '').slice(0, 4), 10); return y ? new Date().getFullYear() - y : null; })();
-    const facts = [
-      `${r.company}${r.taxId ? `（統編 ${r.taxId}）` : ''}`,
-      [r.founded ? `成立 ${r.founded}${years != null ? `（${years} 年）` : ''}` : '成立年不明',
-        r.capital ? `資本總額 ${r.capital} 仟元${capitalScale(r) ? `（${capitalScale(r)}）` : ''}` : '',
-        r.capitalPaid ? `實收 ${r.capitalPaid} 仟元` : '', r.industry ? `產業 ${r.industry}` : ''].filter(Boolean).join('｜'),
-      [r.city || '', r.district || ''].join('') + (r.branchKey ? `（${r.branchKey}）` : ''),
-      r.dealingKind === 'active' ? '現在跟中租有往來' : r.dealingKind === 'past' ? '曾經跟中租往來' : '',
-      r.regChanged ? `最近異動 ${r.regChanged}${r.regKinds && r.regKinds.length && !['none', 'unchecked'].includes(r.regKinds[0]) ? `（${regBadgeText(r)}）` : ''}` : '',
-      r.nextDate ? `下次聯絡 ${r.nextDate.replace(/-/g, '/')}` : '', r.lastDate ? `最近聯絡 ${r.lastDate.replace(/-/g, '/')}` : '',
-    ].filter((x) => x && x.trim());
-    const chattel = (r.chattel || []).map((c) => `- ${window.Chattel.lenderShort(c.lender.name)}　${ym(c.startUse || c.start || c.approved) || '？'}　金額 ${chattelMoney(c.amount)}　${c.days == null && c.dateOdd && c.end ? '迄日有誤' : c.end ? `${ym(c.end)} 到期` : '沒有到期日'}`);
-    const notes = maskPhones(notesBundle(r).text).trim();
-    return ['請照專案說明，幫我看這家客戶：值不值得追、為什麼、開場白、下一步、什麼時候再打。', '',
-      '【公司】', ...facts, '',
-      '【動產擔保】', ...(chattel.length ? chattel : ['清冊裡沒有']), '',
-      '【訪談紀錄（新到舊）】', notes || '（還沒有紀錄）', '',
-      '（電話、負責人、KEYMAN 欄位沒有附上；訪談內容裡的電話號碼已遮掉）'].join('\n');
-  }
   /** 設定分身：說明怎麼建、複製說明書、存專案網址 */
   function openTwinSetup(after) {
     const host = $('#editorBody');
@@ -4171,42 +4084,6 @@
     copyText(text);
     window.open(twinUrl() || CLAUDE_NEW, '_blank', 'noopener');
     toast(twinUrl() ? `${what}已複製，到分身那邊貼上送出` : `${what}已複製，到 Claude 那邊貼上送出`);
-  }
-  window.twinPrompt = (id) => { const v = allViews().find((x) => x.id === id); return v ? twinPrompt(v) : ''; };   // 測試用
-
-  function openDailyReview(day) {
-    const host = $('#editorBody');
-    const draw = (iso) => {
-      const d = dailyReview(iso);
-      host.textContent = '';
-      const pick = el('input', { type: 'date', value: d.day, max: todayISO(), className: 'review-day' });
-      pick.onchange = () => { if (pick.value) draw(pick.value); };
-      host.append(el('h2', { textContent: '📋 今日覆盤' }), el('div', { className: 'card-actions' }, [pick]));
-      const box = el('div', { className: 'review' });
-      box.append(el('p', { className: 'review-sum' }, [el('strong', { textContent: `聯絡了 ${d.companies.length} 家` }),
-        `（打了 ${d.calls} 通）：接通 ${d.reached.length}、未接 ${d.missed.length}${d.blocked.length ? `、禁止推廣 ${d.blocked.length}` : ''}`]));
-      const open = (v) => el('button', { className: 'link-btn', type: 'button', textContent: v.company, onclick: () => { closeOverlays(); openDetail(v.id); } });
-      const line = (label, items) => (items.length ? box.append(el('p', {}, [`${label}：`, ...items.flatMap((x, i) => (i ? ['、', x] : [x]))])) : null);
-      line('⭐ 新標有機會', d.chance.map(open));
-      line('🚗 約到拜訪', d.meetings.map(({ v, l }) => el('span', {}, [open(v), `（${meetLabel(l)}）`])));
-      if (d.reached.length) {
-        box.append(el('h3', { textContent: `💬 對談重點（接通 ${d.reached.length} 家）` }));
-        const ul = el('ul', { className: 'review-points' });
-        d.reached.forEach((c) => ul.append(el('li', {}, [open(c.v), el('span', { className: c.points ? '' : 'muted', textContent: `　${c.points || '（沒寫內容）'}` })])));
-        box.append(ul);
-      }
-      line('⛔ 禁止推廣', d.blocked.map((c) => open(c.v)));
-      line('📵 未接', d.missed.map((c) => open(c.v)));
-      const tail = [d.left != null ? `今天該打的還剩 ${d.left} 家沒打` : '', d.added.length ? `今天加進名單 ${d.added.length} 家` : '', `${dateLabel(d.next).slice(5)} 排了 ${d.tomorrow} 家`].filter(Boolean);
-      box.append(el('p', { className: 'muted', textContent: tail.join('　·　') }));
-      if (!d.companies.length) box.append(el('p', { className: 'muted', textContent: '這天沒有通話紀錄。' }));
-      host.append(box);
-      const copy = el('button', { className: 'btn', type: 'button', textContent: '複製', onclick: async () => { await copyText(reviewText(d)); toast('覆盤已複製，可以貼到 LINE 或筆記'); } });
-      host.append(el('div', { className: 'card-actions' }, [copy]));   // 「複製給 Claude 整理」版本 325 拿掉（一週用 1 次）
-      host.append(el('p', { className: 'muted', textContent: '重點是照規則從訪談內容抓的（第一句、金額、日期、「下一步：」那行）。' }));
-    };
-    draw(day || todayISO());
-    $('#editor').hidden = false;
   }
 
   async function undoSpread() {
@@ -8332,7 +8209,7 @@ export default {
   const USAGE_KEY = 'usage-counts';
   const DEVICE_KEY = 'device-id';
   const usageLoad = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}') || {}; } catch (e) { return {}; } };
-  const NAMEISH_RE = /有限公司|股份|企業|商行|工作室|實業|工業|科技|國際|貿易|裝修|工程行|[路街巷弄號段]|@|\d{3,}/;   // 版本 324：摘要檔裡出現過「…企業」結尾的公司名，補上
+  const NAMEISH_RE = /有限公司|股份|企業|商行|工作室|實業|工業|科技|國際|貿易|裝修|工程行|工坊|藥局|咖啡|製造廠|工廠|建設|商號|診所|車行|餐飲|食品|[路街巷弄號段]|@|\d{3,}/;   // 版本 364 再補：摘要檔裡出現過工坊、藥局、咖啡、製造廠、建設   // 版本 324：摘要檔裡出現過「…企業」結尾的公司名，補上
   function usageArea(b) {
     if (b.closest('#menu')) return '選單';
     if (b.closest('#drawer')) return '詳細頁';
@@ -8345,6 +8222,12 @@ export default {
     if (pane) return `找名單:${pane.id.replace(/^pane/, '')}`;
     return '上方';
   }
+  /** 按鈕上的字就是名單裡某家公司的名字（順訪、關係企業那類列表）：不記（版本 364；摘要檔裡出現過 5 個公司名） */
+  let nameSetAt = 0; let nameSet = new Set();
+  function isCompanyName(text) {
+    if (Date.now() - nameSetAt > 60000) { nameSet = new Set(); allViews().forEach((v) => { nameSet.add(v.company); (v.aliases || []).forEach((a) => nameSet.add(a)); }); nameSetAt = Date.now(); }
+    return nameSet.has(text);
+  }
   function usageKey(target) {
     const b = target && target.closest && target.closest('button, a, summary, .chip');
     if (!b || b.closest('#lockGate')) return '';
@@ -8356,7 +8239,7 @@ export default {
     const raw = String(b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim();
     // 「」『』裡的是人名或公司名（查負責人「某某」名下的公司），冒號後面的多半是公司名（✓ 🚗：某某公司）：都拿掉再記
     const bare = raw.replace(/[「『][^」』]*[」』]/g, '').replace(/[:：].*$/, '').trim();
-    if (!bare || NAMEISH_RE.test(bare)) return '';
+    if (!bare || NAMEISH_RE.test(bare) || isCompanyName(bare)) return '';
     const label = bare.replace(/（[^）]*）/g, '').replace(/\d+/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
     return label ? `${usageArea(b)}:${label}` : '';
   }
@@ -8517,22 +8400,33 @@ export default {
    */
   let deletedKeys = new Set();
   let delByOrigin = new Map();   // 來源 → { target, all }：最近 90 天從名單刪掉的（有記原因的，版本 326），同一家只算一次
+  /*
+   * 「不是目標」回饋到挑名單（版本 364；每月回報的自動化那項，使用者：「自動化跟小問題都照你說的做」）：
+   * 刪掉時選「不是目標」的公司，行業記在墓碑上（版本 326 起）。同一個行業被標過兩次以上，挑新名單時那個行業
+   * 排到跟顧問、投資業同一級（indRank 2）。是排序不是門檻；「每天打得完幾家」視窗會列出來。
+   */
+  let delByIndustry = new Map();   // 行業 → 最近 90 天「不是目標」的次數
+  const notTargetIndRank = (industry) => ((delByIndustry.get(String(industry || '').trim()) || 0) >= 2 ? 2 : 0);
   async function refreshDeleted() {
     try {
       const tombs = (await window.Store.getTombstones()).companies || {};
       deletedKeys = new Set(Object.keys(tombs).filter((k) => tombs[k] !== undefined && !(tombs[k] && tombs[k].lifted)));
-      const by = new Map(); const seen = new Set(); const since = Date.now() - 90 * 86400000;
+      const by = new Map(); const byInd = new Map(); const seen = new Set(); const since = Date.now() - 90 * 86400000;
       Object.entries(tombs).forEach(([k, v]) => {
-        if (!v || typeof v !== 'object' || v.lifted || !v.src || !v.reason || (v.at || 0) < since) return;
+        if (!v || typeof v !== 'object' || v.lifted || !v.reason || (v.at || 0) < since) return;
         const id = v.taxId ? `tax:${v.taxId}` : `name:${v.company || k}`;
         if (seen.has(id)) return; seen.add(id);
+        const ind = String(v.industry || '').trim();
+        if (v.reason === 'target' && ind) byInd.set(ind, (byInd.get(ind) || 0) + 1);
+        if (!v.src) return;
         const d = by.get(v.src) || { target: 0, all: 0 };
         d.all += 1; if (v.reason === 'target') d.target += 1;
         by.set(v.src, d);
       });
-      delByOrigin = by;
+      delByOrigin = by; delByIndustry = byInd;
     } catch (e) { /* 讀不到就維持上一份 */ }
   }
+  window.notTargetIndustries = () => [...delByIndustry.entries()].filter(([, n]) => n >= 2).sort((x, y) => y[1] - x[1]);   // 設定視窗、測試用
   /**
    * 刪掉時選「不是目標」太多的來源：最近 90 天那個來源挑進來的裡面（還在名單上的＋刪掉的），
    * 「不是目標」占四成以上、至少 3 家 → 挑新名單時那個來源的候選排後面（排序不是門檻，使用者定的）。
@@ -8766,8 +8660,6 @@ export default {
       if (act === 'chattel') { switchTab('chattel'); return; }
       if (act === 'registry') { openRegistryUpdate(); return; }
       if (act === 'backups') { await openBackups(); return; }
-      if (act === 'review') { openDailyReview(); return; }
-      if (act === 'twin') { openTwinSetup(); return; }
       if (act === 'day-load') { openDayLoad(); return; }
       if (act === 'rules') { switchTab(act); return; }
       if (act === 'spread-undo') { await undoSpread(); return; }

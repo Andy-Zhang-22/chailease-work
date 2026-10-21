@@ -1,5 +1,5 @@
 // Claude 分身（使用者：「有辦法生成一個跟我一樣的企金業務在系統上嗎」→ AI 分身、「系統這邊也幫我做」）
-// 選單設定網址（只收 claude.ai）、複製說明書。今日覆盤的「複製給 Claude 整理」版本 325 拿掉了（使用次數 1）。
+// 版本 364：選單的「Claude 分身」入口、今日覆盤都拿掉了（一個月 0 次、1 次）；設定頁只剩「拍名片給分身讀」還沒設網址時會開。
 // 詳細頁的「🤖 問 Claude」版本 316 拿掉了（使用次數 0），覆盤照樣走分身（今日撥打戰略版本 319 也拿掉了）
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
@@ -29,20 +29,19 @@ const REC={id:'1',source:'A.csv',company:'星辰精密有限公司',aliases:[],t
  await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2');
  chk((await pg.locator('#drawerBody button.twin-btn').count())===0, '詳細頁沒有「🤖 問 Claude」（版本 316 拿掉）');
  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
- // 選單「Claude 分身」：複製說明書、存網址（只收 claude.ai）
- await pg.click('#btnMenu'); chk(await pg.locator('#menu [data-act="twin"]').count()===1, '選單有「Claude 分身」');
- await pg.click('#menu [data-act="twin"]'); await pg.waitForTimeout(200);
- chk(/Claude 分身/.test(await pg.textContent('#editorBody')), '打開分身設定');
+ // 版本 364：選單沒有「Claude 分身」、也沒有「今日覆盤」了；設定頁從「新增客戶 → 拍名片給分身讀」進（電腦、還沒設網址）
+ await pg.click('#btnMenu'); chk(await pg.locator('#menu [data-act="twin"]').count()===0 && await pg.locator('#menu [data-act="review"]').count()===0, '選單沒有「Claude 分身」「今日覆盤」');
+ await pg.click('#btnMenu'); await pg.waitForTimeout(150);
+ await pg.evaluate(()=>document.querySelector('.way[data-act="new-customer"]').click()); await pg.waitForSelector('#kvPaste');
+ await pg.click('#editorBody button:has-text("拍名片給分身讀")'); await pg.waitForTimeout(200);
+ chk(/Claude 分身/.test(await pg.textContent('#editorBody')), '還沒設網址：先開分身設定');
  await pg.click('#editorBody button:has-text("複製分身說明書")'); await pg.waitForTimeout(150);
  chk(/你是我的分身：中租租賃新莊分公司的企金業務/.test(await last()) && /利率不敏感的客群/.test(await last()), '複製分身說明書');
  await pg.fill('#editorBody .twin-url','https://example.com/x'); await pg.click('#editorBody button:has-text("存起來")'); await pg.waitForTimeout(150);
  chk(await pg.locator('#editorBody .save-err').isVisible(), '不是 claude.ai 的網址不收');
  await pg.fill('#editorBody .twin-url','https://claude.ai/project/abc123'); await pg.click('#editorBody button:has-text("存起來")'); await pg.waitForTimeout(300);
  chk((await pg.evaluate(()=>localStorage.getItem('claude-twin-url')))==='https://claude.ai/project/abc123', '網址存起來');
- await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
- // 今日覆盤沒有「複製給 Claude 整理」了
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="review"]'); await pg.waitForSelector('#editorBody .review');
- chk((await pg.locator('#editorBody button:has-text("複製給 Claude 整理")').count())===0, '今日覆盤沒有「複製給 Claude 整理」（版本 325 拿掉）');
+ chk(await pg.locator('#kvPaste').count()===1, '存好接著回到新增客戶');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
