@@ -1,6 +1,9 @@
 name: 探路：建照對稅籍檔（看完就刪）
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/telemarketing-website-hf2uwj]
+    paths: ['.github/workflows/probe-permits.yml']
 permissions:
   contents: read
 jobs:
