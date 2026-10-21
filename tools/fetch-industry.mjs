@@ -16,7 +16,7 @@
  *   這兩份的地址是工廠／工地的，名稱也可能是工地名 → 名稱、地址都改用稅籍檔（總公司），稅籍檔沒有的、分公司、縣市外的不收。
  *   新廠／新工地：每個場所（食品登錄字號、環境部管制編號）記首見年月（seen-sites.csv），這家多了新場所就標出來。
  *   探路時試過水污染源許可（106598）的許可起始日：多半是展延，分不出新廠，沒用。
- * industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所
+ * industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價
  * 用法：node tools/fetch-industry.mjs [--out leads/industry] [--cities 新北市,臺北市] [--phones leads/trade/phones.csv] [--reset-baseline]
  */
 import fs from 'node:fs/promises';
@@ -44,7 +44,13 @@ export const KINDS = [
 /** 第二批：食品工廠、環保列管（類別名稱） */
 export const FOOD = { id: 8938, kind: '食品製造業' };
 export const ENV = { id: 118447, factory: '環保列管工廠', site: '營造業' };
-export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所'];
+/*
+ * 第三批（版本 365）：新北市建築執照存查（data.gov.tw 123639，新北市工務局，每 3 月）。探路 2026/10/21：14,343 列，起造人沒遮罩、
+ * 一半以上是公司名，有用途、工程造價、發照日。沒有統編 → 起造人名字對稅籍檔的營業人名稱（總公司、縣市內的才留）。
+ * 使用者：「來源越多參考的資訊越好」→ 做成訊號「正在蓋廠房／辦公室（造價 N 萬）」收進產業名單。住宅、農舍（建商）不收。
+ */
+export const PERMIT = { id: 123639, kind: '正在蓋廠房', months: 24 };
+export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所', '建照年月', '建照用途', '建照造價'];
 const BRANCH_NAME = /分公司$/;
 const csvCell = (v) => { const t = String(v == null ? '' : v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 const num = (s) => Number(String(s || '').replace(/[^\d.]/g, '')) || 0;
@@ -106,7 +112,53 @@ export function newSiteOf(x, seenSites, siteBaseline) {
   });
   return best;
 }
-export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : ''];
+const PERMIT_COMPANY = /公司|企業|商行|工業|實業|科技|股份|工廠|開發|事業|農場|合作社/;
+const PERMIT_RESIDENTIAL = /住宅|農舍|宿舍|公寓|透天/;
+const PERMIT_BUSINESS = /工廠|廠房|廠|辦公|事務所|商業|店舖|店鋪|商場|倉儲|倉庫|物流|停車|旅館|醫院|診所|學校|幼兒園|運動|展示|研發|實驗/;
+/** 用途文字 → 短名（訊號用）：廠房／辦公室／倉儲／新建物 */
+export const permitUse = (use) => (/工廠|廠房|廠/.test(use) ? '廠房' : /倉儲|倉庫|物流/.test(use) ? '倉儲' : /辦公|事務所|商業|店舖|店鋪|商場/.test(use) ? '辦公室' : '新建物');
+/**
+ * 建築執照存查一列 → { names, ym, use, cost, district, lic }；起造人不像公司、純住宅／農舍、發照日缺或太舊回 null。
+ * 起造人好幾個用「、」並列；發照日民國 yyyMMdd。
+ */
+export function permitRow(o, { now = new Date(), months = PERMIT.months } = {}) {
+  const useRaw = halfWidth(o.use_of_buildings || '').trim();
+  if (PERMIT_RESIDENTIAL.test(useRaw) && !PERMIT_BUSINESS.test(useRaw)) return null;
+  // 起造人欄位八成長這樣「○○股份有限公司 負責人:王○○」（探路：295 個名字裡 229 個），負責人以後的拿掉才對得到稅籍檔
+  const names = halfWidth(o.proprietor || '').replace(/[(（]?\s*(負責人|代表人).*$/, '').split(/[、,，;；]/).map((x) => x.replace(/[(（][^)）]*[)）]/g, '').trim()).filter((x) => x && PERMIT_COMPANY.test(x) && !BRANCH_NAME.test(x));
+  if (!names.length) return null;
+  const d = String(o.date_the_permit || o.date_licensing || '').replace(/\D/g, '');
+  if (d.length !== 7) return null;
+  const y = Number(d.slice(0, 3)) + 1911; const m = Number(d.slice(3, 5));
+  if (!(m >= 1 && m <= 12)) return null;
+  const age = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+  if (age < 0 || age > months) return null;
+  const site = halfWidth(o.building_site || o.house_address || '');
+  const district = (site.match(/新北市(..區)/) || site.match(/^(..區)/) || [])[1] || '';
+  return { names, ym: `${y}${String(m).padStart(2, '0')}`, use: permitUse(useRaw), cost: num(o.project_cost), district, lic: String(o.license_number || '').trim() };
+}
+/** 建照存查 → 起造人名字 → 最近一張（ym 最新；同月取造價高的） */
+async function fetchPermits() {
+  const url = await csvUrlOf(PERMIT.id);
+  console.log(`新北市建築執照存查（${PERMIT.id}）下載 ${url}`);
+  const text = await fetchRetry(url, (r) => r.text());
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const head = parseLine(lines[0]).map((h) => h.trim());
+  if (!head.includes('proprietor') || !head.includes('date_the_permit')) throw new Error(`建築執照表頭對不上：${head.join(',')}`);
+  const by = new Map(); let n = 0; let kept = 0;
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    n++;
+    const cells = parseLine(lines[i]); const o = {}; head.forEach((h, k) => { o[h] = cells[k] || ''; });
+    const r = permitRow(o);
+    if (!r) continue;
+    kept++;
+    r.names.forEach((name) => { const have = by.get(name); if (!have || r.ym > have.ym || (r.ym === have.ym && r.cost > have.cost)) by.set(name, { ym: r.ym, use: r.use, cost: r.cost, district: r.district, n: (have ? have.n : 0) + 1 }); else have.n += 1; });
+  }
+  console.log(`  ${n.toLocaleString()} 列，最近 ${PERMIT.months} 個月、起造人像公司、不是純住宅的 ${kept.toLocaleString()} 張，起造人 ${by.size.toLocaleString()} 個名字（之後對稅籍檔留縣市內的）`);
+  return by;
+}
+export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : '', r.permit ? r.permit.ym : '', r.permit ? r.permit.use : '', r.permit ? r.permit.cost || '' : ''];
 
 async function readSeen(file, keyOk = (k) => /^\d{8}$/.test(k)) {
   const m = new Map();
@@ -243,6 +295,9 @@ async function main() {
   });
   addExtra(await fetchFood(), () => FOOD.kind);
   addExtra(await fetchEnv(), (st) => (st.type === 'site' ? ENV.site : ENV.factory));
+  // 2b. 新北建照：起造人名字（沒統編），對稅籍檔的營業人名稱
+  const permitByName = await fetchPermits();
+  let permitHit = 0;
 
   // 3. 稅籍：成立日期、組織別、行業
   console.log(`對稅籍檔 ${TAX_SOURCE}（串流）`);
@@ -258,17 +313,19 @@ async function main() {
     const tax = String(cells[1] || '').replace(/\D/g, '');
     let r = byTax.get(tax);
     const x = extra.get(tax);
-    if (!r && !x) continue;
+    const pm = permitByName.size ? permitByName.get(halfWidth(cells[3])) : null;
+    if (!r && !x && !pm) continue;
     const t = taxFields(cells);
     if (!t) continue;
     if (!r) {
-      // 食品、環保那兩份的地址是工廠／工地的 → 用稅籍檔的總公司名稱、地址；分公司、縣市外不收
+      // 食品、環保那兩份的地址是工廠／工地的 → 用稅籍檔的總公司名稱、地址；分公司、縣市外不收。建照只有起造人名字，也走這條
       const name = halfWidth(cells[3]); const address = halfWidth(cells[0]);
       if (t.branch || !name || BRANCH_NAME.test(name) || !inCity(address, CITIES)) continue;
       r = { taxId: tax, name, address, capital: t.capital, paid: 0, kinds: [] };
       byTax.set(tax, r);
     }
     if (x) { x.kinds.forEach((k) => { if (!r.kinds.includes(k)) r.kinds.push(k); }); r.sites = [...x.sites.values()]; }
+    if (pm && !t.branch && !r.permit) { if (!r.kinds.includes(PERMIT.kind)) r.kinds.push(PERMIT.kind); r.permit = pm; permitHit++; }
     hit++;
     r.founded = t.founded; r.org = t.org; r.indCode = t.indCode; r.industry = t.industry;
   }
@@ -281,7 +338,7 @@ async function main() {
   const sitesSeen = updateSeen(prevSites, siteKeys, ym, prevIndex.siteBaseline);
   byTax.forEach((r) => { r.newSite = r.sites ? newSiteOf(r, sitesSeen.seen, sitesSeen.baseline) : null; });
   console.log(`場所 ${siteKeys.length.toLocaleString()} 處（起算月 ${sitesSeen.baseline}）；這個月新場所 ${sitesSeen.newIds.size.toLocaleString()} 處`);
-  console.log(`稅籍檔 ${tn.toLocaleString()} 列（出檔 ${fileDate || '?'}），對到 ${hit.toLocaleString()} 家`);
+  console.log(`稅籍檔 ${tn.toLocaleString()} 列（出檔 ${fileDate || '?'}），對到 ${hit.toLocaleString()} 家；建照起造人對到 ${permitHit.toLocaleString()} 家`);
 
   // 5. 電話
   let phones = null;
@@ -300,8 +357,8 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'seen.csv'), `統編,首見年月\n${[...seen.entries()].sort().map(([k, v]) => `${k},${v}`).join('\n')}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'seen-sites.csv'), `場所,首見年月\n${[...sitesSeen.seen.entries()].sort().map(([k, v]) => `${csvCell(k)},${v}`).join('\n')}\n`, 'utf8');
   const index = {
-    generatedAt: new Date().toISOString(), source: [...KINDS.map((k) => k.id), FOOD.id, ENV.id].map((id) => `https://data.gov.tw/dataset/${id}`),
-    kinds: [...KINDS.map((k) => k.kind), FOOD.kind, ENV.factory, ENV.site], cities: CITIES,
+    generatedAt: new Date().toISOString(), source: [...KINDS.map((k) => k.id), FOOD.id, ENV.id, PERMIT.id].map((id) => `https://data.gov.tw/dataset/${id}`),
+    kinds: [...KINDS.map((k) => k.kind), FOOD.kind, ENV.factory, ENV.site, PERMIT.kind], cities: CITIES, permitTotal: list.filter((r) => r.permit).length,
     baseline, siteBaseline: sitesSeen.baseline, newSiteTotal: list.filter((r) => r.newSite).length, dataYm: ym, taxFileDate: fileDate, total: list.length, newTotal: list.filter((r) => r.isNew).length, newThisMonth: list.filter((r) => r.isNew && r.firstYm === ym).length,
     withPhone: list.filter((r) => r.tel).length, byKind, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     files: [{ path: 'industry.csv', rows: list.length }],
