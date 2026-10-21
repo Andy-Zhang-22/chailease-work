@@ -59,7 +59,7 @@ test('fetch-industry 第二批：食品只收工廠／製造場所；環保列�
   const seen = new Map([['F:A-1', '202610'], ['E:F001', '202610'], ['E:F002', '202612'], ['E:F003', '202611']]);
   assert.deepEqual(t.newSiteOf(x, seen, '202610'), { ym: '202612', what: '新工地' });
   assert.equal(t.newSiteOf(x, new Map([['E:F001', '202610']]), '202610'), null, '起算月就有的不算新');
-  assert.equal(t.HEAD.slice(-3).join(','), '場所,新場所年月,新場所');
+  assert.equal(t.HEAD.slice(12, 15).join(','), '場所,新場所年月,新場所');   // 版本 365 後面再接建照三欄
   // 食藥署的 zip 沒有中央目錄：照本地檔頭解
   const zlib = require('node:zlib');
   const data = Buffer.from('公司統一編號,登錄項目\n12345678,工廠/製造場所\n');
@@ -79,4 +79,27 @@ test('分頁：新工地／新廠是訊號、算利率不敏感、寫進加入�
   assert.equal(I.isNewSite(f), false);
   const oldSite = I.toRecord({ 統編: '45678901', 名稱: '戊營造', 類別: '營造業', 首見年月: '202610', 新場所年月: '202608', 新場所: '新工地' }, TODAY, '202610');
   assert.equal(I.isNewSite(oldSite), false, '4 個月前的新工地不算剛有');
+});
+
+test('fetch-industry 第三批：新北建照只收起造人像公司、不是純住宅、兩年內的；分頁的訊號與備註（版本 365）', async () => {
+  const t = await tool();
+  const now = new Date(2026, 9, 21);
+  const base = { proprietor: '己五金股份有限公司', use_of_buildings: '工廠', date_the_permit: '1150915', project_cost: '12800000', building_site: '新北市三重區中正北路', license_number: '115重建字第00001號' };
+  assert.deepEqual(t.permitRow(base, { now }), { names: ['己五金股份有限公司'], ym: '202609', use: '廠房', cost: 12800000, district: '三重區', lic: '115重建字第00001號' });
+  assert.equal(t.permitRow({ ...base, proprietor: '王○○' }, { now }), null, '自然人不收');
+  assert.equal(t.permitRow({ ...base, use_of_buildings: '集合住宅' }, { now }), null, '純住宅不收');
+  assert.equal(t.permitRow({ ...base, use_of_buildings: '店舖、集合住宅' }, { now }).use, '辦公室', '住商混合收，算辦公室');
+  assert.equal(t.permitRow({ ...base, date_the_permit: '1120915' }, { now }), null, '三年前的不收');
+  assert.equal(t.permitRow({ ...base, date_the_permit: '//' }, { now }), null, '沒發照日不收');
+  assert.deepEqual(t.permitRow({ ...base, proprietor: '甲建設股份有限公司、乙開發有限公司新莊分公司' }, { now }).names, ['甲建設股份有限公司'], '並列的拆開、分公司不收');
+  assert.equal(t.permitUse(''), '新建物'); assert.equal(t.permitUse('倉庫'), '倉儲');
+  assert.equal(t.PERMIT.id, 123639);
+  assert.equal(t.HEAD.slice(-3).join(','), '建照年月,建照用途,建照造價');
+  const r = I.toRecord({ 統編: '56789012', 名稱: '己五金股份有限公司', 類別: '正在蓋廠房', 地址: '新北市三重區', 資本額: '20000000', 首見年月: '202610', 建照年月: '202609', 建照用途: '廠房', 建照造價: '12800000' }, TODAY, '202610');
+  assert.deepEqual(r.permit, { ym: { y: 2026, m: 9 }, use: '廠房', cost: 12800000, months: 3 });
+  assert.deepEqual(I.dailyFacts(r).signals, ['正在蓋廠房（造價 1,280 萬）']);
+  assert.match(I.noteFor(r), /^產業名單：正在蓋廠房，2026-09 建照 正在蓋廠房（造價 1,280 萬）$/);
+  assert.equal(I.kindLabel('正在蓋廠房'), '🏗 蓋廠房');
+  const noPermit = I.toRecord({ 統編: '56789013', 名稱: '庚公司', 類別: '食品製造業', 首見年月: '202610' }, TODAY, '202610');
+  assert.equal(noPermit.permit, null);
 });
