@@ -137,7 +137,7 @@ export function permitRow(o, { now = new Date(), months = PERMIT.months } = {}) 
   return { names, ym: `${y}${String(m).padStart(2, '0')}`, use: permitUse(useRaw), cost: num(o.project_cost), district, lic: String(o.license_number || '').trim() };
 }
 /** 建照存查 → 起造人名字 → 最近一張（ym 最新；同月取造價高的） */
-async function fetchPermits() {
+export async function fetchPermits() {
   const url = await csvUrlOf(PERMIT.id);
   console.log(`新北市建築執照存查（${PERMIT.id}）下載 ${url}`);
   const text = await fetchRetry(url, (r) => r.text());
