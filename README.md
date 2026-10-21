@@ -4859,3 +4859,19 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
   匯入新名單、每日新名單挑完照舊只看那份來源。
 - 測試 `test-public-phones.js`：四家（沒電話、只有市話、已有手機、禁止推廣）各自的結果，再跑一次不重複。
 版號 20261020-363。
+
+## 每月回報後的刪除、回饋與摘要檔修正（版本 364）
+
+10/21 每月「不常用功能」回報（三台裝置 10 月加總）後，使用者：「拿掉以下的東西：今日覆盤、Claude 分身（選單入口，戰略列留著）」「自動化跟小問題都照你說的做」。
+
+- **拿掉今日覆盤**（一個月 1 次；「複製給 Claude 整理」版本 325 就拿掉了）：選單項、`openDailyReview`、`dailyReview`、`reviewText`、`talkPoints`、CSS `.review*`、`test-daily-review.js`。`isoOfMs` 別處還在用，留著。
+- **拿掉選單的「Claude 分身」入口**（0 次）：`twinPrompt`（詳細頁 🤖 版本 316 拿掉後只剩測試用）與遮電話的 `maskPhones` 一起拿掉。
+  設定頁（網址、複製說明書）留著，只剩「新增客戶 → 📇 拍名片給分身讀」在電腦上還沒設網址時會開；`TWIN_GUIDE` 也還給拍名片用。
+  「戰略列」其實版本 319 就拿掉了，摘要檔裡的 3 次是舊版本記的。選單「每天」那組只剩隱藏的「復原剛才的重排」，併進「常用」。
+- **自動化：「不是目標」的行業回饋到挑名單**。刪掉時選「不是目標」的公司，行業記在墓碑上（版本 326 起）；`refreshDeleted` 多算 `delByIndustry`，
+  最近 90 天同一個行業兩次以上，`mergeFeed` 把那個行業排到 indRank 2（跟顧問、投資業同一級）。是排序不是門檻。
+  「每天打得完幾家」視窗列出這些行業與次數；`window.notTargetIndustries()` 測試用，`mergedFeedPreview` 多回 `indRank`。
+- **小問題：摘要檔的使用統計記到公司名**。10 月 Windows 的摘要檔裡有 5 個按鈕名其實是公司名（工坊、藥局、咖啡、製造廠、建設結尾的）。
+  `usageKey` 多一道：按鈕上的字等於名單裡某家公司名或別名（`isCompanyName`，一分鐘快取一份）就不記；`NAMEISH_RE` 補這些結尾。
+- 測試：`test-slim.js`（選單外面只剩匯出 Excel）、`test-twin.js`（從拍名片進設定頁）、`test-feed-merge.js`（兩個「不是目標」墓碑後名祿 indRank 2）。
+版號 20261021-364。

@@ -90,13 +90,21 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.goto('http://localhost:9567/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('feed-need-phone','0'); localStorage.setItem('leads-hunt','0'); localStorage.setItem('new-quota','10'); localStorage.setItem('daily-feed-auto','0');
    // 昱昌以前刪掉過（公司墓碑）：挑的時候就要跳過，不然挑了 4 家只進來 3 家
-   await window.Store.addCompanyTombstones([{key:'tax:53217846',company:'昱昌汽車貨運股份有限公司',taxId:'53217846'}]); },SEED);
+   await window.Store.addCompanyTombstones([{key:'tax:53217846',company:'昱昌汽車貨運股份有限公司',taxId:'53217846'}]);
+   // 版本 364：刪掉時選「不是目標」兩次以上的行業，挑的時候排後面（名祿的行業「運動用品、器材批發業」）
+   const tombs=(await window.Store.getTombstones());
+   tombs.companies=tombs.companies||{};
+   tombs.companies['tax:90000001']={at:Date.now(),company:'假一運動用品有限公司',taxId:'90000001',reason:'target',src:'剛開始請人',industry:'運動用品、器材批發業'};
+   tombs.companies['tax:90000002']={at:Date.now(),company:'假二運動用品有限公司',taxId:'90000002',reason:'target',src:'剛開始請人',industry:'運動用品、器材批發業'};
+   await window.Store.setMeta('tombstones', tombs); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(2500);
  const pv=await pg.evaluate(()=>window.mergedFeedPreview());
  const top=pv[0];
  chk(top && top.name==='乙二機械股份有限公司', `同一家出現在四頁、訊號最多的排第一：${pv.slice(0,3).map(x=>x.name+'('+x.signals.length+')').join('、')}`);
  chk(top && ['本期增資','剛做進出口','剛開電子發票','最近買設備（2026/08）','跟同業借（和潤）'].every(x=>top.signals.includes(x)) && ['ch','le','tr','ei'].every(k=>top.srcs.includes(k)), `訊號加總：${top&&top.signals.join('、')}／來源 ${top&&top.srcs.join(',')}`);
  chk(pv.filter(x=>x.name==='乙二機械股份有限公司').length===1, '同一家只算一次');
+ const ml=pv.find(x=>x.name==='名祿實業有限公司'); const jy=pv.find(x=>x.name==='甲一精密有限公司');
+ chk(ml && ml.indRank===2 && jy && jy.indRank<2, `「不是目標」兩次以上的行業排到最後一級：名祿 indRank ${ml&&ml.indRank}、甲一 ${jy&&jy.indRank}`);
  await pg.click('#feedMore'); await pg.waitForTimeout(3000);
  const fed=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,notes:(r.notesRaw.match(/每日新名單，[^\n]*/)||[''])[0],head:r.notesRaw.split('\n')[0]})));
  const yi=fed.find(f=>f.company==='乙二機械股份有限公司');

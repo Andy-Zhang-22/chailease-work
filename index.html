@@ -14,10 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="電推名單">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="assets/css/app.css?v=20261020-363">
+<link rel="stylesheet" href="assets/css/app.css?v=20261021-364">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261020-363"></script>
+<script src="assets/js/lock.js?v=20261021-364"></script>
 </head>
 <body data-theme="auto">
 
@@ -44,17 +44,13 @@
       每次打開選單「進階」都是收著的；手機上是從底下滑出來的兩欄面板。
       版本 314 照使用次數刪掉沒在用、或別處已經有的（每週覆盤、統計、資料狀態、再補一批、立即同步、今日撥打戰略、
       補電話、找電話、檢查公司名稱、整理未排定、管理已匯入、檢查更新；下載／還原 JSON 收進「備份」那頁）。
+      版本 364 再拿掉今日覆盤（一個月 1 次）、Claude 分身入口（0 次）。
     -->
     <div id="menu" class="menu" hidden>
       <div class="menu-group">
-        <div class="menu-cap">每天</div>
-        <button data-act="review">今日覆盤</button>
-        <button data-act="spread-undo" hidden>復原剛才的重排</button>
-      </div>
-      <div class="menu-group">
         <div class="menu-cap">常用</div>
         <button data-act="export-xlsx">匯出 Excel</button>
-        <button data-act="twin">Claude 分身</button>
+        <button data-act="spread-undo" hidden>復原剛才的重排</button>
       </div>
       <button data-act="menu-more" class="menu-more-toggle" aria-expanded="false">進階 ▸</button>
       <div class="menu-more" id="menuMore" hidden>
@@ -352,27 +348,27 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261020-363"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261020-363"></script>
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261021-364"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261021-364"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261020-363"></script>
-<script src="assets/js/normalize.js?v=20261020-363"></script>
-<script src="assets/js/holidays.js?v=20261020-363"></script>
-<script src="assets/js/registry.js?v=20261020-363"></script>
-<script src="assets/js/ocr.js?v=20261020-363"></script>
-<script src="assets/js/rules.js?v=20261020-363"></script>
-<script src="assets/js/store.js?v=20261020-363"></script>
-<script src="assets/js/sync.js?v=20261020-363"></script>
-<script src="assets/js/leads.js?v=20261020-363"></script>
-<script src="assets/js/chattel.js?v=20261020-363"></script>
-<script src="assets/js/listed.js?v=20261020-363"></script>
-<script src="assets/js/biz.js?v=20261020-363"></script>
-<script src="assets/js/trade.js?v=20261020-363"></script>
-<script src="assets/js/nhi.js?v=20261020-363"></script>
-<script src="assets/js/einv.js?v=20261020-363"></script>
-<script src="assets/js/factory.js?v=20261020-363"></script>
-<script src="assets/js/industry.js?v=20261020-363"></script>
-<script src="assets/js/mix.js?v=20261020-363"></script>
-<script src="assets/js/app.js?v=20261020-363"></script>
+<script src="assets/js/pdf-table.js?v=20261021-364"></script>
+<script src="assets/js/normalize.js?v=20261021-364"></script>
+<script src="assets/js/holidays.js?v=20261021-364"></script>
+<script src="assets/js/registry.js?v=20261021-364"></script>
+<script src="assets/js/ocr.js?v=20261021-364"></script>
+<script src="assets/js/rules.js?v=20261021-364"></script>
+<script src="assets/js/store.js?v=20261021-364"></script>
+<script src="assets/js/sync.js?v=20261021-364"></script>
+<script src="assets/js/leads.js?v=20261021-364"></script>
+<script src="assets/js/chattel.js?v=20261021-364"></script>
+<script src="assets/js/listed.js?v=20261021-364"></script>
+<script src="assets/js/biz.js?v=20261021-364"></script>
+<script src="assets/js/trade.js?v=20261021-364"></script>
+<script src="assets/js/nhi.js?v=20261021-364"></script>
+<script src="assets/js/einv.js?v=20261021-364"></script>
+<script src="assets/js/factory.js?v=20261021-364"></script>
+<script src="assets/js/industry.js?v=20261021-364"></script>
+<script src="assets/js/mix.js?v=20261021-364"></script>
+<script src="assets/js/app.js?v=20261021-364"></script>
 </body>
 </html>
