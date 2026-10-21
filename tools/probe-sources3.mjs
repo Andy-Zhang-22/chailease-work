@@ -6,7 +6,7 @@ const cat = await (await get('https://data.gov.tw/api/front/dataset/export?forma
 const rows = parseCsv(cat.replace(/^﻿/, ''));
 const head = rows[0]; console.log(`目錄 ${rows.length - 1} 個資料集；欄位：${head.join('、')}`);
 const col = (re) => head.findIndex((h) => re.test(h));
-const iId = col(/編號|id/i), iName = col(/名稱|title/i), iOrg = col(/機關|提供|organization/i), iFmt = col(/格式|format/i), iFreq = col(/頻率|frequency/i), iUpd = col(/更新時間|更新日期|modified|updated/i), iDesc = col(/描述|說明|description/i);
+const iId = col(/識別碼|編號|^id$/i), iUrl = col(/下載網址/), iFields = col(/主要欄位/), iName = col(/名稱|title/i), iOrg = col(/機關|提供|organization/i), iFmt = col(/格式|format/i), iFreq = col(/頻率|frequency/i), iUpd = col(/更新時間|更新日期|modified|updated/i), iDesc = col(/描述|說明|description/i);
 const GROUPS = [
   ['建築執照（新北、臺北）', (n, o) => /建築執照|建造執照|建照/.test(n) && /新北|臺北|台北/.test(n + o)],
   ['出進口實績', (n) => /實績/.test(n) && /出進口|進出口|廠商|貿易/.test(n)],
@@ -17,18 +17,22 @@ const picks = [];
 for (const [label, test] of GROUPS) {
   const hits = rows.slice(1).filter((r) => test(String(r[iName] || ''), String(r[iOrg] || '')));
   console.log(`\n== ${label}：${hits.length} 個`);
-  hits.slice(0, 25).forEach((r) => console.log(`  ${r[iId]}｜${r[iName]}｜${r[iOrg]}｜${r[iFmt]}｜${iFreq >= 0 ? r[iFreq] : ''}｜${iUpd >= 0 ? String(r[iUpd]).slice(0, 10) : ''}`));
-  hits.filter((r) => /csv|json|xml/i.test(String(r[iFmt] || ''))).slice(0, 6).forEach((r) => picks.push([label, r[iId], r[iName]]));
+  hits.slice(0, 25).forEach((r) => console.log(`  ${r[iId]}｜${r[iName]}｜${r[iOrg]}｜${r[iFmt]}｜${iFreq >= 0 ? r[iFreq] : ''}｜${iUpd >= 0 ? String(r[iUpd]).slice(0, 10) : ''}｜欄位：${String(r[iFields] || '').slice(0, 160)}`));
+  hits.filter((r) => /新北市建築執照存查|115年度建造執照摘要|新建建築物建造執照列表|企業職缺資訊|求職徵才職缺資訊/.test(String(r[iName] || ''))).forEach((r) => picks.push([label, r[iId], r[iName], String(r[iUrl] || '').split(';')[0]]));
 }
 console.log('\n== 看詮釋資料與欄位（每組最多 6 個，只讀前 300 KB，印欄位名與大小）');
-for (const [label, id, name] of picks) {
+for (const [label, id, name, catUrl] of picks) {
   try {
-    const j = await (await get(`https://data.gov.tw/api/v2/rest/dataset/${id}`)).json();
-    const ds = (j.result && j.result.distribution) || [];
-    const d = ds.find((x) => /csv|json/i.test(String(x.resourceFormat || x.format || ''))) || ds[0];
-    const url = d && (d.resourceDownloadUrl || d.downloadURL);
+    let url = catUrl;
+    try {
+      const j = await (await get(`https://data.gov.tw/api/v2/rest/dataset/${id}`)).json();
+      const ds = (j.result && j.result.distribution) || [];
+      const d = ds.find((x) => /csv|json|xml/i.test(String(x.resourceFormat || x.format || ''))) || ds[0];
+      if (d && (d.resourceDownloadUrl || d.downloadURL)) url = d.resourceDownloadUrl || d.downloadURL;
+      console.log(`\n[${label}] ${id} ${name}：詮釋資料資源 ${ds.length} 個，格式 ${ds.map((x) => x.resourceFormat || x.format).join('/')}`);
+    } catch (e) { console.log(`\n[${label}] ${id} ${name}：詮釋資料讀不到（${String(e.message || e).slice(0, 60)}），用目錄的下載網址`); }
     const host = url ? new URL(url).host : '';
-    console.log(`\n[${label}] ${id} ${name}：資源 ${ds.length} 個，格式 ${ds.map((x) => x.resourceFormat || x.format).join('/')}，主機 ${host}`);
+    console.log(`  主機 ${host}`);
     if (!url) continue;
     const r = await get(url, 90000);
     const type = r.headers.get('content-type') || ''; const len = r.headers.get('content-length') || '?';
