@@ -92,6 +92,8 @@ test('fetch-industry 第三批：新北建照只收起造人像公司、不是�
   assert.equal(t.permitRow({ ...base, date_the_permit: '1120915' }, { now }), null, '三年前的不收');
   assert.equal(t.permitRow({ ...base, date_the_permit: '//' }, { now }), null, '沒發照日不收');
   assert.deepEqual(t.permitRow({ ...base, proprietor: '甲建設股份有限公司、乙開發有限公司新莊分公司' }, { now }).names, ['甲建設股份有限公司'], '並列的拆開、分公司不收');
+  assert.deepEqual(t.permitRow({ ...base, proprietor: '己五金股份有限公司 負責人:王大明' }, { now }).names, ['己五金股份有限公司'], '「負責人:某某」拿掉');
+  assert.deepEqual(t.permitRow({ ...base, proprietor: '己五金股份有限公司（代表人：王大明）' }, { now }).names, ['己五金股份有限公司'], '括號裡的代表人拿掉');
   assert.equal(t.permitUse(''), '新建物'); assert.equal(t.permitUse('倉庫'), '倉儲');
   assert.equal(t.PERMIT.id, 123639);
   assert.equal(t.HEAD.slice(-3).join(','), '建照年月,建照用途,建照造價');

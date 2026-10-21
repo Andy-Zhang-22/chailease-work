@@ -124,7 +124,8 @@ export const permitUse = (use) => (/工廠|廠房|廠/.test(use) ? '廠房' : /�
 export function permitRow(o, { now = new Date(), months = PERMIT.months } = {}) {
   const useRaw = halfWidth(o.use_of_buildings || '').trim();
   if (PERMIT_RESIDENTIAL.test(useRaw) && !PERMIT_BUSINESS.test(useRaw)) return null;
-  const names = halfWidth(o.proprietor || '').split(/[、,，;；]/).map((x) => x.trim()).filter((x) => x && PERMIT_COMPANY.test(x) && !BRANCH_NAME.test(x));
+  // 起造人欄位八成長這樣「○○股份有限公司 負責人:王○○」（探路：295 個名字裡 229 個），負責人以後的拿掉才對得到稅籍檔
+  const names = halfWidth(o.proprietor || '').replace(/[(（]?\s*(負責人|代表人).*$/, '').split(/[、,，;；]/).map((x) => x.replace(/[(（][^)）]*[)）]/g, '').trim()).filter((x) => x && PERMIT_COMPANY.test(x) && !BRANCH_NAME.test(x));
   if (!names.length) return null;
   const d = String(o.date_the_permit || o.date_licensing || '').replace(/\D/g, '');
   if (d.length !== 7) return null;
@@ -137,7 +138,7 @@ export function permitRow(o, { now = new Date(), months = PERMIT.months } = {}) 
   return { names, ym: `${y}${String(m).padStart(2, '0')}`, use: permitUse(useRaw), cost: num(o.project_cost), district, lic: String(o.license_number || '').trim() };
 }
 /** 建照存查 → 起造人名字 → 最近一張（ym 最新；同月取造價高的） */
-export async function fetchPermits() {
+async function fetchPermits() {
   const url = await csvUrlOf(PERMIT.id);
   console.log(`新北市建築執照存查（${PERMIT.id}）下載 ${url}`);
   const text = await fetchRetry(url, (r) => r.text());
