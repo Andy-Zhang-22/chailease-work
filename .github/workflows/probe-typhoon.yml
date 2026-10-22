@@ -9,9 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for u in https://www.dgpa.gov.tw/typh/daily/nds.html https://www.dgpa.gov.tw/typh/daily/ndsjson.aspx https://www.dgpa.gov.tw/typh/daily/ndsrss.aspx https://www.dgpa.gov.tw/typh/daily/ndsjson.html; do
-            echo "=== $u"
-            code=$(curl -sS -L -A "Mozilla/5.0" -o body.txt -w "%{http_code} %{content_type}" --max-time 40 "$u" || echo "curl failed")
-            echo "status: $code  bytes: $(wc -c < body.txt 2>/dev/null)"
-            grep -n -i -o -E '.{0,80}(\.aspx|\.json|rss|xml|新北市|updateTime|資料更新).{0,120}' body.txt | head -40
-          done
+          curl -sS -L -A "Mozilla/5.0" -o body.txt --max-time 40 https://www.dgpa.gov.tw/typh/daily/nds.html
+          echo "bytes $(wc -c < body.txt)"
+          grep -n -i -E '時間|更新|today|date' body.txt | sed 's/^\([0-9]*\):[[:space:]]*/\1: /' | head -20
+          echo "=== table around 新北市"
+          sed -n 320,420p body.txt | sed 's/^[[:space:]]*//' | grep -v '^$'
