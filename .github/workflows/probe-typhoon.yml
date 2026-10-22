@@ -1,0 +1,17 @@
+# 一次性探路（看完就刪）：人事行政總處「天然災害停止上班及上課情形」有沒有機器能讀的格式。只印狀態碼、大小、含關鍵字的行。
+name: 探路：停班公告
+on:
+  push:
+    paths: ['.github/workflows/probe-typhoon.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for u in https://www.dgpa.gov.tw/typh/daily/nds.html https://www.dgpa.gov.tw/typh/daily/ndsjson.aspx https://www.dgpa.gov.tw/typh/daily/ndsrss.aspx https://www.dgpa.gov.tw/typh/daily/ndsjson.html; do
+            echo "=== $u"
+            code=$(curl -sS -L -A "Mozilla/5.0" -o body.txt -w "%{http_code} %{content_type}" --max-time 40 "$u" || echo "curl failed")
+            echo "status: $code  bytes: $(wc -c < body.txt 2>/dev/null)"
+            grep -n -i -o -E '.{0,80}(\.aspx|\.json|rss|xml|新北市|updateTime|資料更新).{0,120}' body.txt | head -40
+          done
