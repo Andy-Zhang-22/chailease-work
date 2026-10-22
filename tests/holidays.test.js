@@ -106,3 +106,9 @@ test('covered：有資料的年份才算', () => {
   assert.equal(Holidays.covered(''), false);
   assert.ok(Holidays.MAX_YEAR >= 2027);
 });
+
+test('颱風假：臨時宣布的照使用者說的補進表（2026-10-23），下個上班日跳過週末與 10/26 補假', () => {
+  assert.equal(Holidays.holidayName('2026-10-23'), '颱風假');
+  assert.equal(Holidays.isWorkday('2026-10-23'), false);
+  assert.equal(Holidays.nextWorkday('2026-10-23').iso, '2026-10-27');
+});
