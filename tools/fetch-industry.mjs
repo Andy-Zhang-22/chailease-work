@@ -16,7 +16,7 @@
  *   這兩份的地址是工廠／工地的，名稱也可能是工地名 → 名稱、地址都改用稅籍檔（總公司），稅籍檔沒有的、分公司、縣市外的不收。
  *   新廠／新工地：每個場所（食品登錄字號、環境部管制編號）記首見年月（seen-sites.csv），這家多了新場所就標出來。
  *   探路時試過水污染源許可（106598）的許可起始日：多半是展延，分不出新廠，沒用。
- * industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價
+ * industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價,建照種類
  * 用法：node tools/fetch-industry.mjs [--out leads/industry] [--cities 新北市,臺北市] [--phones leads/trade/phones.csv] [--reset-baseline]
  */
 import fs from 'node:fs/promises';
@@ -48,9 +48,10 @@ export const ENV = { id: 118447, factory: '環保列管工廠', site: '營造業
  * 第三批（版本 365）：新北市建築執照存查（data.gov.tw 123639，新北市工務局，每 3 月）。探路 2026/10/21：14,343 列，起造人沒遮罩、
  * 一半以上是公司名，有用途、工程造價、發照日。沒有統編 → 起造人名字對稅籍檔的營業人名稱（總公司、縣市內的才留）。
  * 使用者：「來源越多參考的資訊越好」→ 做成訊號「正在蓋廠房／辦公室（造價 N 萬）」收進產業名單。住宅、農舍（建商）不收。
+ * 存查裡建造執照（建字）、使用執照（使字）都有：建照＝正在蓋，使照＝剛蓋好（版本 366）。
  */
 export const PERMIT = { id: 123639, kind: '正在蓋廠房', months: 24 };
-export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所', '建照年月', '建照用途', '建照造價'];
+export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所', '建照年月', '建照用途', '建照造價', '建照種類'];
 const BRANCH_NAME = /分公司$/;
 const csvCell = (v) => { const t = String(v == null ? '' : v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 const num = (s) => Number(String(s || '').replace(/[^\d.]/g, '')) || 0;
@@ -135,7 +136,12 @@ export function permitRow(o, { now = new Date(), months = PERMIT.months } = {}) 
   if (age < 0 || age > months) return null;
   const site = halfWidth(o.building_site || o.house_address || '');
   const district = (site.match(/新北市(..區)/) || site.match(/^(..區)/) || [])[1] || '';
-  return { names, ym: `${y}${String(m).padStart(2, '0')}`, use: permitUse(useRaw), cost: num(o.project_cost), district, lic: String(o.license_number || '').trim() };
+  // 執照字號：「115土建字第…號」建造執照＝正在蓋；「115土使字第…號」使用執照＝剛蓋好（使用者 10/22 指出存查裡兩種都有）；
+  // 拆除、雜項（圍牆、廣告塔）不收
+  const lic = String(o.license_number || '').trim();
+  const stage = /使字/.test(lic) ? '使照' : /建字/.test(lic) ? '建照' : '';
+  if (!stage) return null;
+  return { names, ym: `${y}${String(m).padStart(2, '0')}`, use: permitUse(useRaw), cost: num(o.project_cost), district, lic, stage };
 }
 /** 建照存查 → 起造人名字 → 最近一張（ym 最新；同月取造價高的） */
 async function fetchPermits() {
@@ -153,12 +159,12 @@ async function fetchPermits() {
     const r = permitRow(o);
     if (!r) continue;
     kept++;
-    r.names.forEach((name) => { const have = by.get(name); if (!have || r.ym > have.ym || (r.ym === have.ym && r.cost > have.cost)) by.set(name, { ym: r.ym, use: r.use, cost: r.cost, district: r.district, n: (have ? have.n : 0) + 1 }); else have.n += 1; });
+    r.names.forEach((name) => { const have = by.get(name); if (!have || r.ym > have.ym || (r.ym === have.ym && r.cost > have.cost)) by.set(name, { ym: r.ym, use: r.use, cost: r.cost, district: r.district, stage: r.stage, n: (have ? have.n : 0) + 1 }); else have.n += 1; });
   }
   console.log(`  ${n.toLocaleString()} 列，最近 ${PERMIT.months} 個月、起造人像公司、不是純住宅的 ${kept.toLocaleString()} 張，起造人 ${by.size.toLocaleString()} 個名字（之後對稅籍檔留縣市內的）`);
   return by;
 }
-export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : '', r.permit ? r.permit.ym : '', r.permit ? r.permit.use : '', r.permit ? r.permit.cost || '' : ''];
+export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : '', r.permit ? r.permit.ym : '', r.permit ? r.permit.use : '', r.permit ? r.permit.cost || '' : '', r.permit ? r.permit.stage || '建照' : ''];
 
 async function readSeen(file, keyOk = (k) => /^\d{8}$/.test(k)) {
   const m = new Map();
