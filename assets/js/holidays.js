@@ -53,7 +53,6 @@
         '2026-09-25': '中秋節',
         '2026-09-28': '孔子誕辰紀念日/教師節',
         '2026-10-09': '補假',
-        '2026-10-23': '颱風假',   // 臨時宣布的，使用者 10/22 說「我下次聯絡日剛好是颱風假，我就放假」（版本 368）
         '2026-10-26': '補假',
         '2026-12-25': '行憲紀念日',
       },
@@ -94,11 +93,29 @@
   const WEEK_LABEL = ['日', '一', '二', '三', '四', '五', '六'];
   const dayOfWeek = (iso) => new Date(`${iso}T00:00:00`).getDay();   // 0=日 6=六
 
+  /*
+   * 臨時的假（颱風假，版本 370）：後台每晚 21:00 看人事行政總處的停班公告（tools/fetch-typhoon.mjs），
+   * 新北市整天停班就寫進 leads/holidays-extra.json，這裡開網站時讀進來，跟行事曆一樣算放假。
+   * 讀不到（舊版沒這個檔、沒網路）就當沒有；最多等 3 秒，不能卡住開網站。
+   */
+  const EXTRA = {};
+  function addExtra(map) {
+    for (const k of Object.keys(map || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && map[k]) EXTRA[k] = String(map[k]);
+    return Object.keys(EXTRA).length;
+  }
+  const ready = (typeof fetch === 'function' && typeof document !== 'undefined')
+    ? Promise.race([
+      fetch('leads/holidays-extra.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => addExtra(j)).catch(() => 0),
+      new Promise((resolve) => setTimeout(() => resolve(0), 3000)),
+    ])
+    : Promise.resolve(0);
+
   /** 這天放假就回傳名稱（週末回「週六」「週日」），要上班回空字串。 */
   function holidayName(iso) {
     if (!iso) return '';
     const y = DATA[yearOf(iso)];
     if (y && y.work.indexOf(iso) >= 0) return '';      // 補班日：週末也要上班
+    if (EXTRA[iso]) return EXTRA[iso];
     if (y && y.off[iso]) return y.off[iso];
     const d = dayOfWeek(iso);
     return (d === 0 || d === 6) ? `週${WEEK_LABEL[d]}` : '';
@@ -128,5 +145,5 @@
     return { iso: out, moved: out !== from, from, reason, covered: covered(from) };
   }
 
-  global.Holidays = { holidayName, isWorkday, weekLabel, nextWorkday, covered, addDays, MIN_YEAR, MAX_YEAR, DATA };
+  global.Holidays = { holidayName, isWorkday, weekLabel, nextWorkday, covered, addDays, addExtra, ready, MIN_YEAR, MAX_YEAR, DATA };
 })(window);

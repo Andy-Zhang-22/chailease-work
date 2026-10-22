@@ -107,8 +107,17 @@ test('covered：有資料的年份才算', () => {
   assert.ok(Holidays.MAX_YEAR >= 2027);
 });
 
-test('颱風假：臨時宣布的照使用者說的補進表（2026-10-23），下個上班日跳過週末與 10/26 補假', () => {
-  assert.equal(Holidays.holidayName('2026-10-23'), '颱風假');
+test('2026-10-23 是上班日（版本 368 誤加的颱風假已拿掉；颱風假只在使用者確認當天才補）', () => {
+  assert.equal(Holidays.holidayName('2026-10-23'), '');
+  assert.equal(Holidays.isWorkday('2026-10-23'), true);
+  assert.equal(Holidays.nextWorkday('2026-10-23').moved, false);
+});
+
+test('颱風假（版本 370）：後台寫進 leads/holidays-extra.json 的日子，讀進來就當放假；格式不對的不收', () => {
+  assert.equal(Holidays.holidayName('2026-10-23'), '');
+  assert.equal(Holidays.addExtra({ '2026-10-23': '颱風假（新北市停止上班）', 'x': '不是日期', '2026-10-24': '' }), 1);
+  assert.equal(Holidays.holidayName('2026-10-23'), '颱風假（新北市停止上班）');
   assert.equal(Holidays.isWorkday('2026-10-23'), false);
-  assert.equal(Holidays.nextWorkday('2026-10-23').iso, '2026-10-27');
+  assert.equal(Holidays.nextWorkday('2026-10-23').iso, '2026-10-27');   // 10/24、25 週末，10/26 補假
+  assert.ok(Holidays.ready && typeof Holidays.ready.then === 'function');
 });

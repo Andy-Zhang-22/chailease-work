@@ -91,6 +91,8 @@ jobs:
       - name: 裝 Playwright 與 Chromium
         run: npm i --no-save playwright@1.63.0 @anthropic-ai/sdk && npx playwright install --with-deps chromium
 
+      # 颱風假（版本 371）：每晚 21:00 的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，
+      # 這裡 checkout 到就讀得到，挑名單那步會當假日；不用再查一次
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
         if: vars.GCP_WIF_PROVIDER != ''

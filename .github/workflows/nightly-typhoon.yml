@@ -1,0 +1,45 @@
+# 颱風假（版本 370→371）：每晚台灣 21:00 看人事行政總處「天然災害停止上班及上課情形」，
+# 新北市整個市「今天／明天」整天停止上班，就寫進 leads/holidays-extra.json 推上分支；
+# 清晨 05:00 的每日新名單（daily-feed-drive.yml）checkout 到這個檔，那天就不挑、下次聯絡日挪到下個上班日。
+#
+# 使用者 10/22：「當新北政府發布颱風假時，你可以自動獲得資訊，幫我在系統做修正」→「我要你看停班課的動作執行在每晚的9點去查看」。
+# 政府規定隔天停班要在前一晚 19～22 時前宣布；21:00 之後才宣布的這輪看不到，請使用者跟 Claude 說一聲手動補。
+name: 颱風假（每晚看停班公告）
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 台灣 21:00
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: registry-drive   # 跟每日新名單、商工登記排同一條，不會同時推同一個分支
+  cancel-in-progress: false
+
+jobs:
+  typhoon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: 看人事行政總處的停班公告
+        run: |
+          node tools/fetch-typhoon.mjs | tee typhoon.log
+          printf '%s\n' "$(cat typhoon.log)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 假日表有變就存回 repo
+        run: |
+          git add leads/holidays-extra.json
+          if git diff --cached --quiet; then echo "假日表沒變"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "颱風假：$(date -u +%Y-%m-%d)"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
