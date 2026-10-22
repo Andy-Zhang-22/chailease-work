@@ -41,4 +41,9 @@ test('停班公告：整個市整天停班才算假；半天、某區、某學�
   assert.match(half.note[0], /^2026-10-22 新北市下午04:00起停止上班/);
   // 全形冒號也認得
   assert.deepEqual(T.offDays(['新北市：今天停止上班、停止上課。'], { today }).off, ['2026-10-22']);
+  // 整個市停班時那句沒有對象（2026/10/23 實際的寫法；版本 372 修）
+  assert.deepEqual(T.offDays(['今天停止上班、停止上課。'], { today }).off, ['2026-10-22']);
+  assert.deepEqual(T.offDays(['明天停止上班、停止上課。'], { today }).off, ['2026-10-23']);
+  assert.deepEqual(T.offDays(['今天下午04:00起停止上班、停止上課。'], { today }).off, []);
+  assert.deepEqual(T.offDays(['今天照常上班、照常上課。'], { today }), { off: [], note: [] });
 });

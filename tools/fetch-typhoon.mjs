@@ -9,7 +9,8 @@
  *   頁上有「更新時間：2026/10/22 17:11:04」；每個縣市一列，格子 headers="city_Name New Taipei City" 的下一格是內容：
  *   沒事是「尚未宣布消息」，有事是一句一句「新北市:今天停止上班、停止上課。」「新北市烏來區:明天停止上班、停止上課。」
  *   「某某國小:今天下午01:00起停止上班、停止上課。」用 <br> 隔開。
- * 規則：對象剛好是「新北市」（整個市，不是某區、某學校）而且「今天／明天」整天停止上班才算；下午起、上午停的半天不算假。
+ *   整個市停班時那句「沒有對象」，直接是「今天停止上班、停止上課。」（2026/10/23 實際看到；版本 371 以為會寫「新北市:」，漏掉了）。
+ * 規則：對象是整個市（沒寫對象，或剛好是「新北市」）而且「今天／明天」整天停止上班才算；某區、某學校、下午起、上午停的半天不算假。
  * 只印日期與筆數。抓不到就印出來、照常結束（不能讓挑名單整輪失敗）。
  * 用法：node tools/fetch-typhoon.mjs [--out leads/holidays-extra.json] [--city 新北市]
  */
@@ -47,9 +48,9 @@ export function offDays(lines, { city = '新北市', today }) {
   const off = []; const note = [];
   for (const line of lines || []) {
     if (/尚未宣布/.test(line)) continue;
+    // 「新北市烏來區:明天停止上班…」有對象；整個市停班是「今天停止上班、停止上課。」沒有對象
     const m = /^([^:：]+)[:：](.+)$/.exec(line);
-    if (!m) continue;
-    const who = m[1].trim(); const what = m[2].trim();
+    const who = m ? m[1].trim() : city; const what = (m ? m[2] : line).trim();
     const when = /^(今天|明天)/.exec(what);
     if (!when) continue;
     const day = when[1] === '今天' ? today : addDays(today, 1);
