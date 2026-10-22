@@ -94,7 +94,7 @@
   const dayOfWeek = (iso) => new Date(`${iso}T00:00:00`).getDay();   // 0=日 6=六
 
   /*
-   * 臨時的假（颱風假，版本 370）：後台每天清晨看人事行政總處的停班公告（tools/fetch-typhoon.mjs），
+   * 臨時的假（颱風假，版本 370）：後台每晚 21:00 看人事行政總處的停班公告（tools/fetch-typhoon.mjs），
    * 新北市整天停班就寫進 leads/holidays-extra.json，這裡開網站時讀進來，跟行事曆一樣算放假。
    * 讀不到（舊版沒這個檔、沒網路）就當沒有；最多等 3 秒，不能卡住開網站。
    */

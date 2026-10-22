@@ -69,7 +69,7 @@ on:
         options: ['no', 'yes']
 
 permissions:
-  contents: write   # 颱風假寫進 leads/holidays-extra.json 要推回分支（版本 370）
+  contents: read
   id-token: write   # Workload Identity 聯盟要用 GitHub 的 OIDC token 去換 Google 的
 
 concurrency:
@@ -91,10 +91,8 @@ jobs:
       - name: 裝 Playwright 與 Chromium
         run: npm i --no-save playwright@1.63.0 @anthropic-ai/sdk && npx playwright install --with-deps chromium
 
-      # 颱風假（版本 370）：新北市今天整天停班，就先寫進 leads/holidays-extra.json，下面挑名單那步讀到會當假日
-      - name: 看人事行政總處的停班公告
-        run: node tools/fetch-typhoon.mjs | tee typhoon.log
-
+      # 颱風假（版本 371）：每晚 21:00 的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，
+      # 這裡 checkout 到就讀得到，挑名單那步會當假日；不用再查一次
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
         if: vars.GCP_WIF_PROVIDER != ''
@@ -136,15 +134,3 @@ jobs:
           RECHECK_MODEL: ${{ inputs.recheckmodel || 'opus' }}
           RESEARCH: ${{ inputs.research || 'no' }}
         run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"
-
-      - name: 颱風假有新的就存回 repo
-        if: always()
-        run: |
-          printf '%s\n' "$(cat typhoon.log 2>/dev/null)" >> "$GITHUB_STEP_SUMMARY"
-          git add leads/holidays-extra.json
-          if git diff --cached --quiet; then echo "假日表沒變"; exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "颱風假：$(date -u +%Y-%m-%d)"
-          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"

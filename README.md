@@ -4960,3 +4960,10 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - **限制**：人事行政總處規定隔天停班要在前一晚 19～22 時前宣布，05:00 看得到；少數早上 05:30 才改的會漏掉，那種請使用者像 10/22 一樣跟我說，我手動補。
   網站要看到那天是假日，要等我把機器人推的 `leads/holidays-extra.json` 合進 main；放假當天使用者本來就不開網站，後台已經先挪好了。
 - 測試：`tests/typhoon.test.js`（解析：更新時間、新北市那格、整天／半天／某區）、`tests/holidays.test.js` 加 addExtra 一項。版號 20261022-370。
+
+## 颱風假改成每晚 9 點查（版本 371）
+
+使用者 10/22：「不對，我要你看停班課的動作執行在每晚的9點去查看」。
+版本 370 是清晨 05:00 挑名單前順便查；改成獨立排程 `.github/workflows/nightly-typhoon.yml`，每晚台灣 21:00 跑 `tools/fetch-typhoon.mjs`，
+假日表有變就推上分支。`daily-feed-drive.yml` 拿掉查公告與存檔那兩步、權限改回 `contents: read`，清晨 checkout 到的檔直接當假日。
+限制：21:00 之後才宣布的這輪看不到（政府規定 22 時前宣布），請使用者跟我說，我手動補。版號 20261022-371。
