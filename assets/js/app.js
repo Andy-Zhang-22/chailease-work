@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261022-369';
+  const APP_VERSION = '20261022-370';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -8793,6 +8793,7 @@ export default {
     $('#menuVersion').textContent = `版本 ${APP_VERSION}`;
     wireEvents();
     document.addEventListener('click', countUsage, true);   // 使用統計：只記按鈕上的字與次數
+    if (window.Holidays && window.Holidays.ready) await window.Holidays.ready;   // 颱風假先讀進來，挑名單、重排才會跳過（版本 370）
     await reload();
     const undone = await undoClosedBatch();
     render();

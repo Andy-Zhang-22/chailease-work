@@ -165,7 +165,7 @@ async function main() {
     else if (res.notSynced) line = `${today} 今天還沒同步成功，沒挑`;
     else if (res.empty) line = `${today} 名單是空的，沒挑`;
     else if (res.notReady || res.busy) line = `${today} 清冊沒載好或正在挑，沒挑`;
-    else if (res.holiday) line = `${today} 放假，今天不挑`;
+    else if (res.holiday) line = `${today} 放假（${await page.evaluate((d) => (window.Holidays ? window.Holidays.holidayName(d) : ''), today) || '週末'}），今天不挑`;
     else if (res.full) line = `${today} 今天的 ${res.quota} 家新名單已經排滿（已有 ${res.have} 家），沒挑`;
     else if (!res.picked) line = `${today} 候選裡沒有可以補的${res.skippedNoPhone ? `（${res.skippedNoPhone} 家沒電話、Google 地圖也查不到）` : ''}`;
     else {
