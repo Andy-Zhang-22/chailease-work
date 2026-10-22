@@ -20,7 +20,7 @@
   const CSV_HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '負責人', 'KEYMAN', '產業別', '下次聯絡日', '最近聯絡日', '訪談內容', '地址', '名單新增日期', '國家'];
   const WHEN = [['m3', '3 個月內出現'], ['m6', '3～6 個月'], ['y1', '半年以上'], ['base', '起算時就有']];
   // 類別的短名與圖示（卡片、篩選用）
-  const KIND_SHORT = { 汽車貨運業: '🚚 汽車貨運', 遊覽車客運業: '🚌 遊覽車', 計程車客運業: '🚕 計程車', 小客車租賃業: '🚗 租車', 食品製造業: '🍱 食品工廠', 環保列管工廠: '🏭 環保列管', 營造業: '🏗 營造工地', 正在蓋廠房: '🏗 蓋廠房' };
+  const KIND_SHORT = { 汽車貨運業: '🚚 汽車貨運', 遊覽車客運業: '🚌 遊覽車', 計程車客運業: '🚕 計程車', 小客車租賃業: '🚗 租車', 食品製造業: '🍱 食品工廠', 環保列管工廠: '🏭 環保列管', 營造業: '🏗 營造工地', 新建廠房: '🏗 新建廠房' };
   const VEHICLE = /貨運|客運|租賃/;
   // 每日新名單揉合的訊號：一類一個（同一家好幾類就好幾個訊號）
   const groupSignal = (k) => (VEHICLE.test(k) ? '車輛業者' : k === '食品製造業' ? '食品工廠' : k === '環保列管工廠' ? '環保列管工廠' : k === '營造業' ? '營造業（有工地）' : k);
@@ -104,14 +104,14 @@
     r.newSite = ns ? { ym: ns, what: String(o['新場所'] || '').trim() || '新場所', months: monthsSinceYm(ns, today) } : null;
     // 新北建照（版本 365）：發照年月、用途（廠房／辦公室／倉儲／新建物）、工程造價（元）
     const pym = parseYm(o['建照年月']);
-    r.permit = pym ? { ym: pym, use: String(o['建照用途'] || '').trim() || '新建物', cost: Number(String(o['建照造價'] || '').replace(/\D/g, '')) || 0, months: monthsSinceYm(pym, today), stage: String(o['建照種類'] || '').trim() === '使照' ? '使照' : '建照' } : null;
+    r.permit = pym ? { ym: pym, use: String(o['建照用途'] || '').trim() || '新建物', cost: Number(String(o['建照造價'] || '').replace(/\D/g, '')) || 0, months: monthsSinceYm(pym, today), stage: String(o['建照種類'] || '').trim() === '使照' ? '使照' : '建照', address: String(o['建照地址'] || '').trim() } : null;
     r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.isNew = !!(r.ym && baseline && `${r.ym.y}${String(r.ym.m).padStart(2, '0')}` > String(baseline));
     r.regMonths = r.ym ? monthsSinceYm(r.ym, today) : null;
     r.branch = branchOf(r.address);
     r.district = r.branch.district || '';
     r.key = r.taxId || r.name;
-    r.blob = [r.name, r.taxId, r.address, r.industry, r.kinds.join(' '), r.sites, r.tel].join(' ').toLowerCase();
+    r.blob = [r.name, r.taxId, r.address, r.industry, r.kinds.join(' '), r.sites, r.tel, r.permit ? r.permit.address : ''].join(' ').toLowerCase();
     return r;
   }
 
@@ -230,7 +230,7 @@
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 成立日不明' }),
       r.sites ? el('span', { textContent: `🏗 ${r.sites}`, title: '食藥署登錄的食品工廠、環境部列管的工地與工廠（還沒解除列管的）' }) : '',
       r.newSite ? el('span', { textContent: `🆕 ${ymLabel(r.newSite.ym)} 多了${r.newSite.what}`, title: '跟上個月比，這個月才出現的場所' }) : '',
-      r.permit ? el('span', { textContent: `🏗 ${ymLabel(r.permit.ym)} ${r.permit.stage}：${permitText(r)}`, title: '新北市建築執照存查：這家是起造人（用公司名對的）；建照＝正在蓋，使照＝剛蓋好' }) : '',
+      r.permit ? el('span', { textContent: `🏗 ${ymLabel(r.permit.ym)} ${r.permit.stage}：${permitText(r)}${r.permit.address ? `，蓋在 ${r.permit.address}` : ''}`, title: '新北市建築執照存查：這家是起造人（用公司名對的）；建照＝正在蓋，使照＝剛蓋好' }) : '',
       r.isNew && r.ym ? el('span', { textContent: `🆕 ${ymLabel(r.ym)} 出現在產業名單（${whenText(r)}）`, title: '跟上個月的名單比，這個月才出現' }) : '',
       r.address ? el('span', {}, ['📍 ', el('a', { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}`, target: '_blank', rel: 'noopener', textContent: r.address })]) : '',
       r.taxId ? el('span', { textContent: `#${r.taxId}` }) : '',
@@ -303,7 +303,7 @@
   function noteFor(r) {
     // 只留重點：哪一類、什麼時候出現在名單上（來源漏斗看開頭「產業名單：」）
     const ymIso = (ym) => `${ym.y}-${String(ym.m).padStart(2, '0')}`;
-    return [`產業名單：${r.kinds.join('、')}`, r.permit ? `${ymIso(r.permit.ym)} ${r.permit.stage} ${permitText(r)}` : '', r.newSite ? `${ymIso(r.newSite.ym)} ${r.newSite.what}` : '', r.isNew && r.ym ? `${ymIso(r.ym)} 新出現` : '', r.industry || ''].filter(Boolean).join('，');
+    return [`產業名單：${r.kinds.join('、')}`, r.permit ? `${ymIso(r.permit.ym)} ${r.permit.stage} ${permitText(r)}${r.permit.address ? `，蓋在 ${r.permit.address}` : ''}` : '', r.newSite ? `${ymIso(r.newSite.ym)} ${r.newSite.what}` : '', r.isNew && r.ym ? `${ymIso(r.ym)} 新出現` : '', r.industry || ''].filter(Boolean).join('，');
   }
   const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   function toStandardCsv(list, dates) {
@@ -523,7 +523,7 @@
    * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
    */
   function dailyFacts(r) {
-    const signals = [...new Set(r.kinds.filter((k) => k !== '正在蓋廠房').map(groupSignal))];
+    const signals = [...new Set(r.kinds.filter((k) => k !== '新建廠房' && k !== '正在蓋廠房').map(groupSignal))];
     if (r.permit) signals.push(permitText(r));   // 「正在蓋廠房（造價 1,280 萬）」（版本 365）
     if (isFresh(r)) signals.push(r.kinds.some((k) => VEHICLE.test(k)) ? '剛做車輛業' : '剛出現在產業名單');
     if (isNewSite(r)) signals.push(`剛有${r.newSite.what}`);
