@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261023-373';
+  const APP_VERSION = '20261023-374';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3388,7 +3388,9 @@
     });
     // 成立 10 年以上的真的排最後（版本 345；使用者：「今天給我的名單為甚麼都是成立年非新公司」——以前只是第 7 順位的比較條件，有訊號的老公司照樣排前面）
     // 有手機號碼的排前面（版本 347；使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）：排在訊號前面
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    // 規模符合（資本額 300～6,000 萬）且有手機的排在「有手機」前面（版本 374；使用者：「這幾天的名單確實都是給我有手機的名單，但好像規模都偏小」→「規模符合且有手機的排在有手機前面」）
+    const fit = (c) => Number(!!(c.capOk && c.mobile));
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -3522,7 +3524,7 @@
     const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in'];
     await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
-      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank }));
+      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4 }));
   };
   /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
@@ -3608,8 +3610,9 @@
       // 商行也一樣：成立 10 年以上排最後（版本 345），商行頁自己的四級順序在各級裡照舊
       const oldBiz = (r) => Number(r.years) >= 10;
       const mobileB = (r) => !!((window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}).mobile;   // 有手機的先（版本 347）
+      const fitB = (r) => { const f = (window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}; return Number(!!(f.capOk && f.mobile)); };   // 規模符合且有手機最前面（版本 374）
       bz = bz.filter((r) => capitalOk(r.capital));   // 商行也一樣：資本額要滿 200 萬（版本 362）
-      bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || a[1] - b[1]).map(([r]) => r);
+      bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || fitB(b[0]) - fitB(a[0]) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || a[1] - b[1]).map(([r]) => r);
       /*
        * 只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
        * 這是每日新名單唯一的門檻（合併頁、各分頁照舊都看得到）：沒電話的先用 Google 地圖查一次（名稱、地址都對得上才算），
