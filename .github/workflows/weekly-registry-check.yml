@@ -13,7 +13,7 @@ name: 每週商工登記查詢健檢
 on:
   schedule:
     # 台灣時間每週日 18:00 = UTC 週日 10:00
-    - cron: '0 10 * * 0'
+    - cron: '47 9 * * 0'
   workflow_dispatch:
 
 permissions:

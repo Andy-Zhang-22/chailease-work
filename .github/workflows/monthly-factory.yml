@@ -5,7 +5,7 @@ name: 每月新設工廠
 
 on:
   schedule:
-    - cron: '0 20 19 * *'   # 每月 20 日台灣 04:00
+    - cron: '47 19 19 * *'   # 每月 20 日台灣 03:47
   workflow_dispatch:
     inputs:
       cities:

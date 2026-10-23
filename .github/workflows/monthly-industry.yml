@@ -6,7 +6,7 @@ name: 每月產業名單
 
 on:
   schedule:
-    - cron: '0 20 13 * *'   # 每月 14 日台灣 04:00
+    - cron: '47 19 13 * *'   # 每月 14 日台灣 03:47
   workflow_dispatch:
     inputs:
       cities:

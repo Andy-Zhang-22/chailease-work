@@ -112,3 +112,20 @@ test('fetch-industry 第三批：新北建照只收起造人像公司、不是�
   const noPermit = I.toRecord({ 統編: '56789013', 名稱: '庚公司', 類別: '食品製造業', 首見年月: '202610' }, TODAY, '202610');
   assert.equal(noPermit.permit, null);
 });
+
+test('環保列管快取（版本 375）：抓成功存留下來的公司的列管場所，抓不到就讀回來同一個形狀', async () => {
+  const t = await import(pathToFileURL(path.join(ROOT, 'tools/fetch-industry.mjs')).href);
+  const byTax = new Map([
+    ['12345678', { sites: [{ key: 'E:P001', type: 'factory', flags: ['水污'] }, { key: 'F:A-1', type: 'food' }] }],
+    ['23456789', { sites: [{ key: 'E:S001', type: 'site', flags: [] }] }],
+    ['34567890', { sites: [{ key: 'F:A-2', type: 'food' }] }],
+    ['45678901', {}],
+  ]);
+  const j = t.envCacheOf(byTax, '2026-10-23T00:00:00.000Z');
+  assert.equal(j.total, 2, '只存有列管場所的公司，食品的不算');
+  assert.deepEqual(j.by['12345678'], [{ key: 'E:P001', type: 'factory', flags: ['水污'] }]);
+  const back = t.envCacheToMap(JSON.parse(JSON.stringify(j)));
+  assert.equal(back.size, 2);
+  assert.deepEqual(back.get('23456789').get('E:S001'), { key: 'E:S001', type: 'site', flags: [] });
+  assert.equal(t.envCacheToMap(null).size, 0);
+});

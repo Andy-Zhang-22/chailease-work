@@ -5,7 +5,7 @@ name: 每月電子發票導入名單
 
 on:
   schedule:
-    - cron: '0 20 10 * *'   # 每月 11 日台灣 04:00
+    - cron: '47 19 10 * *'   # 每月 11 日台灣 03:47
   workflow_dispatch:
     inputs:
       cities:

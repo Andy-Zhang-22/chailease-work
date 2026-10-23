@@ -10,7 +10,7 @@ name: 每月動保清冊
 
 on:
   schedule:
-    - cron: '0 2 10 * *'
+    - cron: '47 1 10 * *'
   workflow_dispatch:
     inputs:
       skip_fetch:
