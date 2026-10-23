@@ -36,5 +36,6 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  const again=await pg.evaluate(()=>window.holidayDefer());
  chk(again.moved===0, '再跑一次沒有東西可挪');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
+ console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();
