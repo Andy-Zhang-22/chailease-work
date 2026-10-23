@@ -179,6 +179,11 @@ async function main() {
         + `${res.research ? `；網路查了 ${res.research.asked} 家，${res.research.strong} 家有明確擴張訊號（弱訊號 ${res.research.withSignals - res.research.strong}）${researchStats.failed ? `（${researchStats.failed} 家查失敗）` : ''}；挑進來的 ${res.picked} 家裡 ${res.research.pickedStrong} 家有明確訊號` : ''}`;
     }
     out(line);
+    // 放假那天排著的全部挪到下個上班日（版本 373；使用者：「今天要打的電話也要因為颱風假順延啊」）
+    if (res && res.holiday) {
+      const hd = await page.evaluate(() => window.holidayDefer());
+      out(hd.moved ? `放假順延：今天排著的 ${hd.moved} 家挪到 ${hd.next}` : '放假順延：今天沒有排著要打的');
+    }
     // 3a. 今天排著的新名單裡還沒查過訊號的補查（版本 331：額度被別處挑的排滿時，後台沒挑也沒查，10/12 第一次正式跑就是這樣）
     if (CLAUDE_ON && RESEARCH) {
       const fi = await page.evaluate(() => window.fillTodayIntel());
