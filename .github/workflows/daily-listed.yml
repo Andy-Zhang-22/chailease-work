@@ -10,7 +10,7 @@ name: 每日上市櫃公司
 
 on:
   schedule:
-    - cron: '30 22 * * *'   # 台灣 06:30，重大訊息是前一天整天的
+    - cron: '17 22 * * *'   # 台灣 06:17（版本 375 改非整點），重大訊息是前一天整天的
   workflow_dispatch:
     inputs:
       minutes:

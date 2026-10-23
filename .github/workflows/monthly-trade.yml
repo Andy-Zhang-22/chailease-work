@@ -7,7 +7,7 @@ name: 每月出進口廠商
 
 on:
   schedule:
-    - cron: '0 20 8 * *'   # 每月 9 日台灣 04:00（在商行、公司清冊之後一天）
+    - cron: '47 19 8 * *'   # 每月 9 日台灣 03:47（在商行、公司清冊之後一天）
   workflow_dispatch:
     inputs:
       cities:

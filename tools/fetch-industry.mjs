@@ -259,6 +259,24 @@ async function fetchEnv() {
   return by;
 }
 
+/*
+ * 環保列管的快取（版本 375）：環境部 API 一天 5,000 次的額度跟別人共用、也常連不上，一掛整輪白跑（10/22～23 五次失敗四次）。
+ * 每次抓成功就把「留下來的公司」的列管場所存成 env-cache.json（只有縣市內的幾千家，不是全國）；抓不到就沿用，其餘六份照常更新。
+ */
+export function envCacheOf(byTax, generatedAt = new Date().toISOString()) {
+  const by = {};
+  byTax.forEach((r, tax) => {
+    const sites = (r.sites || []).filter((st) => /^E:/.test(st.key)).map((st) => ({ key: st.key, type: st.type, flags: st.flags || [] }));
+    if (sites.length) by[tax] = sites;
+  });
+  return { generatedAt, total: Object.keys(by).length, by };
+}
+export function envCacheToMap(j) {
+  const by = new Map();
+  Object.entries((j && j.by) || {}).forEach(([tax, sites]) => { by.set(tax, new Map(sites.map((st) => [st.key, { key: st.key, type: st.type, flags: st.flags || [] }]))); });
+  return by;
+}
+
 async function main() {
   const now = new Date();
   const ym = ymOf(now);
@@ -302,7 +320,15 @@ async function main() {
     sites.forEach((st, k) => { x.sites.set(k, st); x.kinds.add(kindOf(st)); });
   });
   addExtra(await fetchFood(), () => FOOD.kind);
-  addExtra(await fetchEnv(), (st) => (st.type === 'site' ? ENV.site : ENV.factory));
+  let envBy; let envCachedFrom = '';
+  try { envBy = await fetchEnv(); } catch (err) {
+    let j = null;
+    try { j = JSON.parse(await fs.readFile(path.join(OUT, 'env-cache.json'), 'utf8')); } catch (e) { j = null; }
+    if (!j) throw err;
+    envBy = envCacheToMap(j); envCachedFrom = String(j.generatedAt || '');
+    console.log(`  環保列管抓不到（${err && err.message ? err.message : err}），沿用 ${envCachedFrom.slice(0, 10)} 的快取 ${envBy.size.toLocaleString()} 家，其餘照常更新`);
+  }
+  addExtra(envBy, (st) => (st.type === 'site' ? ENV.site : ENV.factory));
   // 2b. 新北建照：起造人名字（沒統編），對稅籍檔的營業人名稱
   const permitByName = await fetchPermits();
   let permitHit = 0;
@@ -371,6 +397,8 @@ async function main() {
     withPhone: list.filter((r) => r.tel).length, byKind, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     files: [{ path: 'industry.csv', rows: list.length }],
   };
+  if (envCachedFrom) index.envCachedFrom = envCachedFrom;
+  else await fs.writeFile(path.join(OUT, 'env-cache.json'), `${JSON.stringify(envCacheOf(byTax, index.generatedAt))}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');
   console.log(`\n留 ${list.length.toLocaleString()} 家（${Object.entries(byKind).map(([k, v]) => `${k} ${v}`).join('、')}；剛出現 ${index.newTotal}；有電話 ${index.withPhone}）→ ${OUT}`);
 }

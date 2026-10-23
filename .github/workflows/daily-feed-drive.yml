@@ -17,7 +17,7 @@ name: 每日新名單（雲端硬碟名單）
 
 on:
   schedule:
-    - cron: '0 21 * * *'   # 台灣 05:00（版本 333 跟商工登記對調：先挑好，05:30 的商工登記更新同一天就查得到新名單）
+    - cron: '47 20 * * *'   # 台灣 04:47（版本 375 改非整點：GitHub 整點的排程會延後幾小時，10/23 的 05:00 到 07:53 才跑；版本 333 排在商工登記之前）
   workflow_dispatch:
     inputs:
       mode:
@@ -91,7 +91,7 @@ jobs:
       - name: 裝 Playwright 與 Chromium
         run: npm i --no-save playwright@1.63.0 @anthropic-ai/sdk && npx playwright install --with-deps chromium
 
-      # 颱風假（版本 371）：每晚 21:00 的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，
+      # 颱風假（版本 371）：每晚的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，
       # 這裡 checkout 到就讀得到，挑名單那步會當假日；不用再查一次
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
