@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261023-372';
+  const APP_VERSION = '20261023-373';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -461,10 +461,11 @@
      * 禁止推廣的、今天已經處理過的不動。明天的新名單額度會把這些算進去，不會又多補 20 家上去。
      */
     // 今天約了拜訪的不挪：挪了下次聯絡日，行事曆上那天的拜訪就不見了
-    const due = allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate && !visitBooked(v));
-    if (due.length && !off) {
+    const due = movableToday();
+    // 放假那天也給這顆（版本 373）：後台清晨會自動挪，後台沒跑到就自己按
+    if (due.length) {
       const next = window.Holidays ? window.Holidays.nextWorkday(addDays(today, 1)).iso : addDays(today, 1);
-      const defer = el('button', { className: 'btn btn-tiny', id: 'feedDefer', type: 'button', textContent: `今天的 ${due.length} 家挪到 ${dateLabel(next)}`, title: '今天不打了：今天排著、還沒處理的全部改到下一個上班日' });
+      const defer = el('button', { className: 'btn btn-tiny', id: 'feedDefer', type: 'button', textContent: `今天的 ${due.length} 家挪到 ${dateLabel(next)}`, title: off ? '今天放假：今天排著、還沒處理的全部改到下一個上班日' : '今天不打了：今天排著、還沒處理的全部改到下一個上班日' });
       defer.onclick = async () => {
         if (!await askConfirm(`把今天排著的 ${due.length} 家全部改到 ${dateLabel(next)}（${window.Holidays ? window.Holidays.weekLabel(next) : ''}）？今天已經處理過的、禁止推廣的不動。`, { okText: '挪到那天' })) return;
         defer.disabled = true; defer.textContent = '挪動中…';
@@ -3192,6 +3193,27 @@
     return undo.length;
   }
   window.autoRebalance = autoRebalance;   // 測試用
+
+  /** 今天排著、還沒處理、可以挪的：禁止推廣的、今天處理過的、固定日期的、約了拜訪的不算 */
+  const movableToday = () => { const today = todayISO(); return allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate && !visitBooked(v)); };
+  /*
+   * 放假那天（颱風假、國定假日）排著的全部挪到下個上班日（版本 373；使用者：「今天要打的電話也要因為颱風假順延啊」）。
+   * 後台每天清晨跑（feed-drive.mjs）；用 soft 寫，使用者自己在別台改過的日期不會被蓋掉。
+   * @returns {{ moved: number, next: string }}
+   */
+  async function holidayDefer() {
+    const today = todayISO();
+    if (!window.Holidays || window.Holidays.isWorkday(today)) return { moved: 0, next: '' };
+    const next = window.Holidays.nextWorkday(addDays(today, 1)).iso;
+    const due = movableToday();
+    let moved = 0;
+    for (const v of due) {
+      try { await saveState(v.id, { nextDate: next }, { soft: true }); moved += 1; } catch (err) { console.error('放假順延失敗', err); break; }
+    }
+    if (moved) { await reload(); render(); scheduleSync(); }
+    return { moved, next };
+  }
+  window.holidayDefer = holidayDefer;
 
   /*
    * 整批改日期（挪到下個上班日、照上限重排）前先同步一次，拉不到雲端最新的就不動（版本 361）。
