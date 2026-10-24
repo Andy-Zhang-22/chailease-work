@@ -34,6 +34,16 @@ def main():
                             item["keys"] = list(j.keys())[:12] if isinstance(j, dict) else f"list[{len(j)}]"
                             txt = json.dumps(j, ensure_ascii=False)
                             item["titles"] = re.findall(r'"title"\s*:\s*"([^"]{2,60})"', txt)[:25]
+                            pl = j.get("payload") if isinstance(j, dict) else None
+                            rows = (pl.get("data") or pl.get("list") or pl.get("rows") or pl.get("datasets")) if isinstance(pl, dict) else (pl if isinstance(pl, list) else None)
+                            if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                                item["item_keys"] = list(rows[0].keys())[:20]
+                                item["payload_keys"] = list(pl.keys())[:12] if isinstance(pl, dict) else "list"
+                                for r0 in rows:
+                                    t0 = str(r0.get("title", ""))
+                                    if re.search(r"決標|採購|標案", t0):
+                                        i0 = str(r0.get("id") or r0.get("oid") or r0.get("datasetId") or "")
+                                        if i0 and i0 not in ids: ids.append(i0)
                         except Exception:
                             pass
                     api_calls.append(item)
@@ -50,9 +60,16 @@ def main():
                 # 試著直接在搜尋框打字再送出（網址帶 q 可能沒被讀）
                 boxes = pg.query_selector_all("input")
                 print(f"  頁上 input {len(boxes)} 個：{[(b.get_attribute('type'), b.get_attribute('placeholder'), b.get_attribute('name'), b.get_attribute('id')) for b in boxes[:8]]}")
-                box = pg.query_selector("input[type='search'], input[placeholder*='搜尋'], input[placeholder*='關鍵'], input[name='q'], input[type='text']")
-                if box:
-                    box.fill(q); box.press("Enter"); pg.wait_for_timeout(5000)
+                # 搜尋框 #searchbar-input 不是 editable（前端元件包起來）：用點的＋鍵盤打字
+                try:
+                    loc = pg.locator("#searchbar-input")
+                    loc.click(force=True, timeout=10000)
+                    pg.keyboard.type(q, delay=50)
+                    pg.keyboard.press("Enter")
+                    pg.wait_for_timeout(6000)
+                    print(f"  打字送出後網址：{pg.url[:160]}")
+                except Exception as e:
+                    print(f"  搜尋框打字失敗：{str(e)[:120]}")
                 rows = pg.eval_on_selector_all("a[href*='/dataset/']", "els => els.map(a => [a.getAttribute('href'), (a.innerText||'').trim()])")
                 rows = [(h, t) for h, t in rows if re.search(r"/dataset/\d+$", h or "") and t]
                 print(f"  查「{q}」：畫面上資料集連結 {len(rows)} 個；標題含決標／採購的：{[t[:40] for h, t in rows if re.search(r'決標|採購|標案', t)][:10]}")
@@ -69,14 +86,17 @@ def main():
         print(f"  背後 API 呼叫 {len(api_calls)} 個：")
         for c in api_calls[:20]:
             print(f"    {c['status']} {c['ct']} {c['url']}")
-            if c.get("keys"): print(f"       keys={c['keys']}")
+            if c.get("keys"): print(f"       keys={c['keys']} payload_keys={c.get('payload_keys')} item_keys={c.get('item_keys')}")
             if c.get("titles"): print(f"       titles={c['titles'][:12]}")
             for t in c.get("titles", []):
                 pass
         br.close()
     print("== 1b. 直接打 /api/front/dataset/list 試關鍵字參數")
-    for params in [{"keyword": "決標公告", "size": 20, "page": 1}, {"q": "決標公告", "size": 20, "p": 1}, {"query": "決標公告"}, {"searchText": "決標公告"}]:
-        for method in ["GET", "POST"]:
+    base = {"bool": [], "filter": [], "page_num": 1, "page_limit": 20, "tids": [], "sort": "_score_desc"}
+    variants = [dict(base, bool=[{"query": "決標公告"}]), dict(base, bool=[{"keyword": "決標公告"}]), dict(base, bool=[{"q": "決標公告"}]), dict(base, bool=["決標公告"]),
+                dict(base, keyword="決標公告"), dict(base, q="決標公告"), dict(base, query="決標公告"), dict(base, filter=[{"field": "title", "value": "決標"}])]
+    for params in variants:
+        for method in ["POST"]:
             try:
                 if method == "GET":
                     req = urllib.request.Request("https://data.gov.tw/api/front/dataset/list?" + urllib.parse.urlencode(params), headers={"User-Agent": UA, "Accept": "application/json"})
@@ -87,7 +107,8 @@ def main():
                 txt = json.dumps(j, ensure_ascii=False)
                 titles = re.findall(r'"title"\s*:\s*"([^"]{2,60})"', txt)
                 hit = [t for t in titles if re.search(r"決標|採購|標案", t)]
-                print(f"  {method} {params}: 回 {len(titles)} 個標題，含決標／採購 {len(hit)} 個 {hit[:8]}")
+                short = {k: v for k, v in params.items() if k not in ("filter", "page_num", "page_limit", "tids", "sort") or k == "filter" and v}
+                print(f"  {method} {short}: 回 {len(titles)} 個標題，含決標／採購 {len(hit)} 個 {hit[:8]}；前 3 個標題 {titles[:3]}")
                 if hit:
                     for m in re.finditer(r'\{[^{}]*"title"\s*:\s*"([^"]*(?:決標|採購|標案)[^"]*)"[^{}]*\}', txt):
                         blk = m.group(0)
@@ -124,6 +145,18 @@ def main():
                 print(f"       檔：{x.get('resourceFormat','')} {x.get('resourceDownloadUrl','') or x.get('accessURL','')}")
         except Exception as e:
             print(f"  [{i}] 詮釋資料失敗：{e}")
+        pause()
+    print("== 1c. v2 API 有沒有搜尋端點")
+    for url in ["https://data.gov.tw/api/v2/rest/datasets?q=%E6%B1%BA%E6%A8%99&size=20", "https://data.gov.tw/api/v2/rest/dataset?q=%E6%B1%BA%E6%A8%99", "https://data.gov.tw/api/v2/rest/datasets/search?q=%E6%B1%BA%E6%A8%99"]:
+        try:
+            st, ct, body = get(url)
+            txt = body.decode("utf-8", "ignore")
+            titles = re.findall(r'"title"\s*:\s*"([^"]{2,60})"', txt)
+            print(f"  {url[:70]} HTTP {st} {ct.split(';')[0]} {len(body)} bytes，標題 {len(titles)} 個，含決標 {[t for t in titles if '決標' in t][:5]}")
+        except urllib.error.HTTPError as e:
+            print(f"  {url[:70]} HTTP {e.code}")
+        except Exception as e:
+            print(f"  {url[:70]} 失敗 {str(e)[:80]}")
         pause()
     print("== 3. 採購網本身（境外會不會擋）")
     try:
