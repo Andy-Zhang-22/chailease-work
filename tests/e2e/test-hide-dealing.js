@@ -1,5 +1,6 @@
 // 隱藏「中租往來」（使用者：「請幫我像隱藏禁止推廣一樣，隱藏中租往來的客戶」）：預設勾、記住；篩選點「中租往來」時不藏；家數照樣算
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -24,8 +25,10 @@ const mk=(id,company,notes)=>({id,source:'A.csv',company,aliases:[],taxId:'10000
  chk((await names()).includes('今天到期往來有限公司') && (await names()).includes('逾期往來有限公司'), `中租往來但今天到期、逾期的照樣列：${await names()}`);
  const chips=await pg.$$eval('#fltRelation .chip',a=>a.map(x=>x.textContent.replace(/\s+/g,'')).join('|'));
  chk(/3有跟中租往來/.test(chips), `往來情形那組家數照樣算：${chips}`);
+ await openFilters(pg);
  await pg.locator('#fltRelation .chip').first().click(); await pg.waitForTimeout(300);
  chk((await names())==='今天到期往來有限公司|往來中有限公司|逾期往來有限公司', `篩選點「中租往來」時不藏：${await names()}`);
+ await openFilters(pg);
  await pg.locator('#fltRelation .chip').first().click(); await pg.waitForTimeout(300);
  await pg.uncheck('#hideDealing'); await pg.waitForTimeout(300);
  chk((await names()).split('|').length===5, `取消勾就全部出來：${await names()}`);

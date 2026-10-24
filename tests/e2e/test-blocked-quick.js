@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -13,6 +14,7 @@ const mk=(id,name)=>({id,source:'A.csv',company:name,aliases:[],taxId:'',grade:'
  await pg.goto('http://localhost:9088/index.html'); await pg.evaluate(()=>{try{localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0');localStorage.setItem('registry-auto','0');}catch(e){}}); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{await window.Store.saveRecords(r);},[mk('1','甲公司'),mk('2','乙公司')]);
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
+ await openFilters(pg);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(300);
  await pg.locator('.card:has-text("甲公司") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  // 其他結果沒填內容仍擋

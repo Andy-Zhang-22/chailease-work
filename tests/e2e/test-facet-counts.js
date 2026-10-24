@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -20,6 +21,7 @@ const SEED=[
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(400);
  const chip=async(host,label)=>pg.evaluate(([h,l])=>{const c=[...document.querySelectorAll(`${h} .chip`)].find(x=>x.textContent.trim().endsWith(l)); return c?Number(c.querySelector('small').textContent):null;},[host,label]);
  chk(await chip('#fltPhone','有電話')===2&&await chip('#fltPhone','無電話')===2&&await chip('#fltCity','新北市')===3&&await chip('#fltTax','有統編')===3, '一開始是總數');
+ await openFilters(pg);
  await pg.locator('#fltPhone .chip').filter({hasText:/無電話$/}).click(); await pg.waitForTimeout(300);
  chk(/顯示 2 \/ 2 筆/.test(await pg.textContent('#listSummary')), '只看無電話：2 筆');
  chk(await chip('#fltPhone','有電話')===2&&await chip('#fltPhone','無電話')===2, '自己這組的數字不變（有電話仍是 2，才能換著看）');
@@ -27,11 +29,13 @@ const SEED=[
  const opt=await pg.evaluate(()=>[...document.querySelectorAll('#fltBranch option')].map(o=>o.textContent).join('|'));
  chk(/新莊分公司（1）/.test(opt)&&/城中分公司（1）/.test(opt), `歸屬分公司下拉的數字也連動：${opt}`);
  // 再加一個條件：優先區域 → 完整度那組的數字看的是「其他條件」
+ await openFilters(pg);
  await pg.locator('#fltCity .chip').filter({hasText:/新北市$/}).click(); await pg.waitForTimeout(300);
  chk(/顯示 1 \/ 1 筆/.test(await pg.textContent('#listSummary'))&&await chip('#fltPhone','有電話')===2&&await chip('#fltPhone','無電話')===1, `疊加新北市後：有電話 ${await chip('#fltPhone','有電話')}（新北市裡有 2 家有電話）、無電話 ${await chip('#fltPhone','無電話')}`);
  // 搜尋也算進去
  await pg.fill('#search','丙'); await pg.waitForTimeout(500);
  chk(await chip('#fltPhone','有電話')===0&&await chip('#fltPhone','無電話')===1, `搜尋「丙」後：有電話 ${await chip('#fltPhone','有電話')}、無電話 ${await chip('#fltPhone','無電話')}`);
+ await openFilters(pg);
  await pg.fill('#search',''); await pg.waitForTimeout(400); await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  chk(await chip('#fltPhone','有電話')===2&&await chip('#fltCity','新北市')===3, '清除後回到總數');
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

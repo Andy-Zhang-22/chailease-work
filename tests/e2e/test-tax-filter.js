@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -18,20 +19,27 @@ const SEED=[mk('1','有統編甲公司','12345678'),mk('2','無統編乙公司',
  chk(/資料完整度/.test(await pg.evaluate(()=>document.querySelector('#fltTax').closest('.filter-group').querySelector('label').textContent)), '篩選區群組改名「資料完整度」');
  chk(JSON.stringify(await chips())===JSON.stringify(['1 有統編','2 無統編']), `兩顆固定順序含筆數：${await chips()}`);
  const names=async()=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent).sort());
+ await openFilters(pg);
  await pg.locator('#fltTax .chip').filter({hasText:/有統編$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['有統編甲公司']), `只看有統編：${await names()}`);
+ await openFilters(pg);
  await pg.locator('#fltTax .chip').filter({hasText:/有統編$/}).click(); await pg.locator('#fltTax .chip').filter({hasText:/無統編$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['無統編乙公司','無統編丙公司'].sort()), `只看無統編：${await names()}`);
  chk(await pg.getAttribute('#fltTax .chip[data-value="no"]','aria-pressed')==='true', '按下去的晶片有選取狀態');
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  const pchips=await pg.evaluate(()=>[...document.querySelectorAll('#fltPhone .chip')].map(c=>c.textContent.trim()));
  chk(JSON.stringify(pchips)===JSON.stringify(['2 有電話','1 無電話']), `同一組裡有電話／無電話兩顆：${pchips}`);
+ await openFilters(pg);
  await pg.locator('#fltPhone .chip').filter({hasText:/無電話$/}).click(); await pg.waitForTimeout(300);
  chk(JSON.stringify(await names())==='["無統編丙公司"]', `只看無電話：${await names()}`);
+ await openFilters(pg);
  await pg.locator('#fltTax .chip').filter({hasText:/無統編$/}).click(); await pg.waitForTimeout(300);
  chk(JSON.stringify(await names())==='["無統編丙公司"]', `無統編＋無電話疊加：${await names()}`);
+ await openFilters(pg);
  await pg.locator('#fltPhone .chip').filter({hasText:/無電話$/}).click(); await pg.waitForTimeout(300);
  chk(JSON.stringify(await names())===JSON.stringify(['無統編乙公司','無統編丙公司'].sort()), `取消無電話後只剩無統編條件：${await names()}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  chk((await names()).length===3&&await pg.getAttribute('#fltTax .chip[data-value="no"]','aria-pressed')==='false', '清除篩選後全部回來、晶片取消');
  // 在網站上幫乙公司補上統編 → 變成有統編

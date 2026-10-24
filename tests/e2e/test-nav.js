@@ -14,7 +14,7 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.goto('http://localhost:9511/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(()=>{ localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); });
  const tabs=await pg.$$eval('#tabs .tab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(tabs.length===4 && tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('行事曆') && tabs[2]==='找名單' && /篩選/.test(tabs[3]), `分頁列四個：${tabs.join(' | ')}`);
+ chk(tabs.length===3 && tabs[0].startsWith('重點推廣名單') && tabs[1].startsWith('行事曆') && tabs[2]==='找名單' && await pg.isVisible('#btnFilters'), `分頁列三個，篩選鈕在名單上方（版本 383）：${tabs.join(' | ')}`);
  chk(await pg.locator('#subtabs').isHidden(), '在重點推廣名單時第二排收著');
  // 按找名單：第二排只剩全部（合併）、商行／企業社、上市櫃（版本 327），預設開合併頁
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(400);

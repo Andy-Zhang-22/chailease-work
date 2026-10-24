@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261024-382';
+  const APP_VERSION = '20261024-383';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -41,6 +41,16 @@
   const CHANCE_LABEL = { yes: '有機會', no: '無機會', none: '未判斷' };
   const PAGE_SIZE = 60;
   const $ = (sel) => document.querySelector(sel);
+  /*
+   * 線條圖示（版本 383，使用者挑了 D2 設計）：名單頁的 📞 📅 從系統 emoji 換成跟文字同色的細線圖，
+   * 每台電腦長得一樣、也不會比字還搶眼。只有名單頁用；其他地方的 emoji 沒動。
+   */
+  const ICON = {
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  };
+  const icon = (name) => { const i = document.createElement('i'); i.className = 'ic'; i.setAttribute('aria-hidden', 'true'); i.innerHTML = ICON[name]; return i; };
+
   const el = (tag, props, children) => {
     const node = document.createElement(tag);
     Object.entries(props || {}).forEach(([key, value]) => {
@@ -676,7 +686,7 @@
     const dateCount = items.filter((x) => x.kind === 'date').length;
     bar.classList.toggle('is-due', dueCount > 0);
     // 固定展開：以前可以收起來，使用次數顯示三天內展開／收合點了一百多次，等於每次都要先點開才看得到（版本 314 拿掉）
-    const title = el('strong', { className: 'remind-title', textContent: dueCount ? `⏰ 該回撥了（${dueCount}）` : `⏰ 今天要打（${items.length}）` });
+    const title = el('strong', { className: 'remind-title', textContent: dueCount ? `該回撥了（${dueCount}）` : `今天要打（${items.length}）` });
     const head = el('div', { className: 'remind-head' }, [title]);
     const tools = el('div', { className: 'remind-tools' });
     if (dateCount) {
@@ -700,7 +710,7 @@
       openBtn.onclick = () => openDetail(r.id);
       const main = el('div', { className: 'remind-main' }, [openBtn]);
       const p = r.phones && r.phones[0];
-      if (p) main.append(el('a', { className: 'remind-tel', href: `tel:${p.dial || p.digits}`, textContent: `📞 ${p.display || p.digits}` }));
+      if (p) main.append(el('a', { className: 'remind-tel', href: `tel:${p.dial || p.digits}` }, [icon('phone'), document.createTextNode(p.display || p.digits)]));
       const actions = el('div', { className: 'remind-actions' });
       /*
        * 「完成」是把這一列處理掉，不是只取消那個鬧鐘。
@@ -4220,7 +4230,7 @@
 
   /** 只更新按鈕的選取狀態，不動 DOM 結構。 */
   function syncChipStates() {
-    document.querySelectorAll('#filters .chip[data-filter]').forEach((chip) => {
+    document.querySelectorAll('#filters .chip[data-filter], #quickBar .chip[data-filter]').forEach((chip) => {
       const { filter, value } = chip.dataset;
       const on = filter === 'due'
         ? state.filters.due === value
@@ -4243,7 +4253,7 @@
     const terms = searchTerms();
     const baseFor = (key) => views.filter((r) => passesFilters(r, key, terms));
     Object.keys(FACET_VALUE).forEach((key) => {
-      const hosts = document.querySelectorAll(`#filters .chip[data-filter="${key}"]`);
+      const hosts = document.querySelectorAll(`#filters .chip[data-filter="${key}"], #quickBar .chip[data-filter="${key}"]`);
       const sel = key === 'branch' ? $('#fltBranch') : null;
       if (!hosts.length && !sel) return;
       const base = baseFor(key);
@@ -4270,7 +4280,7 @@
     // 聯絡時程的快速鍵：各自是一段日期範圍，用同樣的方式算
     const dueBase = baseFor('due');
     const today = todayISO();
-    document.querySelectorAll('#filters .chip[data-filter="due"]').forEach((chip) => {
+    document.querySelectorAll('#filters .chip[data-filter="due"], #quickBar .chip[data-filter="due"]').forEach((chip) => {
       const quick = DUE_QUICK.find(([k]) => k === chip.dataset.value);
       const small = chip.querySelector('small');
       if (!quick || !chip.dataset.value || !small) return;
@@ -4306,6 +4316,7 @@
   }
   /** 每一組標題後面標「已選幾個」，收起來也看得到有沒有篩選在作用。 */
   function updateFilterCounts() {
+    let total = 0;
     document.querySelectorAll('#filters .filter-group[data-group]').forEach((g) => {
       let n = g.querySelectorAll('.chip[aria-pressed="true"]').length;
       const key = g.dataset.group;
@@ -4315,10 +4326,14 @@
       if (key === 'sort') n = 0;
       const label = g.querySelector(':scope > label');
       let pill = label && label.querySelector('.filter-count');
+      total += n;
       if (!n) { if (pill) pill.remove(); return; }
       if (!pill) { pill = el('span', { className: 'filter-count' }); label.append(pill); }
       pill.textContent = String(n);
     });
+    // 「更多篩選」鈕上也標總數：面板收著也看得出名單有沒有被篩過
+    const all = $('#filtersCount');
+    if (all) { all.textContent = total ? String(total) : ''; all.hidden = !total; }
   }
 
   function renderFilters() {
@@ -4364,9 +4379,10 @@
       });
     };
 
-    const dueHost = $('#fltDue');
-    dueHost.textContent = '';
     const today = todayISO();
+    // 上方那排（#quickDue）與面板裡（#fltDue）各一份，按哪一份都一樣
+    [$('#fltDue'), $('#quickDue')].filter(Boolean).forEach((dueHost) => {
+    dueHost.textContent = '';
     DUE_QUICK.forEach(([value, label, rangeOf]) => {
       const btn = el('button', { className: 'chip', type: 'button' });
       btn.dataset.filter = 'due';
@@ -4382,6 +4398,7 @@
       }
       btn.onclick = () => { applyDueQuick(value); state.limit = PAGE_SIZE; render(); };
       dueHost.append(btn);
+    });
     });
 
     chips($('#fltSource'), 'source', tally((r) => r.source), state.filters.source, (v) => v.replace(/\.pdf$/i, ''));
@@ -4419,6 +4436,8 @@
       chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1);
     });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
+    // 上方那排只放「有機會」：無機會、未判斷留在面板裡
+    if ($('#quickChance')) chips($('#quickChance'), 'chance', [['yes', chanceCounts.get('yes') || 0]], state.filters.chance, (v) => CHANCE_LABEL[v]);
     // 冷名單：固定兩顆，含 0 筆
     const coldCounts = [['cold', 0], ['ok', 0]];
     all.forEach((r) => { coldCounts[r.cold ? 0 : 1][1] += 1; });
@@ -4427,6 +4446,7 @@
     const oppCounts = new Map(OPP_ORDER.map((k) => [k, 0]));
     all.forEach((r) => { (r.opp || []).forEach((k) => oppCounts.set(k, (oppCounts.get(k) || 0) + 1)); });
     chips($('#fltOpp'), 'opp', OPP_ORDER.map((k) => [k, oppCounts.get(k)]), state.filters.opp, (v) => OPP_LABEL[v]);
+    if ($('#quickOpp')) chips($('#quickOpp'), 'opp', OPP_ORDER.map((k) => [k, oppCounts.get(k)]), state.filters.opp, (v) => OPP_LABEL[v]);
 
     // 統編：固定「有統編 → 無統編」兩顆，含 0 筆
     const taxCounts = [['yes', 0], ['no', 0]];
@@ -4580,7 +4600,7 @@
     const ext = String(p.dial || '').split(',')[1] || '';
 
     const link = el('a', { className: 'tel', href: `tel:${p.dial}` });
-    link.append(document.createTextNode(`📞 ${p.display}${p.note ? ` · ${p.note}` : ''}`));
+    link.append(icon('phone'), document.createTextNode(`${p.display}${p.note ? ` · ${p.note}` : ''}`));
     link.onclick = (e) => { e.stopPropagation(); if (r) markCall(r.id); };
 
     /*
@@ -4649,8 +4669,8 @@
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
 
     const row = el('div', { className: 'card-due' });
-    if (r.nextDate) row.append(el('span', { className: `card-next${bucket === 'overdue' ? ' is-overdue' : ''}`, textContent: `📅 下次 ${dateLabel(r.nextDate)}${bucket === 'overdue' ? `（逾期 ${-dayDiff(r.nextDate)} 天）` : ''}` }));
-    else row.append(el('span', { className: 'card-next muted', textContent: '📅 未排定' }));
+    if (r.nextDate) row.append(el('span', { className: `card-next${bucket === 'overdue' ? ' is-overdue' : ''}` }, [icon('cal'), document.createTextNode(`下次 ${dateLabel(r.nextDate)}${bucket === 'overdue' ? `（逾期 ${-dayDiff(r.nextDate)} 天）` : ''}`)]));
+    else row.append(el('span', { className: 'card-next muted' }, [icon('cal'), document.createTextNode('未排定')]));
     if (r.phones.length) telLinks(r, 1).forEach((a) => row.append(a));
     node.append(row);
 
@@ -4928,6 +4948,7 @@
     document.querySelector('.layout').classList.toggle('is-wide', wide);
     $('#filters').hidden = wide;
     $('#btnFilters').hidden = wide;
+    if (wide) { $('#filters').classList.remove('is-open'); document.querySelector('.layout').classList.remove('filters-open'); $('#filtersBackdrop').hidden = true; $('#btnFilters').setAttribute('aria-expanded', 'false'); }
     renderFilters();
     // 行事曆分頁名字後面帶今天還沒做的家數，不用進去就知道今天排了幾家
     { const n = state.records.length ? calTodayCount() : 0; const pill = $('#countCal'); if (pill) { pill.textContent = n ? String(n) : ''; pill.hidden = !n; } }
@@ -8568,11 +8589,17 @@ export default {
     };
 
     initFilterGroups();
-    $('#btnFilters').onclick = () => {
-      const open = $('#filters').classList.toggle('is-open');
+    // 篩選面板（版本 383）：從右邊滑出來，按「更多篩選」開、按 ✕、點旁邊、Esc 關
+    const setFilters = (open) => {
+      $('#filters').classList.toggle('is-open', open);
+      document.querySelector('.layout').classList.toggle('filters-open', open);
+      $('#filtersBackdrop').hidden = !open;
       $('#btnFilters').setAttribute('aria-expanded', String(open));
-      $('#btnFilters').textContent = open ? '篩選 ▴' : '篩選 ▾';
     };
+    $('#btnFilters').onclick = () => setFilters(!$('#filters').classList.contains('is-open'));
+    $('#btnFiltersClose').onclick = () => setFilters(false);
+    $('#filtersBackdrop').onclick = () => setFilters(false);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#filters').classList.contains('is-open')) setFilters(false); });
 
     $('#tabs').onclick = (e) => {
       const btn = e.target.closest('.tab');

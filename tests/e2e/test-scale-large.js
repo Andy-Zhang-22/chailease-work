@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -17,20 +18,26 @@ const SEED=[mk('1','微企甲','4,999'),mk('7','剛好五千庚','5,000'),mk('8'
  const chips=async()=>pg.evaluate(()=>[...document.querySelectorAll('#fltScale .chip')].map(c=>c.textContent.trim()));
  chk(JSON.stringify(await chips())===JSON.stringify(['1 微企範疇','4 一般組範疇','2 大企部範疇','1 未填資本額']), `規模四顆固定順序含筆數：${await chips()}`);
  const names=async()=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent).sort());
+ await openFilters(pg);
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['剛好五十萬丙','超過五十萬丁'].sort()), `大企部：500,000 仟含、以上都算；499,999 不算：${await names()}`);
  // 卡片變短後範疇不放卡片，詳細頁的資本總額後面寫範疇
  await pg.locator('#cards .card .card-name').first().click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(200);
  chk(/大企部範疇/.test(await pg.textContent('#drawerBody .detail-grid')), '詳細頁資本總額寫「大企部範疇」');
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(200);
+ await openFilters(pg);
  await pg.locator('#fltScale .chip').filter({hasText:/大企部範疇$/}).click(); await pg.locator('#fltScale .chip').filter({hasText:/一般組範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['一般乙','差一點戊','剛好五千庚','八千辛'].sort()), `一般組：5,000（含）以上、500,000 以下（8,000 不再是微企）：${await names()}`);
+ await openFilters(pg);
  await pg.locator('#fltScale .chip').filter({hasText:/一般組範疇$/}).click(); await pg.locator('#fltScale .chip').filter({hasText:/未填資本額$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['沒填己']), `未填資本額：${await names()}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  chk((await names()).length===8, '清除篩選後全部回來');
+ await openFilters(pg);
  await pg.locator('#fltScale .chip').filter({hasText:/微企範疇$/}).click(); await pg.waitForTimeout(400);
  chk(JSON.stringify(await names())===JSON.stringify(['微企甲']), `微企：只有 4,999，5,000 不算：${await names()}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  await pg.locator('.card:has-text("八千辛") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');

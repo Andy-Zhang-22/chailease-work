@@ -1,5 +1,6 @@
 // 短期內要聯絡的太多：要看得到每個上班日各有幾家，並且照「一天最多 N 家」把超過的往後挪。
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -61,6 +62,7 @@ SEED.push(mk(++n,'2026-12-20'));                                // 視野之外
  // --- 點某一天只看那天 ---
  await pg.click('.day-row:nth-child(3)'); await pg.waitForTimeout(600);
  chk(/顯示 3 \/ 3/.test(await pg.textContent('#listSummary')), `點一天就只看那天：${await pg.textContent('#listSummary')}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(400);
 
  // --- 照上限重排 ---

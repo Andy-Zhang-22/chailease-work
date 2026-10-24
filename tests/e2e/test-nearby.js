@@ -1,6 +1,7 @@
 // 客戶詳細頁「附近可以順訪的」：同區的客戶，同一條路排前面、再照值得去的程度；禁止推廣／冷名單／沒電話沒打過的不列；
 // 導航從現在這家出發；勾「連找名單的也列」把出進口廠商、商行同區的排進來、可以加入名單
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -51,6 +52,7 @@ const SEED=[
    // 乙：自己標了有機會（整列覆寫，所以放最後）
    await window.Store.setState({recordId:'b',outcome:'contacted',lastDate:'2026-09-25',chance:'yes',chanceAt:now,updatedAt:now}); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
+ await openFilters(pg);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(200);
  await pg.locator('#cards .card:has-text("現在這家") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);
  const det=pg.locator('#drawerBody details.nearby');
@@ -59,7 +61,7 @@ const SEED=[
  const rows=await det.locator('.nearby-row').allTextContents();
  const names=rows.map(t=>(t.match(/[一-龥]+有限公司/)||[''])[0]);
  chk(names.join('|')==='談過同路有限公司|沒打過同路有限公司|談過別路有限公司|打過還沒約有限公司', `同一條路先、再照值得去的程度；禁止推廣、沒電話沒打過、別區不列：${names.join('|')}`);
- chk(/有機會/.test(rows[2]) && /同一條路/.test(rows[0]) && !/有機會/.test(rows[0]) && /📞/.test(rows[0]) && /沒打過/.test(rows[1]) && /打過還沒約/.test(rows[3]), `籤：談過的不掛「有機會／談過」、自己標的「有機會」還在（乙）：${rows[0].replace(/\s+/g,' ')} ／ ${rows[3].replace(/\s+/g,' ')}`);
+ chk(/有機會/.test(rows[2]) && /同一條路/.test(rows[0]) && !/有機會/.test(rows[0]) && /02-2222-3333/.test(rows[0])   /* 版本 383：📞 換成線條圖示，看號碼 */ && /沒打過/.test(rows[1]) && /打過還沒約/.test(rows[3]), `籤：談過的不掛「有機會／談過」、自己標的「有機會」還在（乙）：${rows[0].replace(/\s+/g,' ')} ／ ${rows[3].replace(/\s+/g,' ')}`);
  const nav=await det.locator('.nearby-row').first().locator('a:has-text("導航")').getAttribute('href');
  chk(/origin=.*%E4%B8%AD%E6%AD%A3%E8%B7%AF100/.test(nav) && /destination=.*200/.test(nav), `導航從現在這家出發：${nav}`);
  // 記錄：打開那家、游標在「記錄這通電話」的內容框（拜訪表單拿掉了，拜訪也記在這）

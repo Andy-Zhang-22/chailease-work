@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -21,9 +22,11 @@ const SEED=[mk('1','迅德興業','桃園市龜山區民生北路一段38之1號
  await pg.reload(); await pg.waitForTimeout(900); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(400);
  const chips=await pg.evaluate(()=>[...document.querySelectorAll('#fltCity .chip')].map(c=>c.textContent.trim()).sort());
  chk(JSON.stringify(chips)===JSON.stringify(['1 其他','1 桃園市','2 新北市'].sort()), `縣市：舊縣名也算得出來、真的沒地址才是其他：${chips}`);
+ await openFilters(pg);
  await pg.locator('#fltCity .chip').filter({hasText:/其他$/}).click(); await pg.waitForTimeout(300);
  const names=await pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent));
  chk(JSON.stringify(names)==='["真的沒地址"]', `其他只剩沒填的那筆：${names}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  await pg.locator('.card:has-text("迅德興業") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
  const d=(await pg.textContent('#drawerBody')).replace(/\s+/g,' ');
