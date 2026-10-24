@@ -32,5 +32,6 @@
    "api_down": false
   }
  },
- "foundedAt": "2026-10-24T09:41:00.769Z"
+ "foundedAt": "2026-10-24T09:41:00.769Z",
+ "autoMerge": "2026-10-24 起 leads/pcc 的推送由 auto-merge-leads.yml 自動合進 main（版本 381）"
 }
