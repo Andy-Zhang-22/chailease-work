@@ -22,12 +22,14 @@ jobs:
           python-version: '3.12'
       - name: 裝 Playwright 與 Chromium
         run: pip install playwright && playwright install --with-deps chromium
-      - name: 開放資料探路
-        run: python pcc_test/probe_open_data.py 2>&1 | tee pcc_test/run-log.txt
-      - name: 網頁探路／抓取
+      - name: 來源探路（第六輪起：直接打找到的決標開放資料）
+        if: ${{ (inputs.step || 'probe') == 'probe' }}
+        run: python pcc_test/probe_sources.py 2>&1 | tee pcc_test/run-log.txt
+      - name: 網頁抓取（採購網從 GitHub 連會被境外封鎖，只有 scrape 才跑）
+        if: ${{ (inputs.step || 'probe') == 'scrape' }}
         env:
           STEP: ${{ inputs.step || 'probe' }}
-        run: python pcc_test/scrape_awards.py --step "$STEP" 2>&1 | tee -a pcc_test/run-log.txt
+        run: python pcc_test/scrape_awards.py --step "$STEP" 2>&1 | tee pcc_test/run-log.txt
       - name: 結果寫回 pcc_test/
         if: always()
         run: |
