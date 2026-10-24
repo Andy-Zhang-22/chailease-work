@@ -1,5 +1,6 @@
 // 主名單對動保清冊：卡片標「跟誰借錢、什麼時候到期」、詳細頁列案件、篩選撈 3 個月內到期
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -42,9 +43,11 @@ const SEED=[mk('1','禾泰精密工業有限公司','28451237'), mk('2','昱昌�
  // 篩選
  const chips=await pg.$$eval('#fltChattel .chip',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()).join('|'));
  chk(/1 ?3 個月內到期/.test(chips) && /1 ?12 個月內到期/.test(chips) && /2 ?有動保登記/.test(chips) && /1 ?清冊裡沒有/.test(chips), `篩選籤：${chips}`);
+ await openFilters(pg);
  await pg.locator('#fltChattel .chip:has-text("3 個月內到期")').click(); await pg.waitForTimeout(300);
  const names=await pg.$$eval('#paneList .card .card-name',a=>a.map(x=>x.textContent.trim()));
  chk(names.join('|')==='禾泰精密工業有限公司', `只看 3 個月內到期：${names.join('|')}`);
+ await openFilters(pg);
  await pg.locator('#fltChattel .chip:has-text("3 個月內到期")').click(); await pg.waitForTimeout(300);
  // 詳細頁
  await pg.locator('#paneList .card:has-text("禾泰") .card-name').click(); await pg.waitForSelector('#drawerBody h2'); await pg.waitForTimeout(300);

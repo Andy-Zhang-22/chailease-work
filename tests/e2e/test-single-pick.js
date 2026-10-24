@@ -1,5 +1,6 @@
 // 二分法那幾組改單選；縣市、規模、變更登記這種疊起來有意義的維持複選
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -26,6 +27,7 @@ SEED[2].notesRaw='2026/08/01 還沒談到額度'; SEED[2].timeline=[{date:'2026-
                            ['#fltVisit','有拜訪','無拜訪'],['#fltRelation','active','none'],
                            ['#fltChance','有機會','無機會']]) {
    const pick=(t)=>(/^[a-z]+$/.test(t) ? pg.locator(`${host} .chip[data-value="${t}"]`) : pg.locator(`${host} .chip:has-text("${t}")`));
+   await openFilters(pg);
    await pick(a).click(); await pg.waitForTimeout(250);
    await pick(b).click(); await pg.waitForTimeout(250);
    const p=await picked(host);
@@ -35,14 +37,19 @@ SEED[2].notesRaw='2026/08/01 還沒談到額度'; SEED[2].timeline=[{date:'2026-
  }
 
  // 複選那幾組維持原樣：縣市可以同時選台北＋新北
+ await openFilters(pg);
  await pg.locator('#fltCity .chip:has-text("臺北市")').click(); await pg.waitForTimeout(250);
+ await openFilters(pg);
  await pg.locator('#fltCity .chip:has-text("新北市")').click(); await pg.waitForTimeout(250);
  chk((await picked('#fltCity')).length===2, `縣市維持複選：${JSON.stringify(await picked('#fltCity'))}`);
  chk((await names()).length===3, '兩個縣市是聯集，三筆都在');
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(400);
 
  // 客戶規模也維持複選：微企＋一般組
+ await openFilters(pg);
  await pg.locator('#fltScale .chip:has-text("微企範疇")').click(); await pg.waitForTimeout(250);
+ await openFilters(pg);
  await pg.locator('#fltScale .chip:has-text("一般組範疇")').click(); await pg.waitForTimeout(250);
  chk((await picked('#fltScale')).length===2, `客戶規模維持複選：${JSON.stringify(await picked('#fltScale'))}`);
  chk(JSON.stringify(await names())===JSON.stringify(['乙公司','甲公司']), `微企＋一般組是聯集：${JSON.stringify(await names())}`);

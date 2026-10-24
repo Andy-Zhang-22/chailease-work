@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -33,6 +34,7 @@ const REG={'11111111':row('11111111','增資甲',{Capital_Stock_Amount:'8000000'
  await pg.waitForTimeout(300); await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  chk(JSON.stringify(await chips())===JSON.stringify(['1 增資','1 減資','1 變更登記地址','1 負責人異動','1 其他','2 無變更','1 未查核']), `自動更新後分類：${await chips()}`);
  const names=async()=>pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent).sort());
+ await openFilters(pg);
  const pick=async(t)=>{ await pg.locator('#fltRegChange .chip').filter({hasText:new RegExp(t+'$')}).click(); await pg.waitForTimeout(300); };
  await pick('增資'); chk(JSON.stringify(await names())==='["增資甲"]', `增資：${await names()}`); await pick('增資');
  await pick('減資'); chk(JSON.stringify(await names())==='["減資乙"]', `減資：${await names()}`); await pick('減資');
@@ -41,6 +43,7 @@ const REG={'11111111':row('11111111','增資甲',{Capital_Stock_Amount:'8000000'
  await pick('其他'); chk(JSON.stringify(await names())==='["其他丁"]', `其他（成立年）：${await names()}`); await pick('其他');
  await pick('無變更'); chk(JSON.stringify(await names())===JSON.stringify(['沒變戊','補地址庚'].sort()), `無變更（補空白不算變更）：${await names()}`); await pick('無變更');
  await pick('未查核'); chk(JSON.stringify(await names())==='["查不到己"]', `未查核（查不到的）：${await names()}`);
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(300);
  const badge=(await pg.textContent('.card:has-text("增資甲") .badge-regchange').catch(()=>'')).replace(/\s+/g,' ').trim();
  chk(/^增資 \d+\/\d+、負責人異動 \d+\/\d+$/.test(badge), `卡片標記列出異動種類，各自帶日期：${badge}`);

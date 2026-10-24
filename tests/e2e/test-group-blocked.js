@@ -2,6 +2,7 @@
 // 1) 以前「已停業整批標禁止推廣」標的那家，一打開就復原（那則紀錄刪掉、狀態推回來、變未排定），同組的另一家不動；
 // 2) 自己把一家標禁止推廣：同老闆的另一家不該跟著變「禁止推廣」、下次聯絡日不該被洗掉；「隱藏禁止推廣」只藏被禁的那家
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -51,6 +52,7 @@ const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,g
  const names=await pg.$$eval('#cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
  chk(await pg.isChecked('#hideBlocked') && !names.includes('証宇科技有限公司') && names.includes('寶絢科技股份有限公司') && names.includes('大順工業有限公司'), `隱藏禁止推廣：証宇藏起來、寶絢與大順還在：${names.join('|')}`);
  chk(!/禁止推廣/.test(await pg.locator('#cards .card:has-text("寶絢") .card-top').textContent()), '寶絢的卡片不會寫禁止推廣');
+ await openFilters(pg);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(300);
  chk((await pg.$$eval('#cards .card .card-name',a=>a.length))===3, '取消隱藏三家都在');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);

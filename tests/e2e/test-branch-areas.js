@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -71,12 +72,15 @@ const SEED=[mk('1','新莊甲','新北市新莊區中正路1號'),mk('5','宜蘭
  chk(await badge('登記在台中實際在新莊')==='北台中／南台中共同區', `依登記地址而非實際地址：${await badge('登記在台中實際在新莊')}`);
  const opts=await pg.evaluate(()=>[...document.querySelectorAll('#fltBranch option')].map(o=>o.textContent));
  chk(opts[0]==='全部'&&JSON.stringify(opts.slice(1).sort())===JSON.stringify(['新莊分公司（1）','城北／新莊共同區（1）','桃園分公司（1）','北台中／南台中共同區（1）','宜花分公司（2）','高屏／宜花共同區（1）'].sort()), `歸屬分公司是下拉選單、選項含筆數：${opts}`);
+ await openFilters(pg);
  await pg.selectOption('#fltBranch','新莊分公司'); await pg.waitForTimeout(300);
  const names=await pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent));
  chk(JSON.stringify(names)==='["新莊甲"]', `下拉選新莊分公司：${names}`);
  chk(await pg.textContent('#filters [data-group="branch"] .filter-count')==='1', '收合標題顯示已選 1');
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(200);
  chk(await pg.inputValue('#fltBranch')===''&&(await pg.locator('#filters [data-group="branch"] .filter-count').count())===0, '清除後下拉回到全部、數字消失');
+ await openFilters(pg);
  await pg.click('#btnResetFilters'); await pg.waitForTimeout(200);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

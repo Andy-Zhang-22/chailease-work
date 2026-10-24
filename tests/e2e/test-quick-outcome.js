@@ -1,5 +1,6 @@
 // 資料狀態、禁止推廣原因與日期（一鍵通話結果已拿掉）
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.csv':'text/csv'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -23,6 +24,7 @@ const mk=(id,company)=>({id,source:'A.csv',company,aliases:[],taxId:'',grade:'',
  // 禁止推廣：在通話紀錄裡標，卡片標籤帶日期，詳細頁有原因
  await pg.evaluate(async()=>{ await window.Store.addLog({recordId:'4',date:'2026-09-20',text:'老闆說不要再打',outcome:'blocked',createdAt:Date.now()}); });
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1200);
+ await openFilters(pg);
  await pg.locator('#hideBlocked').uncheck(); await pg.waitForTimeout(300);
  const badge=await card('丁四有限公司').locator('.badge-blocked').first();
  chk((await badge.textContent()).includes('禁止推廣 9/20') && (await badge.getAttribute('title')).includes('老闆說不要再打'), `禁止推廣標籤帶日期與原因：${await badge.textContent()} / ${await badge.getAttribute('title')}`);

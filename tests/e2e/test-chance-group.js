@@ -1,6 +1,7 @@
 // 篩選「有沒有機會」：同老闆連結的關係企業算一家（使用者：「這個標注裡，有幾間是關係企業不要重複計算，會有錯覺」）；
 // 點下去篩出來的名單照舊列每一家
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
 const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index.html':decodeURIComponent(rq.url.split('?')[0]));
@@ -29,6 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const chips=await pg.$$eval('#fltChance .chip',a=>a.map(x=>x.textContent.replace(/\s+/g,'')).join('|'));
  chk(chips==='2有機會|1無機會|1未判斷', `關係企業算一家：甲乙丙算 1、丁 1 → 有機會 2：${chips}`);
  chk(/關係企業算一家/.test(await pg.textContent('.filter-group[data-group="chance"] label')), '標題講明關係企業算一家');
+ await openFilters(pg);
  await pg.locator('#fltChance .chip:has-text("有機會")').first().click(); await pg.waitForTimeout(300);
  const names=await pg.$$eval('#cards .card .card-name',a=>a.length);
  chk(names===4, `點下去照舊列每一家：${names} 家`);

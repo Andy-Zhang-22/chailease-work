@@ -1,5 +1,6 @@
 // 排序多一個「依最近異動日期（新到舊）」，而且排序那組搬到「名單新增」下面
 const { chromium } = require('playwright');
+const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const { installAsk, asked, clearAsked, clickAsk } = require('./askhelp');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -31,7 +32,9 @@ const SEED=[mk(1,'甲公司','2024/01/05'),mk(2,'乙公司','2026/04/02'),mk(3,'
    `由新到舊排，沒有日期的排最後：${JSON.stringify(names)}`);
 
  // 換別的排序再換回來，確定沒壞
+ await openFilters(pg);
  await pg.selectOption('#sortBy','company'); await pg.waitForTimeout(400);
+ await openFilters(pg);
  await pg.selectOption('#sortBy','regchanged'); await pg.waitForTimeout(400);
  const again=await pg.evaluate(()=>[...document.querySelectorAll('.card-name')].map(x=>x.textContent));
  chk(again[0]==='乙公司', `切來切去還是對的：${JSON.stringify(again)}`);
