@@ -5039,3 +5039,12 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - `app.js`：來源鍵 `pc`（SRC、MIX_SOURCES、mergedFeedPreview、DATA_SOURCES「每天」、來源漏斗「政府標案得標」、公開資料補電話的來源）；`index.html` 的 panePcc 與 script。
 - 跟現有名單的去重照舊：名單裡有的標「已在名單」、每日新名單不挑；刪過的（公司墓碑）不挑。10 年以上照系統規則排最後，不是排除。
 - 測試：`tests/pcc.test.js`（3 項）、`pcc_test/test_fetch_pcc.py`（Python 純函式 3 項：解析、篩選、合併與去重）、`tests/e2e/test-pcc.js`。版號 20261024-378。
+
+## 政府標案得標：地址帶郵遞區號，縣市篩選全刷掉（版本 379）
+
+使用者 10/24 在 Mac 上第一次正式跑 `python3 tools/fetch-pcc.py --date 20261023`：公告 2599 筆、決標公告 567 案、投標廠商 975 家、得標 614 家，篩完留 0 家，573 家「不在縣市內」。
+
+- 原因：API 回的廠商地址前面帶郵遞區號（「114 臺北市內湖區…」，也有「23553新北市…」沒空格的），`in_city` 用「開頭是縣市名」比對，全部不符。
+- 修：`in_city` 先去掉開頭的數字、空白、連字號再比縣市。其他篩選不動。
+- 順便記：兩個 `fetch-pcc.py` 同時跑會被 API 回 429（請求太頻繁）跳過案子；同一天再跑一次會補回來，`cases.csv` 去重不會重複累計件數。Mac 上一次只跑一個。
+- 測試：`pcc_test/test_fetch_pcc.py` 的 `in_city` 加三個帶郵遞區號的例子（3 項 OK）。版號 20261024-379。

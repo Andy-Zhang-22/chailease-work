@@ -53,7 +53,8 @@ def parse_date(s):
     return f"{y:04d}-{mo:02d}-{d:02d}"
 
 def in_city(address, cities):
-    a = str(address or "").strip()
+    """API 回的地址前面帶郵遞區號（「114 臺北市內湖區…」「23553新北市…」），先去掉再比縣市（2026/10/23 實跑 614 家全被刷掉才發現）"""
+    a = re.sub(r"^[\s\d\-－]+", "", str(address or "").strip())
     return any(a.startswith(c) for c in cities)
 
 def vendors_of(detail):

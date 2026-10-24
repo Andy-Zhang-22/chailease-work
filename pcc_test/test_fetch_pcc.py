@@ -20,6 +20,7 @@ class T(unittest.TestCase):
         self.assertEqual(fp.parse_date("115/10/23"), "2026-10-23"); self.assertEqual(fp.parse_date("2026-10-23"), "2026-10-23")
         self.assertEqual(fp.parse_date("20261023"), "2026-10-23"); self.assertEqual(fp.parse_date("1151023"), "2026-10-23"); self.assertEqual(fp.parse_date("x"), "")
         self.assertTrue(fp.in_city("台北市信義區", fp.CONFIG["cities"])); self.assertFalse(fp.in_city("桃園市", fp.CONFIG["cities"]))
+        self.assertTrue(fp.in_city("114 臺北市內湖區", fp.CONFIG["cities"])); self.assertTrue(fp.in_city("23553新北市中和區", fp.CONFIG["cities"])); self.assertFalse(fp.in_city("330 桃園市", fp.CONFIG["cities"]))
     def test_vendors_and_judge(self):
         vs = fp.vendors_of(DETAIL)
         self.assertEqual(len(vs), 5)
