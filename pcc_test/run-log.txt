@@ -1,49 +1,133 @@
-== 1. data.gov.tw 搜尋「決標」
-  查「決標公告」 HTTP 200，頁面 749212 bytes，資料集連結 0 個
-  查「決標 採購」 HTTP 200，頁面 749215 bytes，資料集連結 0 個
-  查「政府電子採購網」 HTTP 200，頁面 749239 bytes，資料集連結 0 個
-== 2. 詮釋資料（前 0 個）
-== 3. 採購網首頁與資料開放／API 相關連結
-  https://web.pcc.gov.tw/ 失敗：HTTP Error 500: Internal Server Error
-  https://web.pcc.gov.tw/pis/ 失敗：HTTP Error 500: Internal Server Error
-  https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic 失敗：HTTP Error 500: Internal Server Error
+/home/runner/work/chailease-work/chailease-work/pcc_test/probe_open_data.py:73: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  d = (datetime.datetime.utcnow() + datetime.timedelta(hours=8) - datetime.timedelta(days=2)).strftime("%Y%m%d")
+== 1. data.gov.tw 搜尋（瀏覽器畫出來）
+  查「決標公告」：資料集 20 個
+    - 122907 公車預估到站時間
+    - 122972 新北市垃圾清運車輛所在位置
+    - 123878 新北市空氣品質資訊
+    - 149456 桃園市路邊停車路段收費資訊
+    - 149283 金品獎獲獎專區
+    - 149455 桃園市政府每年度消費諮詢商品類型分析表
+    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
+    - 27148 桃園市政府住宅發展處職員官等性別統計報表
+    - 26002 桃園市觀光工廠
+    - 148198 桃園市人口比率按三階段年齡別分-每年統計
+    - 94368 桃園市居家護理所
+    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
+    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
+    - 149665 桃園市公共管線圖資-自來水系統管線
+    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
+    - 149319 桃園市已登記應回收廢棄物回收業者名單
+    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
+    - 46434 桃園市總預算歲出機關別預算總表
+    - 147369 桃園市社會福利暨綜合類志工各年齡人數報表(每年統計)
+    - 47824 附屬單位預算營業基金固定資產建設改良擴充資金來源綜計表
+  查「決標」：資料集 20 個
+    - 122907 公車預估到站時間
+    - 122972 新北市垃圾清運車輛所在位置
+    - 123878 新北市空氣品質資訊
+    - 149456 桃園市路邊停車路段收費資訊
+    - 149283 金品獎獲獎專區
+    - 149455 桃園市政府每年度消費諮詢商品類型分析表
+    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
+    - 27148 桃園市政府住宅發展處職員官等性別統計報表
+    - 26002 桃園市觀光工廠
+    - 148198 桃園市人口比率按三階段年齡別分-每年統計
+    - 94368 桃園市居家護理所
+    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
+    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
+    - 149665 桃園市公共管線圖資-自來水系統管線
+    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
+    - 149319 桃園市已登記應回收廢棄物回收業者名單
+    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
+    - 46434 桃園市總預算歲出機關別預算總表
+    - 147369 桃園市社會福利暨綜合類志工各年齡人數報表(每年統計)
+    - 47824 附屬單位預算營業基金固定資產建設改良擴充資金來源綜計表
+  查「政府電子採購網」：資料集 20 個
+    - 122907 公車預估到站時間
+    - 122972 新北市垃圾清運車輛所在位置
+    - 123878 新北市空氣品質資訊
+    - 149456 桃園市路邊停車路段收費資訊
+    - 149283 金品獎獲獎專區
+    - 149455 桃園市政府每年度消費諮詢商品類型分析表
+    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
+    - 27148 桃園市政府住宅發展處職員官等性別統計報表
+    - 26002 桃園市觀光工廠
+    - 148198 桃園市人口比率按三階段年齡別分-每年統計
+    - 94368 桃園市居家護理所
+    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
+    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
+    - 149665 桃園市公共管線圖資-自來水系統管線
+    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
+    - 149319 桃園市已登記應回收廢棄物回收業者名單
+    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
+    - 46434 桃園市總預算歲出機關別預算總表
+    - 147369 桃園市社會福利暨綜合類志工各年齡人數報表(每年統計)
+    - 47824 附屬單位預算營業基金固定資產建設改良擴充資金來源綜計表
+  查「採購 得標廠商」：資料集 20 個
+    - 122907 公車預估到站時間
+    - 122972 新北市垃圾清運車輛所在位置
+    - 123878 新北市空氣品質資訊
+    - 149456 桃園市路邊停車路段收費資訊
+    - 149283 金品獎獲獎專區
+    - 149455 桃園市政府每年度消費諮詢商品類型分析表
+    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
+    - 27148 桃園市政府住宅發展處職員官等性別統計報表
+    - 26002 桃園市觀光工廠
+    - 148198 桃園市人口比率按三階段年齡別分-每年統計
+    - 94368 桃園市居家護理所
+    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
+    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
+    - 149665 桃園市公共管線圖資-自來水系統管線
+    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
+    - 149319 桃園市已登記應回收廢棄物回收業者名單
+    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
+    - 46434 桃園市總預算歲出機關別預算總表
+    - 147369 桃園市社會福利暨綜合類志工各年齡人數報表(每年統計)
+    - 47824 附屬單位預算營業基金固定資產建設改良擴充資金來源綜計表
+== 2. 詮釋資料（標題含決標／得標／採購的，最多 10 個）
+== 3. 採購網本身（境外會不會擋）
+  web.pcc.gov.tw 失敗：HTTP Error 500: Internal Server Error
+== 4. 對照：g0v 社群鏡站 API（非官方，pcc.g0v.ronny.tw）
+  https://pcc.g0v.ronny.tw/api/listbydate?date=20261022 失敗：Expecting value: line 1 column 1 (char 0)
+  https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E 失敗：Expecting value: line 1 column 1 (char 0)
 == 首頁
    url: https://web.pcc.gov.tw/
-   title: The URL you requested has been blocked  bytes: 38642
+   title: The URL you requested has been blocked  bytes: 38643
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic → HTTP 500
 == indexTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic
-   title: The URL you requested has been blocked  bytes: 38684
+   title: The URL you requested has been blocked  bytes: 38685
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced → HTTP 500
 == indexTenderAdvanced
    url: https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced
-   title: The URL you requested has been blocked  bytes: 38690
+   title: The URL you requested has been blocked  bytes: 38691
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion → HTTP 500
 == readBulletion
    url: https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion
-   title: The URL you requested has been blocked  bytes: 38685
+   title: The URL you requested has been blocked  bytes: 38686
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate → HTTP 500
 == readNoticeDate
    url: https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate
-   title: The URL you requested has been blocked  bytes: 38687
+   title: The URL you requested has been blocked  bytes: 38688
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic → HTTP 500
 == readTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic
-   title: The URL you requested has been blocked  bytes: 38683
+   title: The URL you requested has been blocked  bytes: 38684
    form 0 個
    連結 0 個，相關 0 個
