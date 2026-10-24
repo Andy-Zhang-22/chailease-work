@@ -1,23 +1,13 @@
-# 每天抓前一天的政府電子採購網決標公告（經 g0v 標案 API，pcc-api.openfun.app），只留得標廠商地址在新北市、臺北市、
-# 組織型態是公司登記或商業登記的，寫成 leads/pcc/pcc.csv（一家一列，跨期同統編不重複）；網站的「政府標案得標」分頁與每日新名單讀這裡。
-# 公司成立日、資本額查商工登記補（fill-founded.mjs --source pcc）。排在每日新名單（03:17）之前。
-#
-# 使用者（2026/10/24）：「在現有的電推系統新增一個案源來源『政府標案得標廠商』…每天跑前一天的日期；週末、國定假日沒資料屬正常」。
-name: 每日政府標案得標
+# 政府標案得標：抓取在使用者自己的電腦跑（tools/fetch-pcc.py；g0v 標案 API 從 GitHub Actions 連會被 Cloudflare 擋），
+# 電腦端用 tools/pcc-daily.sh 抓完推上分支；這支在 leads/pcc/pcc.csv 有新推送時接著查商工登記補公司成立日、資本額
+# （fill-founded.mjs --source pcc，商工登記從 Actions 連得到），再推回去。網站的「政府標案得標」分頁與每日新名單讀 leads/pcc/。
+name: 每日政府標案得標（補成立日與資本額）
 
 on:
-  schedule:
-    - cron: '17 18 * * *'   # 台灣 02:17（GitHub 排程會延後兩三小時，仍在 03:17 的每日新名單之前）
+  push:
+    paths: ['leads/pcc/pcc.csv']
   workflow_dispatch:
     inputs:
-      date:
-        description: '抓哪一天的決標公告（YYYYMMDD；空白＝台灣的昨天）'
-        required: false
-        default: ''
-      days:
-        description: '一次往回抓幾天（手動補抓用；空白＝1）'
-        required: false
-        default: '1'
       founded_minutes:
         description: '查商工登記最多跑幾分鐘'
         required: false
@@ -35,23 +25,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  fetch:
+  founded:
+    # 自己推的那次（commit 訊息開頭是「政府標案得標：補」）不要再觸發一輪
+    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, '政府標案得標：補') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
-
-      - name: 抓決標公告
-        env:
-          DATE: ${{ inputs.date || '' }}
-          DAYS: ${{ inputs.days || '1' }}
-        run: |
-          node tools/fetch-pcc.mjs --date "$DATE" --days "$DAYS" | tee fetch-pcc.log
-          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-pcc.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: 補上公司成立日與資本額
         continue-on-error: true
@@ -67,6 +51,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A leads/pcc
           if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
-          git commit -m "政府標案得標名單：$(date -u +%Y-%m-%d)"
+          git commit -m "政府標案得標：補成立日與資本額 $(date -u +%Y-%m-%d)"
           git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"

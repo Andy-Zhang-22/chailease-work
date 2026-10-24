@@ -8,3 +8,6 @@ registry-check.json
 
 # Claude Code 載入 mod 時自己寫的型別檔（.claude/mods/*/.claude-plugin/types/），不進 repo
 .claude/mods/*/.claude-plugin/types/
+
+# 政府標案得標：給使用者看的當天結果，不進 repo
+pcc_test/result-*.csv
