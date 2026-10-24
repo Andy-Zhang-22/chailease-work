@@ -1,0 +1,49 @@
+== 1. data.gov.tw 搜尋「決標」
+  查「決標公告」 HTTP 200，頁面 749212 bytes，資料集連結 0 個
+  查「決標 採購」 HTTP 200，頁面 749215 bytes，資料集連結 0 個
+  查「政府電子採購網」 HTTP 200，頁面 749239 bytes，資料集連結 0 個
+== 2. 詮釋資料（前 0 個）
+== 3. 採購網首頁與資料開放／API 相關連結
+  https://web.pcc.gov.tw/ 失敗：HTTP Error 500: Internal Server Error
+  https://web.pcc.gov.tw/pis/ 失敗：HTTP Error 500: Internal Server Error
+  https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic 失敗：HTTP Error 500: Internal Server Error
+== 首頁
+   url: https://web.pcc.gov.tw/
+   title: The URL you requested has been blocked  bytes: 38642
+   form 0 個
+   連結 0 個，相關 0 個
+
+-- https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic → HTTP 500
+== indexTenderBasic
+   url: https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic
+   title: The URL you requested has been blocked  bytes: 38684
+   form 0 個
+   連結 0 個，相關 0 個
+
+-- https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced → HTTP 500
+== indexTenderAdvanced
+   url: https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced
+   title: The URL you requested has been blocked  bytes: 38690
+   form 0 個
+   連結 0 個，相關 0 個
+
+-- https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion → HTTP 500
+== readBulletion
+   url: https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion
+   title: The URL you requested has been blocked  bytes: 38685
+   form 0 個
+   連結 0 個，相關 0 個
+
+-- https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate → HTTP 500
+== readNoticeDate
+   url: https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate
+   title: The URL you requested has been blocked  bytes: 38687
+   form 0 個
+   連結 0 個，相關 0 個
+
+-- https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic → HTTP 500
+== readTenderBasic
+   url: https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic
+   title: The URL you requested has been blocked  bytes: 38683
+   form 0 個
+   連結 0 個，相關 0 個
