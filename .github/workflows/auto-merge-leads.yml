@@ -1,0 +1,46 @@
+# 政府標案得標的資料自動合併（版本 381）。使用者 2026/10/24：「本機對話每天都會新增得標的名單，你就自動合併進系統」。
+# 分支上 leads/pcc/ 有推送（使用者 Mac 的 pcc-daily.sh，或 daily-pcc.yml 補完成立日的機器人）就跑：
+# 分支跟 main 的差異只有 leads/ 底下的資料才合（程式的改動照舊等使用者說「合併」才由 Claude 合）；合完分支跟 main 一樣。
+name: 得標資料自動合併
+
+on:
+  push:
+    branches: ['claude/telemarketing-website-hf2uwj']
+    paths: ['leads/pcc/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-merge-leads
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 只有 leads/ 的資料就合進 main
+        run: |
+          git fetch origin main
+          changed="$(git diff --name-only "origin/main...$GITHUB_SHA")"
+          if [ -z "$changed" ]; then echo "分支跟 main 一樣，沒有要合的"; exit 0; fi
+          other="$(printf '%s\n' "$changed" | grep -v '^leads/' || true)"
+          if [ -n "$other" ]; then
+            printf '分支上還有程式沒合併，這次不自動合，等使用者說「合併」：\n%s\n' "$other"
+            printf '分支上還有程式沒合併（%s），這次不自動合\n' "$(printf '%s' "$other" | tr '\n' ' ')" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B main origin/main
+          if git merge --ff-only "$GITHUB_SHA" 2>/dev/null; then echo "快轉合併"; else git merge --no-ff "$GITHUB_SHA" -m "得標資料自動合併：$(date -u +%Y-%m-%d)"; fi
+          git push origin main
+          git push origin "main:$GITHUB_REF_NAME"
+          n="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+          printf '合進 main 了：%s 個資料檔\n' "$n" >> "$GITHUB_STEP_SUMMARY"
