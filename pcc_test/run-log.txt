@@ -1,96 +1,24 @@
-/home/runner/work/chailease-work/chailease-work/pcc_test/probe_open_data.py:73: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-  d = (datetime.datetime.utcnow() + datetime.timedelta(hours=8) - datetime.timedelta(days=2)).strftime("%Y%m%d")
-== 1. data.gov.tw 搜尋（瀏覽器畫出來）
-  查「決標公告」：資料集 20 個
-    - 7319 拖吊保管場
-    - 122972 新北市垃圾清運車輛所在位置
-    - 12818 即時交通事故資料(A1類)
-    - 7505 各警察機關新聞發布
-    - 122907 公車預估到站時間
-    - 123878 新北市空氣品質資訊
-    - 149456 桃園市路邊停車路段收費資訊
-    - 149283 金品獎獲獎專區
-    - 149455 桃園市政府每年度消費諮詢商品類型分析表
-    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
-    - 27148 桃園市政府住宅發展處職員官等性別統計報表
-    - 26002 桃園市觀光工廠
-    - 148198 桃園市人口比率按三階段年齡別分-每年統計
-    - 94368 桃園市居家護理所
-    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
-    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
-    - 149665 桃園市公共管線圖資-自來水系統管線
-    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
-    - 149319 桃園市已登記應回收廢棄物回收業者名單
-    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
-  查「決標」：資料集 20 個
-    - 7319 拖吊保管場
-    - 122972 新北市垃圾清運車輛所在位置
-    - 12818 即時交通事故資料(A1類)
-    - 7505 各警察機關新聞發布
-    - 122907 公車預估到站時間
-    - 123878 新北市空氣品質資訊
-    - 149456 桃園市路邊停車路段收費資訊
-    - 149283 金品獎獲獎專區
-    - 149455 桃園市政府每年度消費諮詢商品類型分析表
-    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
-    - 27148 桃園市政府住宅發展處職員官等性別統計報表
-    - 26002 桃園市觀光工廠
-    - 148198 桃園市人口比率按三階段年齡別分-每年統計
-    - 94368 桃園市居家護理所
-    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
-    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
-    - 149665 桃園市公共管線圖資-自來水系統管線
-    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
-    - 149319 桃園市已登記應回收廢棄物回收業者名單
-    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
-  查「政府電子採購網」：資料集 20 個
-    - 7319 拖吊保管場
-    - 122972 新北市垃圾清運車輛所在位置
-    - 12818 即時交通事故資料(A1類)
-    - 7505 各警察機關新聞發布
-    - 122907 公車預估到站時間
-    - 123878 新北市空氣品質資訊
-    - 149456 桃園市路邊停車路段收費資訊
-    - 149283 金品獎獲獎專區
-    - 149455 桃園市政府每年度消費諮詢商品類型分析表
-    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
-    - 27148 桃園市政府住宅發展處職員官等性別統計報表
-    - 26002 桃園市觀光工廠
-    - 148198 桃園市人口比率按三階段年齡別分-每年統計
-    - 94368 桃園市居家護理所
-    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
-    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
-    - 149665 桃園市公共管線圖資-自來水系統管線
-    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
-    - 149319 桃園市已登記應回收廢棄物回收業者名單
-    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
-  查「採購 得標廠商」：資料集 20 個
-    - 7319 拖吊保管場
-    - 122972 新北市垃圾清運車輛所在位置
-    - 12818 即時交通事故資料(A1類)
-    - 7505 各警察機關新聞發布
-    - 122907 公車預估到站時間
-    - 123878 新北市空氣品質資訊
-    - 149456 桃園市路邊停車路段收費資訊
-    - 149283 金品獎獲獎專區
-    - 149455 桃園市政府每年度消費諮詢商品類型分析表
-    - 33872 桃園市二代戒菸合約醫療院所(藥局)名單
-    - 27148 桃園市政府住宅發展處職員官等性別統計報表
-    - 26002 桃園市觀光工廠
-    - 148198 桃園市人口比率按三階段年齡別分-每年統計
-    - 94368 桃園市居家護理所
-    - 148651 桃園市地方公職人員選舉投票率每4年統計(98年至103年)
-    - 31362 桃園市願意配合推動供氣定型化契約瓦斯行清冊
-    - 149665 桃園市公共管線圖資-自來水系統管線
-    - 149452 桃園市政府訴願決定經行政法院裁判結果統計表
-    - 149319 桃園市已登記應回收廢棄物回收業者名單
-    - 174634 桃園市列冊獨居老人人數及服務概況(113年新規)
+== 1. data.gov.tw 搜尋（瀏覽器畫出來，順便錄下它背後呼叫的 API）
+  查「決標公告」：畫面上資料集連結 20 個；標題含決標／採購的：[]
+  查「決標」：畫面上資料集連結 20 個；標題含決標／採購的：[]
+  背後 API 呼叫 7 個：
+    200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825361007&_gaz=1&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGA&cid=871057564.1792825362&frm=0&
+    200 application/json https://data.gov.tw/api/front/dataset/list
+       keys=['success', 'code', 'message', 'payload']
+       titles=['拖吊保管場', '新北市垃圾清運車輛所在位置', '即時交通事故資料(A1類)', '各警察機關新聞發布', '公車預估到站時間', '新北市空氣品質資訊', '桃園市路邊停車路段收費資訊', '金品獎獲獎專區', '桃園市政府每年度消費諮詢商品類型分析表', '桃園市二代戒菸合約醫療院所(藥局)名單', '桃園市政府住宅發展處職員官等性別統計報表', '桃園市觀光工廠']
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za200zd9102522707xf1&_p=1792825361007&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=871057564.1792825362&frm=0&ps
+    200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99
+    200 application/json https://data.gov.tw/api/front/dataset/list
+       keys=['success', 'code', 'message', 'payload']
+       titles=['新北市垃圾清運車輛所在位置', '拖吊保管場', '即時交通事故資料(A1類)', '各警察機關新聞發布', '公車預估到站時間', '新北市空氣品質資訊', '桃園市路邊停車路段收費資訊', '金品獎獲獎專區', '桃園市政府每年度消費諮詢商品類型分析表', '桃園市二代戒菸合約醫療院所(藥局)名單', '桃園市政府住宅發展處職員官等性別統計報表', '桃園市觀光工廠']
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825370695&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGQ&cid=871057564.1792825362&frm=0&pscdl=n
 == 2. 詮釋資料（標題含決標／得標／採購的，最多 10 個）
 == 3. 採購網本身（境外會不會擋）
   web.pcc.gov.tw 失敗：HTTP Error 500: Internal Server Error
 == 4. 對照：g0v 社群鏡站 API（非官方，pcc.g0v.ronny.tw）
-  https://pcc.g0v.ronny.tw/api/listbydate?date=20261022 失敗：Expecting value: line 1 column 1 (char 0)
-  https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E 失敗：Expecting value: line 1 column 1 (char 0)
+  https://pcc.g0v.ronny.tw/api/listbydate?date=20261022 HTTP 200 text/html，不是 JSON，前 160 字：<!DOCTYPE html> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> <title>標案瀏覽</title> <script src="//ajax.googleapis.com/ajax/li
+  https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E HTTP 200 text/html，不是 JSON，前 160 字：<!DOCTYPE html> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> <title>標案瀏覽</title> <script src="//ajax.googleapis.com/ajax/li
 == 首頁
    url: https://web.pcc.gov.tw/
    title: The URL you requested has been blocked  bytes: 38643
