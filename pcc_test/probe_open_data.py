@@ -1,7 +1,7 @@
 """查有沒有不用爬網頁的決標資料來源。只印標題、網址、欄位名、筆數、更新頻率，不印標案或廠商內容。
 第一輪（10/24）：data.gov.tw 搜尋頁是前端畫的，純 HTML 看不到結果 → 改用 Playwright 畫出來再讀；
 採購網 web.pcc.gov.tw 從 GitHub（美國 IP）連回「The URL you requested has been blocked」，境外封鎖。"""
-import datetime, json, re, time, urllib.parse, urllib.request
+import datetime, json, re, time, urllib.error, urllib.parse, urllib.request
 from playwright.sync_api import sync_playwright
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
@@ -75,7 +75,6 @@ def main():
                 pass
         br.close()
     print("== 1b. 直接打 /api/front/dataset/list 試關鍵字參數")
-    import urllib.error
     for params in [{"keyword": "決標公告", "size": 20, "page": 1}, {"q": "決標公告", "size": 20, "p": 1}, {"query": "決標公告"}, {"searchText": "決標公告"}]:
         for method in ["GET", "POST"]:
             try:
