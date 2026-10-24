@@ -52,6 +52,8 @@
   - 合併後把工作分支快轉到 main 再推上去，等 GitHub Pages 部署跑完，才算完成。
 - 機器人（github-actions）每天會把名單資料推到分支上，這種推送不會觸發 CI。
   - 比對確認只多了 `leads/` 底下的資料，就可以用最新的 head SHA 合併。
+- **政府標案得標的資料（`leads/pcc/`）不用等使用者說合併**：使用者 2026/10/24 授權自動合併，`.github/workflows/auto-merge-leads.yml` 在分支跟 main 只差 `leads/` 資料時自己合進 main。
+  分支上若有還沒合的程式，它不會動，照舊等使用者說「合併」。
 - 不改寫別人的歷史、不 force push。
 
 ## 每次改版
