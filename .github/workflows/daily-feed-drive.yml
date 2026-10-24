@@ -17,7 +17,7 @@ name: 每日新名單（雲端硬碟名單）
 
 on:
   schedule:
-    - cron: '47 20 * * *'   # 台灣 04:47（版本 375 改非整點：GitHub 整點的排程會延後幾小時，10/23 的 05:00 到 07:53 才跑；版本 333 排在商工登記之前）
+    - cron: '17 19 * * *'   # 台灣 03:17（版本 376：GitHub 排程會延後兩三小時，04:47 的 10/24 還是 07:30 才跑，提早到 03:17 延後也在 06:30 前跑完；版本 333 排在商工登記之前）
   workflow_dispatch:
     inputs:
       mode:
@@ -69,7 +69,7 @@ on:
         options: ['no', 'yes']
 
 permissions:
-  contents: read
+  contents: write   # 清晨補看停班公告寫進 leads/holidays-extra.json 要推回分支（版本 376）
   id-token: write   # Workload Identity 聯盟要用 GitHub 的 OIDC token 去換 Google 的
 
 concurrency:
@@ -91,8 +91,11 @@ jobs:
       - name: 裝 Playwright 與 Chromium
         run: npm i --no-save playwright@1.63.0 @anthropic-ai/sdk && npx playwright install --with-deps chromium
 
-      # 颱風假（版本 371）：每晚的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，
-      # 這裡 checkout 到就讀得到，挑名單那步會當假日；不用再查一次
+      # 颱風假：每晚的 nightly-typhoon.yml 會把新北市停班的日子寫進 leads/holidays-extra.json 推上分支，這裡 checkout 到就讀得到。
+      # 版本 376 加一道保險：10/23 晚上那支排程被 GitHub 跳過沒跑，清晨挑名單前再看一次公告，有停班就先寫進檔，挑名單那步會當假日
+      - name: 再看一次停班公告（晚上的排程被跳過的保險）
+        run: node tools/fetch-typhoon.mjs | tee typhoon.log
+
       - name: 用 Workload Identity 聯盟換 Google 存取權杖（有設 GCP_WIF_PROVIDER 才跑）
         id: auth
         if: vars.GCP_WIF_PROVIDER != ''
@@ -134,3 +137,15 @@ jobs:
           RECHECK_MODEL: ${{ inputs.recheckmodel || 'opus' }}
           RESEARCH: ${{ inputs.research || 'no' }}
         run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"
+
+      - name: 颱風假有新的就存回 repo
+        if: always()
+        run: |
+          printf '%s\n' "$(cat typhoon.log 2>/dev/null)" >> "$GITHUB_STEP_SUMMARY"
+          git add leads/holidays-extra.json
+          if git diff --cached --quiet; then echo "假日表沒變"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "颱風假：$(date -u +%Y-%m-%d)"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
