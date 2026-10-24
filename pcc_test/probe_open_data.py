@@ -40,15 +40,19 @@ def main():
             except Exception:
                 pass
         pg.on("response", on_resp)
+        reqs = []
+        pg.on("request", lambda rq: reqs.append((rq.method, rq.url[:160], (rq.post_data or "")[:300])) if "data.gov.tw/api" in rq.url else None)
         for q in ["決標公告", "決標"]:
             url = "https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=" + urllib.parse.quote(q)
             try:
                 pg.goto(url, wait_until="networkidle")
                 pg.wait_for_timeout(2500)
                 # 試著直接在搜尋框打字再送出（網址帶 q 可能沒被讀）
-                box = pg.query_selector("input[type='search'], input[placeholder*='搜尋'], input[name='q']")
+                boxes = pg.query_selector_all("input")
+                print(f"  頁上 input {len(boxes)} 個：{[(b.get_attribute('type'), b.get_attribute('placeholder'), b.get_attribute('name'), b.get_attribute('id')) for b in boxes[:8]]}")
+                box = pg.query_selector("input[type='search'], input[placeholder*='搜尋'], input[placeholder*='關鍵'], input[name='q'], input[type='text']")
                 if box:
-                    box.fill(q); box.press("Enter"); pg.wait_for_timeout(4000)
+                    box.fill(q); box.press("Enter"); pg.wait_for_timeout(5000)
                 rows = pg.eval_on_selector_all("a[href*='/dataset/']", "els => els.map(a => [a.getAttribute('href'), (a.innerText||'').trim()])")
                 rows = [(h, t) for h, t in rows if re.search(r"/dataset/\d+$", h or "") and t]
                 print(f"  查「{q}」：畫面上資料集連結 {len(rows)} 個；標題含決標／採購的：{[t[:40] for h, t in rows if re.search(r'決標|採購|標案', t)][:10]}")
@@ -59,6 +63,9 @@ def main():
             except Exception as e:
                 print(f"  查「{q}」失敗：{e}")
             pause()
+        print(f"  送出的 API request {len(reqs)} 個（method、網址、body）：")
+        for m, u, b in reqs[:12]:
+            print(f"    {m} {u}  body={b}")
         print(f"  背後 API 呼叫 {len(api_calls)} 個：")
         for c in api_calls[:20]:
             print(f"    {c['status']} {c['ct']} {c['url']}")
@@ -67,6 +74,32 @@ def main():
             for t in c.get("titles", []):
                 pass
         br.close()
+    print("== 1b. 直接打 /api/front/dataset/list 試關鍵字參數")
+    import urllib.error
+    for params in [{"keyword": "決標公告", "size": 20, "page": 1}, {"q": "決標公告", "size": 20, "p": 1}, {"query": "決標公告"}, {"searchText": "決標公告"}]:
+        for method in ["GET", "POST"]:
+            try:
+                if method == "GET":
+                    req = urllib.request.Request("https://data.gov.tw/api/front/dataset/list?" + urllib.parse.urlencode(params), headers={"User-Agent": UA, "Accept": "application/json"})
+                else:
+                    req = urllib.request.Request("https://data.gov.tw/api/front/dataset/list", data=json.dumps(params).encode(), headers={"User-Agent": UA, "Accept": "application/json", "Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    j = json.loads(r.read().decode("utf-8", "ignore"))
+                txt = json.dumps(j, ensure_ascii=False)
+                titles = re.findall(r'"title"\s*:\s*"([^"]{2,60})"', txt)
+                hit = [t for t in titles if re.search(r"決標|採購|標案", t)]
+                print(f"  {method} {params}: 回 {len(titles)} 個標題，含決標／採購 {len(hit)} 個 {hit[:8]}")
+                if hit:
+                    for m in re.finditer(r'\{[^{}]*"title"\s*:\s*"([^"]*(?:決標|採購|標案)[^"]*)"[^{}]*\}', txt):
+                        blk = m.group(0)
+                        idm = re.search(r'"(?:id|datasetId|oid)"\s*:\s*"?(\d+)"?', blk)
+                        if idm and idm.group(1) not in ids:
+                            ids.append(idm.group(1))
+            except urllib.error.HTTPError as e:
+                print(f"  {method} {params}: HTTP {e.code}")
+            except Exception as e:
+                print(f"  {method} {params}: 失敗 {str(e)[:80]}")
+            pause()
     # 從 API 回傳裡找資料集 id（title 旁邊通常有 id）
     for c in api_calls:
         for i in re.findall(r'"id"\s*:\s*"?(\d{3,7})"?', json.dumps(c)):
