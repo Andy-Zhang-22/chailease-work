@@ -11,3 +11,4 @@ registry-check.json
 
 # 政府標案得標：給使用者看的當天結果，不進 repo
 pcc_test/result-*.csv
+__pycache__/
