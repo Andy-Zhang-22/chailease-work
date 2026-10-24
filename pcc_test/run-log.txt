@@ -1,66 +1,101 @@
 == 1. data.gov.tw 搜尋（瀏覽器畫出來，順便錄下它背後呼叫的 API）
   頁上 input 117 個：[('text', None, None, 'el-id-1024-112'), ('text', '請輸入關鍵字', None, 'searchbar-input'), ('text', '請輸入', None, 'adv-nid'), ('text', None, None, 'el-id-1024-113'), ('checkbox', None, None, 'agency-children'), ('text', None, None, 'el-id-1024-114'), ('text', None, None, 'el-id-1024-115'), ('text', None, None, 'el-id-1024-116')]
-  查「決標公告」失敗：ElementHandle.fill: Timeout 60000ms exceeded.
-Call log:
-    - fill("決標公告")
-  - attempting fill action
-    2 × waiting for element to be visible, enabled and editable
-      - element is not editable
-    - retrying fill action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and editable
-      - element is not editable
-    - retrying fill action
-      - waiting 100ms
-    119 × waiting for element to be visible, enabled and editable
-        - element is not editable
-      - retrying fill action
-        - waiting 500ms
-
+  打字送出後網址：https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&rft=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A
+  查「決標公告」：畫面上資料集連結 20 個；標題含決標／採購的：['決標公告', '決標金額前5大之決標公告', '中央研究院科研採購無法決標公告', '與政府機關有巨額採購，且在履約期間之廠商名單', '前1年度公告金額以上採購限制性決標公告', '內政部建築研究所全球資訊網_採購案決標公告', '外交部領事事務局採購案件決標公告資料摘要', '法務部法醫研究所「案號：231030616、案名：本所鑑驗管理系統及生命統計應用', '法醫研究所「案號：621040729、案名：基因鑑定用自動化分注系統乙套」決標公', '法務部法醫研究所「案號：621040413、案名：DNA鑑定試劑套組耗材乙批」決']
   頁上 input 117 個：[('text', None, None, 'el-id-1024-112'), ('text', '請輸入關鍵字', None, 'searchbar-input'), ('text', '請輸入', None, 'adv-nid'), ('text', None, None, 'el-id-1024-113'), ('checkbox', None, None, 'agency-children'), ('text', None, None, 'el-id-1024-114'), ('text', None, None, 'el-id-1024-115'), ('text', None, None, 'el-id-1024-116')]
-  查「決標」失敗：ElementHandle.fill: Timeout 60000ms exceeded.
-Call log:
-    - fill("決標")
-  - attempting fill action
-    2 × waiting for element to be visible, enabled and editable
-      - element is not editable
-    - retrying fill action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and editable
-      - element is not editable
-    - retrying fill action
-      - waiting 100ms
-    119 × waiting for element to be visible, enabled and editable
-        - element is not editable
-      - retrying fill action
-        - waiting 500ms
-
-  送出的 API request 2 個（method、網址、body）：
+  打字送出後網址：https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&rft=%E6%B1%BA%E6%A8%99
+  查「決標」：畫面上資料集連結 20 個；標題含決標／採購的：['決標金額前5大之決標公告', '決標公告', '近1季最有利標之決標件數及決標金額統計', '近1季依採購級距之決標件數及決標金額統計', '近1季依採購性質決標之件數及決標金額統計', '近半年GPA決標資料集', '近1季機關採公開方式辦理之決標件數、決標金額及比率', '各機關每月依採購性質之決標件數及決標金額統計（依公告日期統計且不含跨月更正之決標', '水利署招標及決標訊息', '本署政府採購決標案件統計表']
+  送出的 API request 8 個（method、網址、body）：
     POST https://data.gov.tw/api/front/dataset/list  body={"bool":[],"filter":[],"page_num":1,"page_limit":20,"tids":[],"sort":"_score_desc"}
+    POST https://data.gov.tw/api/front/dataset/list  body={"bool":[{"fulltext":{"value":"決標公告"}}],"filter":[],"page_num":1,"page_limit":20,"tids":[],"sort":"_score_desc"}
+    GET https://data.gov.tw/api/front/search/history/query/suggest?q=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A  body=
+    POST https://data.gov.tw/api/front/search/history/recommend  body={"bool":[{"search_keywords":{"value":"決標公告"}}]}
     POST https://data.gov.tw/api/front/dataset/list  body={"bool":[],"filter":[],"page_num":1,"page_limit":20,"tids":[],"sort":"_score_desc"}
-  背後 API 呼叫 8 個：
+    POST https://data.gov.tw/api/front/dataset/list  body={"bool":[{"fulltext":{"value":"決標"}}],"filter":[],"page_num":1,"page_limit":20,"tids":[],"sort":"_score_desc"}
+    GET https://data.gov.tw/api/front/search/history/query/suggest?q=%E6%B1%BA%E6%A8%99  body=
+    POST https://data.gov.tw/api/front/search/history/recommend  body={"bool":[{"search_keywords":{"value":"決標"}}]}
+  背後 API 呼叫 15 個：
     200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825625483&_gaz=1&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGA&cid=593674964.1792825626&frm=0&
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1h1v9102522707za208zd9102522707xf1&_p=1792825927510&_gaz=1&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGA&cid=749063471.1792825928&frm=
     200 application/json https://data.gov.tw/api/front/dataset/list
-       keys=['success', 'code', 'message', 'payload']
-       titles=['公車預估到站時間', '新北市垃圾清運車輛所在位置', ' 警察機關失物招領網路公告數位批次檔案', '165反詐騙諮詢專線－詐騙闢謠專區', '測速執法點取締件數資料', '集會遊行資訊', '拖吊保管場', '即時交通事故資料(A1類)', '各警察機關新聞發布', '新北市空氣品質資訊', '桃園市路邊停車路段收費資訊', '金品獎獲獎專區']
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za200zd9102522707xf1&_p=1792825625483&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=593674964.1792825626&frm=0&ps
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+       titles=['新北市垃圾清運車輛所在位置', '公車預估到站時間', '165反詐騙諮詢專線_遭停止解析涉詐網站', '即時交通事故資料 (A1類)(json格式)', '警察機關網路公告拾得人領取拾得物數位批次檔案', '測速執法設置點', ' 警察機關失物招領網路公告數位批次檔案', '165反詐騙諮詢專線－詐騙闢謠專區', '測速執法點取締件數資料', '集會遊行資訊', '拖吊保管場', '即時交通事故資料(A1類)']
+    200 application/json https://data.gov.tw/api/front/dataset/list
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+       titles=['決標公告', '決標金額前5大之決標公告', '中央研究院科研採購無法決標公告', '與政府機關有巨額採購，且在履約期間之廠商名單', '前1年度公告金額以上採購限制性決標公告', '內政部建築研究所全球資訊網_採購案決標公告', '外交部領事事務局採購案件決標公告資料摘要', '法務部法醫研究所「案號：231030616、案名：本所鑑驗管理系統及生命統計應用系統委外再造案」決標公告', '法醫研究所「案號：621040729、案名：基因鑑定用自動化分注系統乙套」決標公告', '法務部法醫研究所「案號：621040413、案名：DNA鑑定試劑套組耗材乙批」決標公告', '法務部法醫研究所「案號：721040707、案名：毒化鑑驗研究用水解酵素一批」決標公告', '法務部法醫研究所「案號：621040211、案名：基因鑑驗核酸自動分析儀及聚合酶連鎖反應機乙批」決標公告']
+    200 application/json https://data.gov.tw/api/front/search/history/query/suggest?q=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+    200 application/json https://data.gov.tw/api/front/search/history/recommend
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1h1v9102522707za200zd9102522707xf1&_p=1792825927510&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=749063471.1792825928&frm=0&
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1h1v9102522707za200zd9102522707xf1&_p=1792825927510&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=749063471.1792825928&frm=0&
     200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99
     200 application/json https://data.gov.tw/api/front/dataset/list
-       keys=['success', 'code', 'message', 'payload']
-       titles=['新北市垃圾清運車輛所在位置', '警察機關網路公告拾得人領取拾得物數位批次檔案', '測速執法設置點', '公車預估到站時間', ' 警察機關失物招領網路公告數位批次檔案', '165反詐騙諮詢專線－詐騙闢謠專區', '測速執法點取締件數資料', '集會遊行資訊', '拖吊保管場', '即時交通事故資料(A1類)', '各警察機關新聞發布', '新北市空氣品質資訊']
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825694200&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGQ&cid=593674964.1792825626&frm=0&pscdl=n
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za200zd9102522707xf1&_p=1792825694200&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=593674964.1792825626&frm=0&ps
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+       titles=['新北市垃圾清運車輛所在位置', '公車預估到站時間', '165反詐騙諮詢專線_遭停止解析涉詐網站', '即時交通事故資料 (A1類)(json格式)', '警察機關網路公告拾得人領取拾得物數位批次檔案', '測速執法設置點', ' 警察機關失物招領網路公告數位批次檔案', '165反詐騙諮詢專線－詐騙闢謠專區', '測速執法點取締件數資料', '集會遊行資訊', '拖吊保管場', '即時交通事故資料(A1類)']
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1h1v9102522707za208zd9102522707xf1&_p=1792825943983&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGQ&cid=749063471.1792825928&frm=0&pscdl
+    200 application/json https://data.gov.tw/api/front/dataset/list
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+       titles=['決標金額前5大之決標公告', '決標公告', '近1季最有利標之決標件數及決標金額統計', '近1季依採購級距之決標件數及決標金額統計', '近1季依採購性質決標之件數及決標金額統計', '近半年GPA決標資料集', '近1季機關採公開方式辦理之決標件數、決標金額及比率', '各機關每月依採購性質之決標件數及決標金額統計（依公告日期統計且不含跨月更正之決標案）', '水利署招標及決標訊息', '本署政府採購決標案件統計表', '海巡署各年度已決標採購案件', '前1年度技術服務最有利標案件統計']
+    200 application/json https://data.gov.tw/api/front/search/history/recommend
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+    200 application/json https://data.gov.tw/api/front/search/history/query/suggest?q=%E6%B1%BA%E6%A8%99
+       keys=['success', 'code', 'message', 'payload'] payload_keys=None item_keys=None
+    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1h1v9102522707za200zd9102522707xf1&_p=1792825943983&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=749063471.1792825928&frm=0&
 == 1b. 直接打 /api/front/dataset/list 試關鍵字參數
-  GET {'keyword': '決標公告', 'size': 20, 'page': 1}: HTTP 405
-  POST {'keyword': '決標公告', 'size': 20, 'page': 1}: 回 10 個標題，含決標／採購 0 個 []
-  GET {'q': '決標公告', 'size': 20, 'p': 1}: HTTP 405
-  POST {'q': '決標公告', 'size': 20, 'p': 1}: 回 10 個標題，含決標／採購 0 個 []
-  GET {'query': '決標公告'}: HTTP 405
-  POST {'query': '決標公告'}: 回 10 個標題，含決標／採購 0 個 []
-  GET {'searchText': '決標公告'}: HTTP 405
-  POST {'searchText': '決標公告'}: 回 10 個標題，含決標／採購 0 個 []
+  POST {'bool': [{'query': '決標公告'}], 'filter': [], 'page_num': 1, 'page_limit': 20, 'tids': [], 'sort': '_score_desc'}: HTTP 500
+  POST {'bool': [{'keyword': '決標公告'}], 'filter': [], 'page_num': 1, 'page_limit': 20, 'tids': [], 'sort': '_score_desc'}: HTTP 500
+  POST {'bool': [{'q': '決標公告'}], 'filter': [], 'page_num': 1, 'page_limit': 20, 'tids': [], 'sort': '_score_desc'}: HTTP 500
+  POST {'bool': ['決標公告'], 'filter': [], 'page_num': 1, 'page_limit': 20, 'tids': [], 'sort': '_score_desc'}: HTTP 500
+  POST {'bool': [], 'keyword': '決標公告'}: 回 20 個標題，含決標／採購 0 個 []；前 3 個標題 ['新北市垃圾清運車輛所在位置', '公車預估到站時間', '165反詐騙諮詢專線_遭停止解析涉詐網站']
+  POST {'bool': [], 'q': '決標公告'}: 回 20 個標題，含決標／採購 0 個 []；前 3 個標題 ['公車預估到站時間', '新北市垃圾清運車輛所在位置', '165反詐騙諮詢專線_遭停止解析涉詐網站']
+  POST {'bool': [], 'query': '決標公告'}: 回 20 個標題，含決標／採購 0 個 []；前 3 個標題 ['公車預估到站時間', '新北市垃圾清運車輛所在位置', '165反詐騙諮詢專線_遭停止解析涉詐網站']
+  POST {'bool': [], 'filter': [{'field': 'title', 'value': '決標'}]}: 回 20 個標題，含決標／採購 0 個 []；前 3 個標題 ['公車預估到站時間', '新北市垃圾清運車輛所在位置', '165反詐騙諮詢專線_遭停止解析涉詐網站']
 == 2. 詮釋資料（標題含決標／得標／採購的，最多 10 個）
+  [16371] 決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：JSON https://pms.sme.gov.tw/PMSApi/v2/ODT/ATM
+  [6155] 決標金額前5大之決標公告
+       更新頻率：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}；機關：；最後更新：
+       欄位：
+       檔：JSON https://web.pcc.gov.tw/tps/openDataApi/atmTop5
+  [90822] 中央研究院科研採購無法決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：CSV https://dga.sinica.edu.tw/archives/bce82686d9bcbedf
+  [7264] 與政府機關有巨額採購，且在履約期間之廠商名單
+       更新頻率：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}；機關：；最後更新：
+       欄位：
+       檔：XML https://web.pcc.gov.tw/peems/lapeem/lapeemGeneralPolit/downLoadOpenData
+  [165150] 前1年度公告金額以上採購限制性決標公告
+       更新頻率：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}；機關：；最後更新：
+       欄位：
+       檔：JSON https://web.pcc.gov.tw/tps/openDataApi/lyOpenData?runType=3
+  [25122] 內政部建築研究所全球資訊網_採購案決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：JSON https://www.abri.gov.tw/OpenData.aspx?SN=064937AB9A10D2BB
+  [11233] 外交部領事事務局採購案件決標公告資料摘要
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：XML https://www.boca.gov.tw/rss-132-1.xml
+  [13446] 法務部法醫研究所「案號：231030616、案名：本所鑑驗管理系統及生命統計應用系統委外再造案」決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：CSV https://www.tpa.moj.gov.tw/public/Attachment/791414402371.csv
+  [20824] 法醫研究所「案號：621040729、案名：基因鑑定用自動化分注系統乙套」決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：CSV https://www.tpa.moj.gov.tw/public/Attachment/791414402371.csv
+  [15486] 法務部法醫研究所「案號：621040413、案名：DNA鑑定試劑套組耗材乙批」決標公告
+       更新頻率：{'regularupdate': '2'}；機關：；最後更新：
+       欄位：
+       檔：CSV https://www.tpa.moj.gov.tw/public/Attachment/791414402371.csv
+== 1c. v2 API 有沒有搜尋端點
+  https://data.gov.tw/api/v2/rest/datasets?q=%E6%B1%BA%E6%A8%99&size=20 HTTP 404
+  https://data.gov.tw/api/v2/rest/dataset?q=%E6%B1%BA%E6%A8%99 HTTP 405
+  https://data.gov.tw/api/v2/rest/datasets/search?q=%E6%B1%BA%E6%A8%99 HTTP 404
 == 3. 採購網本身（境外會不會擋）
   web.pcc.gov.tw 失敗：HTTP Error 500: Internal Server Error
 == 4. 對照：g0v 社群鏡站 API（非官方，pcc.g0v.ronny.tw）
@@ -68,41 +103,41 @@ Call log:
   https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E HTTP 200 text/html，不是 JSON，前 160 字：<!DOCTYPE html> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> <title>標案瀏覽</title> <script src="//ajax.googleapis.com/ajax/li
 == 首頁
    url: https://web.pcc.gov.tw/
-   title: The URL you requested has been blocked  bytes: 38644
+   title: The URL you requested has been blocked  bytes: 38642
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic → HTTP 500
 == indexTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic
-   title: The URL you requested has been blocked  bytes: 38686
+   title: The URL you requested has been blocked  bytes: 38684
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced → HTTP 500
 == indexTenderAdvanced
    url: https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced
-   title: The URL you requested has been blocked  bytes: 38692
+   title: The URL you requested has been blocked  bytes: 38690
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion → HTTP 500
 == readBulletion
    url: https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion
-   title: The URL you requested has been blocked  bytes: 38687
+   title: The URL you requested has been blocked  bytes: 38685
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate → HTTP 500
 == readNoticeDate
    url: https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate
-   title: The URL you requested has been blocked  bytes: 38689
+   title: The URL you requested has been blocked  bytes: 38687
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic → HTTP 500
 == readTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic
-   title: The URL you requested has been blocked  bytes: 38685
+   title: The URL you requested has been blocked  bytes: 38683
    form 0 個
    連結 0 個，相關 0 個
