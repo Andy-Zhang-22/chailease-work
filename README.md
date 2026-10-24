@@ -5004,3 +5004,10 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
    `envCacheOf`、`envCacheToMap`，`tests/industry.test.js` 加一項。
 3. **停班公告 22:33 再查一次**：`nightly-typhoon.yml` 加第二個排程，補 20:47 之後才宣布的（政府規定 22 時前宣布）。
 版號 20261023-375。
+
+## 挑名單提早到 03:17、清晨再看一次停班公告（版本 376）
+
+使用者 10/24：看了我回報「21:00 的停班公告排程 GitHub 直接跳過沒執行；04:47 的挑名單還是 07:30 才跑」後說「合併」（當時沒有開著的 PR，當成兩項都做、做完合併）。
+1. `daily-feed-drive.yml` 排程 04:47 → 03:17：GitHub 這段時間的排程固定延後兩三小時，提早到 03:17 延後也在 06:30 前跑完。商工登記 05:17 不動（同一個 concurrency group，會排在後面）。
+2. 清晨挑名單前再跑一次 `tools/fetch-typhoon.mjs`，晚上 20:47、22:33 那支被跳過也補得回來；有寫檔就推回分支（權限改回 `contents: write`）。晚上的排程照舊。
+版號 20261024-376。
