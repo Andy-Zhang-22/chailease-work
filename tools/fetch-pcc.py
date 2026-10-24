@@ -164,7 +164,9 @@ def fetch_day(date, cfg=CONFIG, log=print):
             awards[f"{r.get('unit_id')}|{r.get('job_number')}"] = r   # 同案的更正公告蓋掉原公告（後面的 filename 比較新）
     stats["awards"] = len(awards)
     rows = []
-    for key, a in awards.items():
+    log(f"{date}：公告 {len(recs)} 筆，決標公告 {len(awards)} 案，開始逐案抓明細（每案等 {cfg['request_gap_sec']:g} 秒，約 {int(len(awards) * (cfg['request_gap_sec'] + 0.5) / 60) + 1} 分鐘）…")
+    for i, (key, a) in enumerate(awards.items(), 1):
+        if i % 20 == 0: log(f"  …{i}/{len(awards)} 案")
         time.sleep(cfg["request_gap_sec"])
         t = get_json(f"{base}/api/tender?unit_id={urllib.parse.quote(str(a.get('unit_id', '')))}&job_number={urllib.parse.quote(str(a.get('job_number', '')))}", cfg, log)
         if t is None: stats["detail_fail"] += 1; continue
