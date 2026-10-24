@@ -15,29 +15,62 @@ def pause():
     time.sleep(2.5)
 
 def main():
-    print("== 1. data.gov.tw 搜尋（瀏覽器畫出來）")
+    print("== 1. data.gov.tw 搜尋（瀏覽器畫出來，順便錄下它背後呼叫的 API）")
     ids = []
     with sync_playwright() as p:
         br = p.chromium.launch()
         pg = br.new_context(user_agent=UA, locale="zh-TW").new_page()
         pg.set_default_timeout(60000)
-        for q in ["決標公告", "決標", "政府電子採購網", "採購 得標廠商"]:
+        api_calls = []
+        def on_resp(resp):
+            try:
+                u = resp.url
+                if "data.gov.tw" in u and re.search(r"api|search|dataset", u, re.I) and not re.search(r"\.(js|css|png|svg|woff2?|ico)(\?|$)", u):
+                    ct = resp.headers.get("content-type", "")
+                    item = {"url": u[:200], "status": resp.status, "ct": ct.split(";")[0]}
+                    if "json" in ct:
+                        try:
+                            j = resp.json()
+                            item["keys"] = list(j.keys())[:12] if isinstance(j, dict) else f"list[{len(j)}]"
+                            txt = json.dumps(j, ensure_ascii=False)
+                            item["titles"] = re.findall(r'"title"\s*:\s*"([^"]{2,60})"', txt)[:25]
+                        except Exception:
+                            pass
+                    api_calls.append(item)
+            except Exception:
+                pass
+        pg.on("response", on_resp)
+        for q in ["決標公告", "決標"]:
             url = "https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=" + urllib.parse.quote(q)
             try:
                 pg.goto(url, wait_until="networkidle")
-                pg.wait_for_timeout(2000)
+                pg.wait_for_timeout(2500)
+                # 試著直接在搜尋框打字再送出（網址帶 q 可能沒被讀）
+                box = pg.query_selector("input[type='search'], input[placeholder*='搜尋'], input[name='q']")
+                if box:
+                    box.fill(q); box.press("Enter"); pg.wait_for_timeout(4000)
                 rows = pg.eval_on_selector_all("a[href*='/dataset/']", "els => els.map(a => [a.getAttribute('href'), (a.innerText||'').trim()])")
                 rows = [(h, t) for h, t in rows if re.search(r"/dataset/\d+$", h or "") and t]
-                print(f"  查「{q}」：資料集 {len(rows)} 個")
-                for h, t in rows[:20]:
+                print(f"  查「{q}」：畫面上資料集連結 {len(rows)} 個；標題含決標／採購的：{[t[:40] for h, t in rows if re.search(r'決標|採購|標案', t)][:10]}")
+                for h, t in rows:
                     i = h.rsplit("/", 1)[-1]
-                    print(f"    - {i} {t[:70]}")
-                    if i not in ids:
+                    if re.search(r"決標|採購|標案", t) and i not in ids:
                         ids.append(i)
             except Exception as e:
                 print(f"  查「{q}」失敗：{e}")
             pause()
+        print(f"  背後 API 呼叫 {len(api_calls)} 個：")
+        for c in api_calls[:20]:
+            print(f"    {c['status']} {c['ct']} {c['url']}")
+            if c.get("keys"): print(f"       keys={c['keys']}")
+            if c.get("titles"): print(f"       titles={c['titles'][:12]}")
+            for t in c.get("titles", []):
+                pass
         br.close()
+    # 從 API 回傳裡找資料集 id（title 旁邊通常有 id）
+    for c in api_calls:
+        for i in re.findall(r'"id"\s*:\s*"?(\d{3,7})"?', json.dumps(c)):
+            pass
     print(f"== 2. 詮釋資料（標題含決標／得標／採購的，最多 10 個）")
     shown = 0
     for i in ids:
@@ -70,11 +103,16 @@ def main():
         print(f"  web.pcc.gov.tw 失敗：{e}")
     pause()
     print("== 4. 對照：g0v 社群鏡站 API（非官方，pcc.g0v.ronny.tw）")
-    d = (datetime.datetime.utcnow() + datetime.timedelta(hours=8) - datetime.timedelta(days=2)).strftime("%Y%m%d")
+    d = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8) - datetime.timedelta(days=2)).strftime("%Y%m%d")
     for url in [f"https://pcc.g0v.ronny.tw/api/listbydate?date={d}", "https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E6%B0%A3&page=1"]:
         try:
             st, ct, body = get(url)
-            j = json.loads(body.decode("utf-8", "ignore"))
+            txt = body.decode("utf-8", "ignore")
+            if "json" not in ct:
+                head = re.sub(r"\s+", " ", txt)[:160]
+                print(f"  {url[:60]} HTTP {st} {ct.split(';')[0]}，不是 JSON，前 160 字：{head}")
+                pause(); continue
+            j = json.loads(txt)
             recs = j.get("records") or []
             keys = sorted(set().union(*[r.keys() for r in recs[:50]])) if recs else []
             briefs = [r.get("brief", {}) for r in recs[:50] if isinstance(r.get("brief"), dict)]
