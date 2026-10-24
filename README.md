@@ -5018,3 +5018,16 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 每日新名單排序再加最前面一層：**資本額 300～6,000 萬 ＋ 有手機 ＋ 一年內有買設備（擔保 300 萬以上；半年到一年的要同業金主，跟原本「最近買設備」那條同一個判斷）＋ 明確訊號兩個以上（買設備那個也算一個）**，
 四個同時滿足的先，其餘照版本 374 的順序（規模符合且有手機 → 有手機 → 訊號 → 買設備 → 行業 → 成立年數 …）。
 「訊號兩個以上」是我定的門檻，使用者沒說幾個；要改一個數字。`mergedFeedPreview` 多回 buy、strong；`test-feed-merge.js` 加兩家（買設備＋兩訊號 vs 三訊號沒買設備）。版號 20261024-377。
+
+## 新來源「政府標案得標」（版本 378，進行中）
+
+使用者 10/24：「在現有的電推系統新增一個案源來源『政府標案得標廠商』，資料來自 g0v 標案 API」→ 問清楚後選「接進這個電推系統，照新設工廠那樣做」。
+
+- `assets/js/pcc.js`：照 factory.js 的架構——分頁（?tab=pcc，第二排沒按鈕）、篩選、加入名單走 15 欄（名稱、統編、成立、資本額、電話、地址填得上；分級、負責人、KEYMAN、產業別留空不猜；
+  備註放「政府標案得標 日期，標案名稱，招標機關，決標金額，共 N 件」）、每日新名單的訊號「剛得標（金額）」（3 個月內，算利率不敏感）、合併頁的那一句、名單卡片標 🏆。
+- `app.js`：來源鍵 `pc`（SRC、MIX_SOURCES、mergedFeedPreview、DATA_SOURCES 每天、來源漏斗「政府標案得標」、公開資料補電話的來源）、`index.html` 的 panePcc 與 script。
+- `tools/fill-founded.mjs --source pcc`：跟新設工廠同一套欄位補成立日與資本額。
+- `.github/workflows/daily-pcc.yml`：每天台灣 02:17 抓前一天（在 03:17 每日新名單之前）；**還沒接上排程**。
+- 還沒做：`tools/fetch-pcc.mjs`（抓取與篩選）。原因：g0v 的 API（pcc-api.openfun.app）從 GitHub Actions 連會被 Cloudflare 的機器人驗證擋（403「Just a moment…」），不繞；
+  等使用者在自己電腦跑 `pcc_test/probe_keys.py` 確認連得到、印出鍵名，再決定抓取放哪裡（使用者電腦排程推上 GitHub，或桌面 App 內建瀏覽器產 Excel 手動匯入）。
+- 測試：`tests/pcc.test.js` 三項。版號 20261024-378。
