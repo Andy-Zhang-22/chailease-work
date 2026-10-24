@@ -1,0 +1,15 @@
+# 一次性探路（看完就刪）：g0v 標案 API 的鍵名。只印鍵名、筆數、種類。
+name: 探路：標案 API
+on:
+  push:
+    paths: ['.github/workflows/probe-pcc.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: node tools/probe-pcc.mjs 20261023
