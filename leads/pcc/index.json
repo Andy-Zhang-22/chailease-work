@@ -1,0 +1,1 @@
+{"generatedAt":"","source":"https://pcc-api.openfun.app（政府電子採購網決標公告）","cities":["新北市","臺北市"],"days":180,"total":0,"withPhone":0,"latestDate":"","files":[{"path":"pcc.csv","rows":0}],"note":"佔位檔：抓取在使用者電腦跑（tools/fetch-pcc.py），推上來才有資料"}

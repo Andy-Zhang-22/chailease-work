@@ -1,0 +1,35 @@
+== A. 開放資料平臺上「決標」相關資料集（用它的搜尋 API，翻 3 頁）
+   搜尋結果一筆的欄位：['all_keyword', 'tag_name', 'tag_name_en', 'doc_count']
+   共 0 個標題含決標／得標的資料集：
+== B. 幾個主要來源的詮釋資料（v2，完整鍵）
+   [16371] 決標公告 ｜ 鍵：['categoryService', 'categoryDataset', 'datasetId', 'identifier', 'title', 'description', 'type', 'license', 'cost', 'dataProvider', 'publisherOID', 'publisherContactName', 'publisherContactPhone', 'publisherContactEmail', 'updateFrequency', 'dataQuality', 'coverageStartedDate', 'coverageEndedDate', 'publishedDate', 'modifiedDate', 'spatialCoverage', 'language', 'relatedUrl', 'notes', 'apiDocUrl', 'distribution', 'keyword', 'en']
+       updateFrequency: {'regularupdate': '2'}
+       description: 年度委辦計畫決標資訊
+       檔：JSON https://pms.sme.gov.tw/PMSApi/v2/ODT/ATM ｜ 年度委辦計畫決標資訊
+   [6155] 決標金額前5大之決標公告 ｜ 鍵：['categoryService', 'categoryDataset', 'datasetId', 'identifier', 'title', 'description', 'type', 'license', 'cost', 'dataProvider', 'publisherOID', 'publisherContactName', 'publisherContactPhone', 'publisherContactEmail', 'updateFrequency', 'dataQuality', 'coverageStartedDate', 'coverageEndedDate', 'publishedDate', 'modifiedDate', 'spatialCoverage', 'language', 'relatedUrl', 'notes', 'apiDocUrl', 'distribution', 'keyword', 'en']
+       updateFrequency: {'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       description: 總決標金額前5大之決標公告資訊
+       檔：JSON https://web.pcc.gov.tw/tps/openDataApi/atmTop5 ｜ 決標金額前5大之決標公告
+   [165150] 前1年度公告金額以上採購限制性決標公告 ｜ 鍵：['categoryService', 'categoryDataset', 'datasetId', 'identifier', 'title', 'description', 'type', 'license', 'cost', 'dataProvider', 'publisherOID', 'publisherContactName', 'publisherContactPhone', 'publisherContactEmail', 'updateFrequency', 'dataQuality', 'coverageStartedDate', 'coverageEndedDate', 'publishedDate', 'modifiedDate', 'spatialCoverage', 'language', 'relatedUrl', 'notes', 'apiDocUrl', 'distribution', 'keyword', 'en']
+       updateFrequency: {'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       description: 提供前1年度公告金額以上採購限制性決標公告
+       檔：JSON https://web.pcc.gov.tw/tps/openDataApi/lyOpenData?runType=3 ｜ 
+   [7264] 與政府機關有巨額採購，且在履約期間之廠商名單 ｜ 鍵：['categoryService', 'categoryDataset', 'datasetId', 'identifier', 'title', 'description', 'type', 'license', 'cost', 'dataProvider', 'publisherOID', 'publisherContactName', 'publisherContactPhone', 'publisherContactEmail', 'updateFrequency', 'dataQuality', 'coverageStartedDate', 'coverageEndedDate', 'publishedDate', 'modifiedDate', 'spatialCoverage', 'language', 'relatedUrl', 'notes', 'apiDocUrl', 'distribution', 'keyword', 'en']
+       updateFrequency: {'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       description: 提供近一週公告巨額採購決標公告且在履約期間之廠商名單。
+       檔：XML https://web.pcc.gov.tw/peems/lapeem/lapeemGeneralPolit/downLoadOpenData ｜ 
+== C. 直接打來源
+   16371 決標公告（pms.sme.gov.tw）: HTTP 200 application/json 196,650 bytes
+   16371 決標公告（pms.sme.gov.tw）: 頂層 list[1022]；列表 1022 筆
+     欄位（5）：['計畫年度', '案號', '計畫名稱', '決標金額', '投標廠商']
+     第一筆形狀：{'計畫年度': ('str', 3), '案號': ('str', 9), '計畫名稱': ('str', 21), '決標金額': ('str', 7), '投標廠商': ('str', 10)}
+   6155 決標金額前 5 大（採購網 openDataApi）: HTTP 500
+   165150 限制性決標（採購網 openDataApi）: HTTP 500
+   7264 巨額採購履約中廠商（採購網 peems）: HTTP 500
+== D. 16371 能不能依日期篩（試幾種參數，只看筆數有沒有變）
+   ?StartDate=2026-10-17&EndDate=2026-10-24: HTTP 200 196,650 bytes，列表 1022 筆
+   ?startDate=20261017&endDate=20261024: HTTP 200 196,650 bytes，列表 1022 筆
+   ?date=20261023: HTTP 200 196,650 bytes，列表 1022 筆
+   ?awardDate=2026-10-23: HTTP 200 196,650 bytes，列表 1022 筆
+   ?page=1&size=20: HTTP 200 196,650 bytes，列表 1022 筆
+   ?year=2026&month=10: HTTP 200 196,650 bytes，列表 1022 筆

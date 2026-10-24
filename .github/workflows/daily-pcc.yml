@@ -1,0 +1,56 @@
+# 政府標案得標：抓取在使用者自己的電腦跑（tools/fetch-pcc.py；g0v 標案 API 從 GitHub Actions 連會被 Cloudflare 擋），
+# 電腦端用 tools/pcc-daily.sh 抓完推上分支；這支在 leads/pcc/pcc.csv 有新推送時接著查商工登記補公司成立日、資本額
+# （fill-founded.mjs --source pcc，商工登記從 Actions 連得到），再推回去。網站的「政府標案得標」分頁與每日新名單讀 leads/pcc/。
+name: 每日政府標案得標（補成立日與資本額）
+
+on:
+  push:
+    paths: ['leads/pcc/pcc.csv']
+  workflow_dispatch:
+    inputs:
+      founded_minutes:
+        description: '查商工登記最多跑幾分鐘'
+        required: false
+        default: '30'
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pcc
+  cancel-in-progress: false
+
+jobs:
+  founded:
+    # 自己推的那次（commit 訊息開頭是「政府標案得標：補」）不要再觸發一輪
+    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, '政府標案得標：補') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: 補上公司成立日與資本額
+        continue-on-error: true
+        env:
+          MINUTES: ${{ inputs.founded_minutes || '30' }}
+        run: |
+          node tools/fill-founded.mjs --source pcc --minutes "$MINUTES" --concurrency 4 | tee fill-founded.log
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fill-founded.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leads/pcc
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git commit -m "政府標案得標：補成立日與資本額 $(date -u +%Y-%m-%d)"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"

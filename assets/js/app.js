@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261024-377';
+  const APP_VERSION = '20261024-378';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1106,6 +1106,11 @@
       const fac = window.Factory && window.Factory.lookup ? window.Factory.lookup(out.taxId) : null;
       out.newFactory = fac && fac.regMonths != null && fac.regMonths < 6 ? fac : null;
     }
+    // 剛得標（政府電子採購網決標公告，最近 6 個月）：要付履約保證金、墊款（版本 378）
+    {
+      const aw = window.Pcc && window.Pcc.lookup ? window.Pcc.lookup(out.taxId) : null;
+      out.newAward = aw && aw.regMonths != null && aw.regMonths < 6 ? aw : null;
+    }
     out.chattelKinds = out.chattel.length
       ? ['has', out.chattelNext && out.chattelNext.days <= 92 ? 'm3' : '', out.chattelNext && out.chattelNext.days <= 366 ? 'm12' : ''].filter(Boolean)
       : ['none'];
@@ -1686,7 +1691,7 @@
 
   /** 統編 → 公開資料裡的電話 { tel, from }；資料要先載（loadPhoneSources） */
   const PHONE_SOURCES = [
-    ['Nhi', '剛開始請人（健保）'], ['Einv', '剛開電子發票'], ['Factory', '新設工廠'], ['Industry', '產業名單'],
+    ['Nhi', '剛開始請人（健保）'], ['Einv', '剛開電子發票'], ['Factory', '新設工廠'], ['Industry', '產業名單'], ['Pcc', '政府標案得標'],
   ];
   async function loadPhoneSources() {
     await Promise.all([
@@ -3424,6 +3429,8 @@
     { key: 'nh', tab: 'nhi', label: '剛開始請人', mod: () => window.Nhi },
     { key: 'ei', tab: 'einv', label: '剛開電子發票', mod: () => window.Einv },
     { key: 'fa', tab: 'factory', label: '新設工廠', mod: () => window.Factory },
+    // 政府標案得標（版本 378；使用者：「新增一個案源來源『政府標案得標廠商』」）：g0v 標案 API 的決標公告，每天抓
+    { key: 'pc', tab: 'pcc', label: '政府標案得標', mod: () => window.Pcc },
     // 產業名單（使用者：「這些資料都做，同個統編的公司依資料都合在一起」）：車輛相關業者、食品工廠、環保列管工廠、營造業
     { key: 'in', tab: 'industry', label: '產業名單', mod: () => window.Industry },
     // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
@@ -3460,7 +3467,7 @@
   };
   /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
   window.mixSourceStatus = async () => {
-    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠', industry: '產業名單' };
+    const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠', industry: '產業名單', pcc: '政府標案得標' };
     return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
       try {
         const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
@@ -3522,9 +3529,9 @@
     return box;
   };
   window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
-    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry];
+    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry, window.Pcc];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
-    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in'];
+    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in', 'pc'];
     await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
       .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4, buy: buyRank(c), strong: strongSignals(c) }));
@@ -3549,7 +3556,7 @@
     // 後台 05:30 來看到排滿就不挑（10/12 第一次正式跑就是這樣，版本 331）。使用者自己按「再補」照常。
     if (!force && !more && !BACKEND_RUN && feedBackendActive()) return { picked: 0, backend: true, day: today };
     if (!state.records.length && !more) return { picked: 0, empty: true };   // 還沒有主名單，先不餵
-    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry) { if (more) toast('清冊還沒載好，請重新整理再試'); return { picked: 0, notReady: true }; }
+    if (!window.Chattel || !window.Leads || !window.Biz || !window.Trade || !window.Nhi || !window.Einv || !window.Factory || !window.Industry || !window.Pcc) { if (more) toast('清冊還沒載好，請重新整理再試'); return { picked: 0, notReady: true }; }
     /*
      * 有開雲端同步的話，今天要先同步成功過才挑：另一台昨天挑的還沒同步進來就挑，
      * 同樣的公司會再進來一次（9/27 手機補的六家，9/29 電腦全部又挑了一遍）。
@@ -3572,7 +3579,7 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return { picked: 0, full: true, have, quota: newQuota(), day }; }
-      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll] = await Promise.all([
+      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll, pcAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Biz.dailyCandidates().catch((e) => { console.error(e); return []; }),
@@ -3581,6 +3588,7 @@
         window.Einv.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Factory.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Industry.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Pcc.dailyCandidates().catch((e) => { console.error(e); return []; }),
       ]);
       /*
        * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
@@ -3604,6 +3612,7 @@
         { key: 'ei', label: '剛開電子發票', mod: window.Einv, list: eiAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'fa', label: '新設工廠', mod: window.Factory, list: faAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'in', label: '產業名單', mod: window.Industry, list: inAll.filter((r) => notBuried(r.name, r.taxId)) },
+        { key: 'pc', label: '政府標案得標', mod: window.Pcc, list: pcAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
       let merged = mergeFeed(SRC).filter((c) => capitalOk(c.capital));   // 資本額門檻（版本 362）
       const mergedKeys = new Set(merged.map((c) => c.key));
@@ -3817,6 +3826,7 @@
     { key: 'einv', url: 'leads/einv/index.json', every: '每月 11 日', at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家` },
     { key: 'factory', url: 'leads/factory/index.json', every: '每月 20 日', at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家` },
     { key: 'industry', url: 'leads/industry/index.json', every: '每月 14 日', at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家` },
+    { key: 'pcc', url: 'leads/pcc/index.json', every: '每天', at: (j) => j.generatedAt, extra: (j) => `${Number(j.total || 0).toLocaleString()} 家` },
   ];
 
   /*
@@ -4625,6 +4635,7 @@
         ? el('span', { className: 'badge badge-regchange', textContent: regBadgeText(r), title: regChangeBrief(r) }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.newFactory ? el('span', { className: 'badge badge-opp', textContent: `🏭 新登記工廠 ${r.newFactory.ym.y}/${String(r.newFactory.ym.m).padStart(2, '0')}`, title: `經濟部生產中工廠清冊：${r.newFactory.name}${r.newFactory.products ? `，主要產品 ${r.newFactory.products}` : ''}` }) : '',
+      r.newAward ? el('span', { className: 'badge badge-opp', textContent: `🏆 剛得標 ${r.newAward.ym.y}/${String(r.newAward.ym.m).padStart(2, '0')}`, title: `政府電子採購網決標公告：${r.newAward.tender || ''}${r.newAward.agency ? `（${r.newAward.agency}）` : ''}` }) : '',
       (r.opp || []).includes('renew') ? el('span', { className: 'badge badge-opp', textContent: '🔁 換約時機', title: `跟同業的動保 ${oppText(r, 'renew')}，30 天內沒聯絡過` }) : '',
       (r.opp || []).includes('fresh') ? el('span', { className: 'badge badge-opp', textContent: `📈 ${oppText(r, 'fresh')}`, title: r.chance === 'no' ? '標了無機會之後，商工登記又有變更' : '很久沒聯絡，這段時間商工登記有變更' }) : '',
       r.foreignCorps.length ? el('span', { className: 'badge badge-foreign', textContent: r.havenCorps.length ? '🌏 境外控股' : '🌏 外國法人股東', title: `董監事裡的法人：${r.foreignCorps.join('、')}（商工登記）` }) : '',
@@ -4807,7 +4818,7 @@
    * 看哪一條真的比較打得出東西。來源從檔名看，每日新名單的看訪談內容開頭（動保：／新公司清冊／商行／企業社）。
    * 成案系統裡沒有，「有機會」當代理指標。
    */
-  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
+  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '政府標案得標'];
   function freshOrigin(v) {
     const src = String(v.source || '');
     if (/^動產擔保名單/.test(src)) return '動產擔保';
@@ -4818,6 +4829,7 @@
     if (/^剛開電子發票/.test(src)) return '剛開電子發票';
     if (/^新設工廠/.test(src)) return '新設工廠';
     if (/^產業名單/.test(src)) return '產業名單';
+    if (/^政府標案得標/.test(src)) return '政府標案得標';
     if (!/^每日新名單/.test(src)) return '';
     const n = String(v.notesRaw || '');
     if (/^動保：/.test(n)) return '動產擔保';
@@ -4828,6 +4840,7 @@
     if (/^電子發票 /.test(n)) return '剛開電子發票';
     if (/^工廠登記 /.test(n)) return '新設工廠';
     if (/^產業名單：/.test(n)) return '產業名單';
+    if (/^政府標案得標 /.test(n)) return '政府標案得標';
     return '';
   }
   function funnelStats(views) {
@@ -4908,6 +4921,7 @@
     $('#paneNhi').hidden = tab !== 'nhi';
     $('#paneFactory').hidden = tab !== 'factory';
     $('#paneIndustry').hidden = tab !== 'industry';
+    $('#panePcc').hidden = tab !== 'pcc';
     $('#paneMix').hidden = tab !== 'mix';
     // 只有重點推廣名單用左側篩選；規則、行事曆、找名單各頁（有自己的一組）讓內容佔滿整個寬度
     const wide = tab !== 'all';
@@ -4939,6 +4953,8 @@
       if (window.Factory) window.Factory.show();
     } else if (tab === 'industry') {
       if (window.Industry) window.Industry.show();
+    } else if (tab === 'pcc') {
+      if (window.Pcc) window.Pcc.show();
     } else if (tab === 'mix') {
       if (window.Mix) window.Mix.show();
     } else { renderList(); renderRemindBar(); }
@@ -8491,7 +8507,8 @@ export default {
     nhi: { input: '#nhi-q', placeholder: '搜尋剛開始請人：名稱、統編、地址、行業、電話' },
     factory: { input: '#factory-q', placeholder: '搜尋新設工廠：名稱、統編、地址、行業、主要產品、電話' },
     industry: { input: '#industry-q', placeholder: '搜尋產業名單：名稱、統編、地址、類別、行業、電話' },
-    mix: { input: '#mix-q', placeholder: '搜尋新名單（七份合併）：名稱、統編、地址、電話、訊號' },
+    pcc: { input: '#pcc-q', placeholder: '搜尋政府標案得標：名稱、統編、地址、標案名稱、招標機關、電話' },
+    mix: { input: '#mix-q', placeholder: '搜尋新名單（八份合併）：名稱、統編、地址、電話、訊號' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {
@@ -8752,7 +8769,7 @@ export default {
    * 合併頁＋七份名單＋上市櫃。state.tab 還是那幾個 key，各分頁、搜尋欄、?tab= 都不用改；按「找名單」就回到上次看的那個來源。
    * 規則從右上選單進，分頁列不亮。（版本 314 拿掉統計、剛開電子發票的獨立頁，原本的第三排併成一排；上市櫃留著排最後）
    */
-  const SOURCE_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'factory', 'industry', 'listed'];
+  const SOURCE_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'factory', 'industry', 'pcc', 'listed'];
   // 版本 327：第二排只剩合併、商行、上市櫃三個按鈕；其他六頁沒有按鈕（?tab= 與測試還開得到），「找名單」只記得這三個
   const SHOWN_SOURCE_TABS = ['mix', 'biz', 'listed'];
   function switchTab(tab) {
@@ -8866,6 +8883,10 @@ export default {
     // 新設工廠：名單上的客戶剛登記工廠，卡片標 🏭（資料不用打開那一頁也先載）
     if (window.Factory && window.Factory.ensureData) {
       window.Factory.ensureData().then(() => { chattelVersion += 1; render(); }).catch(() => {});
+    }
+    // 政府標案得標：名單上的客戶剛得標，卡片標 🏆（版本 378）
+    if (window.Pcc && window.Pcc.ensureData) {
+      window.Pcc.ensureData().then(() => { chattelVersion += 1; render(); }).catch(() => {});
     }
     checkForUpdate();
     dropOldDossierDb();
