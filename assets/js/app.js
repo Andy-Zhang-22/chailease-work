@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261024-376';
+  const APP_VERSION = '20261024-377';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3390,7 +3390,10 @@
     // 有手機號碼的排前面（版本 347；使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）：排在訊號前面
     // 規模符合（資本額 300～6,000 萬）且有手機的排在「有手機」前面（版本 374；使用者：「這幾天的名單確實都是給我有手機的名單，但好像規模都偏小」→「規模符合且有手機的排在有手機前面」）
     const fit = (c) => Number(!!(c.capOk && c.mobile));
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    // 四個同時滿足的最前面（版本 377；使用者：「有手機、訊號多的且有買設備、規模符合的都先給我」）：
+    // 規模符合＋有手機＋一年內有買設備（擔保 300 萬以上；半年到一年的要同業金主，跟 buyRank 同一條）＋明確訊號兩個以上（買設備那個也算一個）
+    const top = (c) => Number(!!(c.capOk && c.mobile && buyRank(c) <= 1 && strongSignals(c) >= 2));
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -3524,7 +3527,7 @@
     const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in'];
     await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
-      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4 }));
+      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4, buy: buyRank(c), strong: strongSignals(c) }));
   };
   /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
