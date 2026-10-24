@@ -1,61 +1,48 @@
 == 1. data.gov.tw 搜尋（瀏覽器畫出來，順便錄下它背後呼叫的 API）
-  查「決標公告」：畫面上資料集連結 20 個；標題含決標／採購的：[]
-  查「決標」：畫面上資料集連結 20 個；標題含決標／採購的：[]
-  背後 API 呼叫 7 個：
-    200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99%E5%85%AC%E5%91%8A
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825361007&_gaz=1&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGA&cid=871057564.1792825362&frm=0&
-    200 application/json https://data.gov.tw/api/front/dataset/list
-       keys=['success', 'code', 'message', 'payload']
-       titles=['拖吊保管場', '新北市垃圾清運車輛所在位置', '即時交通事故資料(A1類)', '各警察機關新聞發布', '公車預估到站時間', '新北市空氣品質資訊', '桃園市路邊停車路段收費資訊', '金品獎獲獎專區', '桃園市政府每年度消費諮詢商品類型分析表', '桃園市二代戒菸合約醫療院所(藥局)名單', '桃園市政府住宅發展處職員官等性別統計報表', '桃園市觀光工廠']
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za200zd9102522707xf1&_p=1792825361007&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AEAAAGQ&ae=a&cid=871057564.1792825362&frm=0&ps
-    200 text/html https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=%E6%B1%BA%E6%A8%99
-    200 application/json https://data.gov.tw/api/front/dataset/list
-       keys=['success', 'code', 'message', 'payload']
-       titles=['新北市垃圾清運車輛所在位置', '拖吊保管場', '即時交通事故資料(A1類)', '各警察機關新聞發布', '公車預估到站時間', '新北市空氣品質資訊', '桃園市路邊停車路段收費資訊', '金品獎獲獎專區', '桃園市政府每年度消費諮詢商品類型分析表', '桃園市二代戒菸合約醫療院所(藥局)名單', '桃園市政府住宅發展處職員官等性別統計報表', '桃園市觀光工廠']
-    204 text/plain https://analytics.google.com/g/collect?v=2&tid=G-68L77FMJ2H&gtm=45je6al1v9102522707za208zd9102522707xf1&_p=1792825370695&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=AAAAAGQ&cid=871057564.1792825362&frm=0&pscdl=n
-== 2. 詮釋資料（標題含決標／得標／採購的，最多 10 個）
-== 3. 採購網本身（境外會不會擋）
-  web.pcc.gov.tw 失敗：HTTP Error 500: Internal Server Error
-== 4. 對照：g0v 社群鏡站 API（非官方，pcc.g0v.ronny.tw）
-  https://pcc.g0v.ronny.tw/api/listbydate?date=20261022 HTTP 200 text/html，不是 JSON，前 160 字：<!DOCTYPE html> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> <title>標案瀏覽</title> <script src="//ajax.googleapis.com/ajax/li
-  https://pcc.g0v.ronny.tw/api/searchbytitle?query=%E5%86%B7%E HTTP 200 text/html，不是 JSON，前 160 字：<!DOCTYPE html> <html> <head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> <title>標案瀏覽</title> <script src="//ajax.googleapis.com/ajax/li
+Traceback (most recent call last):
+  File "/home/runner/work/chailease-work/chailease-work/pcc_test/probe_open_data.py", line 162, in <module>
+    main()
+  File "/home/runner/work/chailease-work/chailease-work/pcc_test/probe_open_data.py", line 46, in main
+    url = "https://data.gov.tw/datasets/search?p=1&size=20&s=_score_desc&q=" + urllib.parse.quote(q)
+                                                                               ^^^^^^
+UnboundLocalError: cannot access local variable 'urllib' where it is not associated with a value
 == 首頁
    url: https://web.pcc.gov.tw/
-   title: The URL you requested has been blocked  bytes: 38643
+   title: The URL you requested has been blocked  bytes: 38642
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic → HTTP 500
 == indexTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/indexTenderBasic
-   title: The URL you requested has been blocked  bytes: 38685
+   title: The URL you requested has been blocked  bytes: 38684
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced → HTTP 500
 == indexTenderAdvanced
    url: https://web.pcc.gov.tw/prkms/tender/common/advanced/indexTenderAdvanced
-   title: The URL you requested has been blocked  bytes: 38691
+   title: The URL you requested has been blocked  bytes: 38690
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion → HTTP 500
 == readBulletion
    url: https://web.pcc.gov.tw/prkms/tender/common/bulletion/readBulletion
-   title: The URL you requested has been blocked  bytes: 38686
+   title: The URL you requested has been blocked  bytes: 38685
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate → HTTP 500
 == readNoticeDate
    url: https://web.pcc.gov.tw/prkms/tender/common/noticeDate/readNoticeDate
-   title: The URL you requested has been blocked  bytes: 38688
+   title: The URL you requested has been blocked  bytes: 38687
    form 0 個
    連結 0 個，相關 0 個
 
 -- https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic → HTTP 500
 == readTenderBasic
    url: https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic
-   title: The URL you requested has been blocked  bytes: 38684
+   title: The URL you requested has been blocked  bytes: 38683
    form 0 個
    連結 0 個，相關 0 個
