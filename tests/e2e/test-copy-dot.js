@@ -33,7 +33,9 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk(look.text==='', '按鈕本身沒有文字');
  chk(/複製電話/.test(look.label||''), `讀螢幕的人還看得到是什麼：${look.label}`);
  chk(look.w>=20&&look.h>=26, `按的範圍夠手指按：${look.w}×${look.h}`);
- chk(look.bg==='rgb(100, 116, 139)', `點是灰的（不跟卡片上的綠色標記搶眼）：${look.bg}`);
+ // 灰：三個色版接近、不偏綠（版本 382 換配色後是 --muted，不綁死色碼）
+ const rgb=(look.bg.match(/\d+/g)||[]).map(Number);
+ chk(rgb.length>=3&&Math.max(...rgb)-Math.min(...rgb)<=30&&rgb[1]<=rgb[2]+10, `點是灰的（不跟卡片上的綠色標記搶眼）：${look.bg}`);
  chk(Math.abs(parseFloat(look.dw)-parseFloat(look.font)/2)<0.6&&look.radius==='999px',
    `點＝那行字的一半：字 ${look.font}、點 ${look.dw}`);
 
