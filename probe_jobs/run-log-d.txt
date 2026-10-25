@@ -1,0 +1,16 @@
+== D. 台灣就業通職缺清單（44062）的 datastore API：能不能翻頁、篩縣市、總筆數
+   無參數：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   limit=5：HTTP 200 ｜ 6,045 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 5 ｜ 縣市前 5 [('台北市', 5)] ｜ 第一筆更新日 20260915
+   offset=1000&limit=5：HTTP 200 ｜ 109 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 0 ｜ 縣市前 5 [] ｜ 第一筆更新日 
+   $top=5：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   $skip=1000&$top=5：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   page=2&size=5：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   CITYNAME=新北市：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   q=新北市：HTTP 200 ｜ 1,371,884 bytes ｜ 最外層 ['success', 'updateTime', 'result'] ｜ {'success': True, 'updateTime': '20261025T010004'} ｜ result 的純量 {'resource_id': 'A17000000J-030144-VAL'} ｜ 筆數 1000 ｜ 縣市前 5 [('台北市', 992), ('新北市', 7), ('桃園市', 1)] ｜ 第一筆更新日 20260915
+   filters JSON：HTTP 200 ｜ 86 bytes ｜ 最外層 ['success', 'error'] ｜ {'success': False} ｜ result 的純量 {} ｜ 筆數 0 ｜ 縣市前 5 [] ｜ 第一筆更新日 
+   CSV 下載加參數：
+   CSV?limit=5000：HTTP 200 ｜ 743,087 bytes ｜ 1000 筆 ｜ 縣市前 3 [('台北市', 992), ('新北市', 7), ('桃園市', 1)]
+   CSV?offset=1000：HTTP 200 ｜ 743,087 bytes ｜ 1000 筆 ｜ 縣市前 3 [('台北市', 992), ('新北市', 7), ('桃園市', 1)]
+   CSV?$skip=1000：HTTP 200 ｜ 743,087 bytes ｜ 1000 筆 ｜ 縣市前 3 [('台北市', 992), ('新北市', 7), ('桃園市', 1)]
+   CSV?page=2：HTTP 200 ｜ 743,087 bytes ｜ 1000 筆 ｜ 縣市前 3 [('台北市', 992), ('新北市', 7), ('桃園市', 1)]
+探路結束。
