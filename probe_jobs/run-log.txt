@@ -1,4 +1,16 @@
 == A. data.gov.tw 搜尋職缺相關資料集
+   查「就業機會」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 17 筆
+       一筆的欄位：['agency_name', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone', 'license_tid']；前 8 個標題：['輔導青年創業成果', '前瞻基礎建設計畫特別預算', '民間團體申請多元就業開發方案計畫提案期限', '多元就業開發方案與培力就業計畫提案說明會', '新經濟移民法相關資料', '台灣自來水公司新進人員性別統計表', '嘉義市身心障礙綜合園區-再耕園', '10341-01-01-2 臺中市職業訓練人數概況']
+   查「職缺」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
+       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'coverage_temporal_end', 'coverage_temporal_start', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname']；前 8 個標題：['見習農場職缺', '歷年各業廠商職缺數', '歷年各業廠商職缺率', '台灣就業通網站職缺清單', '本會就業服務-企業職缺資訊', '108年臺南市政府就業資訊', '臺北市政府求職徵才職缺資訊', '臺北市就業服務處求職求才職缺資訊']
+   查「台灣就業通」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 11 筆
+       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['台灣就業通網站職缺清單', '台灣就業通網站單一簽入網站清冊', '109年臺南市政府就業資訊', '二度就業婦女求職推介協助人數', '育嬰留職停薪期間補充人力-按性別分', '就業服務之求才及求才僱用人數按職業分', '家暴及性侵害被害人就業協助人數-按性別分', '就業服務之求才及求才僱用人數按辦理單位分']
+   查「徵才」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
+       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['內政部徵才資訊', '交通部徵才資訊', '內政部移民署徵才專區', '嘉義市政府網站-徵才公告', '臺南市政府110年徵才活動就業資訊', '嘉義縣政府建設處_徵才資訊', '臺南市政府111年徵才活動就業資訊', '臺北市政府求職徵才職缺資訊']
+   查「求才」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
+       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['就業服務之求才及求才僱用人數按職業分', '就業服務之求才及求才僱用人數按辦理單位分', '臺北市就職求才人數及求供倍數', '外交部全球資訊網-中文版-求才公告', '臺南市求職求才人數及求供倍數', '臺北市就業服務處求職求才職缺資訊', '就業輔導', '臺北市求職、求才及推介就業人數按職業別分']
+   GET https://data.gov.tw/api/v2/rest/datasets?q=%E8%81%B7%E7%BC%BA&size=20 失敗：HTTP Error 404: Not Found
+   GET https://data.gov.tw/api/front/dataset/list?q=%E8%81%B7%E7%BC%BA&page_n 失敗：HTTP Error 405: Method Not Allowed
    共 0 個：
 == B. 詮釋資料（v2）：更新頻率、欄位說明、下載網址
 == C. 直接下載，看欄位、筆數、有沒有統編、新北／台北幾筆（只印統計）
