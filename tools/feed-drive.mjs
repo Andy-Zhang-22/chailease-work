@@ -193,6 +193,11 @@ async function main() {
     // 3b. 照上限重排（使用者點頭的第 4 項）：照網站的設定（關著就不排、今天排過就不重排），超過上限的把最不急的往後挪
     const moved = await page.evaluate(() => window.autoRebalance());
     out(moved ? `照上限重排：往後挪了 ${moved} 家` : '照上限重排：不用動（沒超過上限、關著、或今天排過了）');
+    // 3c. 104 候選池（版本 387）：排序接下來的 45 家寫進同步檔的設定，Mac 早上在使用者的 Chrome 裡逐家查 104，有徵才的加進當天名單
+    try {
+      const hc = await page.evaluate(() => window.hiringCandidates(45));
+      out(hc && hc.n ? `104 候選池：${hc.n} 家（寫在同步檔的設定裡，Mac 早上拿去查）` : '104 候選池：清冊沒載好，這次沒寫');
+    } catch (err) { out(`104 候選池沒寫成：${err && err.message ? err.message : err}`); }
 
     // 4. 每月一次：找不到電話的再查 Google
     if (doNoPhone) {
