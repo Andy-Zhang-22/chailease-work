@@ -1,17 +1,306 @@
 == A. data.gov.tw 搜尋職缺相關資料集
-   查「就業機會」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 17 筆
-       一筆的欄位：['agency_name', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone', 'license_tid']；前 8 個標題：['輔導青年創業成果', '前瞻基礎建設計畫特別預算', '民間團體申請多元就業開發方案計畫提案期限', '多元就業開發方案與培力就業計畫提案說明會', '新經濟移民法相關資料', '台灣自來水公司新進人員性別統計表', '嘉義市身心障礙綜合園區-再耕園', '10341-01-01-2 臺中市職業訓練人數概況']
-   查「職缺」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
-       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'coverage_temporal_end', 'coverage_temporal_start', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname']；前 8 個標題：['見習農場職缺', '歷年各業廠商職缺數', '歷年各業廠商職缺率', '台灣就業通網站職缺清單', '本會就業服務-企業職缺資訊', '108年臺南市政府就業資訊', '臺北市政府求職徵才職缺資訊', '臺北市就業服務處求職求才職缺資訊']
-   查「台灣就業通」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 11 筆
-       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['台灣就業通網站職缺清單', '台灣就業通網站單一簽入網站清冊', '109年臺南市政府就業資訊', '二度就業婦女求職推介協助人數', '育嬰留職停薪期間補充人力-按性別分', '就業服務之求才及求才僱用人數按職業分', '家暴及性侵害被害人就業協助人數-按性別分', '就業服務之求才及求才僱用人數按辦理單位分']
-   查「徵才」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
-       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['內政部徵才資訊', '交通部徵才資訊', '內政部移民署徵才專區', '嘉義市政府網站-徵才公告', '臺南市政府110年徵才活動就業資訊', '嘉義縣政府建設處_徵才資訊', '臺南市政府111年徵才活動就業資訊', '臺北市政府求職徵才職缺資訊']
-   查「求才」：HTTP 200，最外層鍵 ['success', 'code', 'message', 'payload']，結果 20 筆
-       一筆的欄位：['agency_name', 'agency_name_en', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone']；前 8 個標題：['就業服務之求才及求才僱用人數按職業分', '就業服務之求才及求才僱用人數按辦理單位分', '臺北市就職求才人數及求供倍數', '外交部全球資訊網-中文版-求才公告', '臺南市求職求才人數及求供倍數', '臺北市就業服務處求職求才職缺資訊', '就業輔導', '臺北市求職、求才及推介就業人數按職業別分']
-   GET https://data.gov.tw/api/v2/rest/datasets?q=%E8%81%B7%E7%BC%BA&size=20 失敗：HTTP Error 404: Not Found
-   GET https://data.gov.tw/api/front/dataset/list?q=%E8%81%B7%E7%BC%BA&page_n 失敗：HTTP Error 405: Method Not Allowed
-   共 0 個：
+   一筆的全部欄位：['agency_name', 'agency_tid', 'category_dataset_tid', 'category_dataset_name', 'category_tid', 'category_name', 'changed', 'charge', 'check_freq_tid', 'check_freq_name', 'content', 'coverage_spatial', 'dataset_status', 'dataset_status_name', 'dataset_type', 'language', 'liaison_displayname', 'liaison_emails', 'liaison_phone', 'license_tid', 'license_name', 'metadata_changed', 'nid', 'note', 'note_internal', 'pubdate', 'quality_badge_type', 'quality_check_status', 'status', 'title', 'topic_tid', 'topic_name', 'updatefreq_desc', 'api_detect_status', 'api_doc_url', 'dataset_resource_description', 'dataset_resource_note', 'all_file_format_tid', 'all_amount', 'all_file_format_name', 'all_url', 'all_encoding', 'data_fields', 'all_field_desc', 'all_related_url', 'all_tag_tid', 'all_tag_name', 'dataset_view_times', 'resource_download_times', 'resource_download_times_past_7days', 'comment_quantity', 'vote_average_percent', 'vote_quantity', 'central_government_level_1', 'central_government_level_2', 'central_government_level_3', 'is_high_application', '_ingest_timestamp', 'schema_badge_type', 'textual_name', 'textual', 'agency_name_en']
+   查「就業機會」：HTTP 200，結果 17 筆；標題：['輔導青年創業成果', '前瞻基礎建設計畫特別預算', '民間團體申請多元就業開發方案計畫提案期限', '多元就業開發方案與培力就業計畫提案說明會', '新經濟移民法相關資料', '台灣自來水公司新進人員性別統計表', '嘉義市身心障礙綜合園區-再耕園', '10341-01-01-2 臺中市職業訓練人數概況', '2030雙語政策整體推動方案', '地方產業發展基金補助計畫(歷年清單)']
+   查「職缺」：HTTP 200，結果 20 筆；標題：['見習農場職缺', '歷年各業廠商職缺數', '歷年各業廠商職缺率', '台灣就業通網站職缺清單', '本會就業服務-企業職缺資訊', '108年臺南市政府就業資訊', '臺北市政府求職徵才職缺資訊', '臺北市就業服務處求職求才職缺資訊', '運輸業缺員訊息', '金融研訓院金融就業服務']
+   查「台灣就業通」：HTTP 200，結果 11 筆；標題：['台灣就業通網站職缺清單', '台灣就業通網站單一簽入網站清冊', '109年臺南市政府就業資訊', '二度就業婦女求職推介協助人數', '育嬰留職停薪期間補充人力-按性別分', '就業服務之求才及求才僱用人數按職業分', '家暴及性侵害被害人就業協助人數-按性別分', '就業服務之求才及求才僱用人數按辦理單位分', '就業服務之求職及求職推介就業人數-按性別、職業分', '就業服務之求職及求職推介就業人數-按性別、辦理單位分']
+   查「徵才」：HTTP 200，結果 20 筆；標題：['內政部徵才資訊', '交通部徵才資訊', '內政部移民署徵才專區', '嘉義市政府網站-徵才公告', '臺南市政府110年徵才活動就業資訊', '嘉義縣政府建設處_徵才資訊', '臺南市政府111年徵才活動就業資訊', '臺北市政府求職徵才職缺資訊', '國家通訊傳播委員會徵才資訊', '雲林縣政府全球資訊網徵才公告']
+   查「求才」：HTTP 200，結果 20 筆；標題：['就業服務之求才及求才僱用人數按職業分', '就業服務之求才及求才僱用人數按辦理單位分', '臺北市就職求才人數及求供倍數', '外交部全球資訊網-中文版-求才公告', '臺南市求職求才人數及求供倍數', '臺北市就業服務處求職求才職缺資訊', '就業輔導', '臺北市求職、求才及推介就業人數按職業別分', '臺北市求職、求才及推介就業人數按年齡別分', '臺北市求職、求才及推介就業人數按教育別分']
+   共 53 個：
+   - 41883 見習農場職缺 ｜ 農業部 ｜  ｜ 每日
+   - 9857 歷年各業廠商職缺數 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 9858 歷年各業廠商職缺率 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 44062 台灣就業通網站職缺清單 ｜ 勞動部勞動力發展署 ｜  ｜ 每日
+   - 131575 本會就業服務-企業職缺資訊 ｜ 國軍退除役官兵輔導委員會 ｜  ｜ 每年
+   - 128467 臺北市政府求職徵才職缺資訊 ｜ 臺北市政府人事處 ｜  ｜ 每日
+   - 135021 臺北市就業服務處求職求才職缺資訊 ｜ 臺北市就業服務處 ｜  ｜ 每日
+   - 32432 公平交易委員會外補職缺甄選性別統計 ｜ 公平交易委員會 ｜  ｜ 每年
+   - 34120 各業廠商職缺概況－按行業及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 7229 行政院人事行政總處事求人機關徵才資料 ｜ 行政院人事行政總處 ｜  ｜ 每日
+   - 40132 內政部移民署徵才專區 ｜ 內政部移民署 ｜  ｜ 每日
+   - 162612 客家委員會累計提列公務人員高普考試職缺數 ｜ 客家委員會 ｜  ｜ 每日
+   - 34123 各業廠商職缺計薪單位－按行業及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 161410 臺南市政府112年徵才活動就業資訊 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 37979 教育業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 36793 製造業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 174171 臺南市政府114年徵才活動就業資訊 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 36790 工業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 176531 臺南市政府115年徵才活動就業資訊 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 36791 服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 40292 其他服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37978 支援服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37975 金融及保險業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 36797 批發及零售業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 40293 科學園區廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37976 不動產業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37972 運輸及倉儲業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 34127 工業及服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 36796 營建工程業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 36794 電力及燃氣供應業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37973 住宿及餐飲業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 34126 工業及服務業廠商開出職缺原因－按行業、職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 37974 出版影音及資通訊業廠商職缺僱用條件概況－按職類及員工規模分 ｜ 行政院主計總處 ｜  ｜ 每年
+   - 148564 臺南市政府111年徵才活動就業資訊 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 57289 台灣就業通網站單一簽入網站清冊 ｜ 勞動部勞動力發展署 ｜  ｜ 每日
+   - 146549 就業服務之求才及求才僱用人數按職業分 ｜ 勞動部 ｜  ｜ 每日
+   - 146550 就業服務之求才及求才僱用人數按辦理單位分 ｜ 勞動部 ｜  ｜ 每日
+   - 8657 內政部徵才資訊 ｜ 人事處 ｜  ｜ 每日
+   - 7310 交通部徵才資訊 ｜ 交通部 ｜  ｜ 每日
+   - 52320 嘉義市政府網站-徵才公告 ｜ 嘉義市政府 ｜  ｜ 每日
+   - 137467 臺南市政府110年徵才活動就業資訊 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 134082 嘉義縣政府建設處_徵才資訊 ｜ 嘉義縣政府 ｜  ｜ 每日
+   - 11126 國家通訊傳播委員會徵才資訊 ｜ 國家通訊傳播委員會 ｜  ｜ 每日
+   - 159085 雲林縣政府全球資訊網徵才公告 ｜ 雲林縣政府 ｜  ｜ 每日
+   - 97382 外交部全球資訊網-中文版-求才公告 ｜ 外交部 ｜  ｜ 即時
+   - 155761 臺北市就職求才人數及求供倍數 ｜ 臺北市就業服務處 ｜  ｜ 每日
+   - 143432 臺南市求職求才人數及求供倍數 ｜ 臺南市政府勞工局 ｜  ｜ 每日
+   - 133595 臺北市求職、求才及推介就業人數按職業別分 ｜ 臺北市就業服務處 ｜  ｜ 每日
+   - 145736 臺北市求職、求才及推介就業人數按年齡別分 ｜ 臺北市就業服務處 ｜  ｜ 每日
+   - 133596 臺北市求職、求才及推介就業人數按教育別分 ｜ 臺北市就業服務處 ｜  ｜ 每日
+   - 87868 10343-01-02-2 臺中市就業服務之求職、求才及推介就業人數－按年齡分 ｜ 臺中市政府勞工局 ｜  ｜ 每日
+   - 87870 10343-01-03-2 臺中市就業服務之求職、求才及推介就業人數－按職業分 ｜ 臺中市政府勞工局 ｜  ｜ 每日
+   - 87866 10343-01-01-2 臺中市就業服務之求職、求才及推介就業人數－按教育程度分 ｜ 臺中市政府勞工局 ｜  ｜ 每日
 == B. 詮釋資料（v2）：更新頻率、欄位說明、下載網址
+   [41883] 見習農場職缺 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://data.moa.gov.tw/Service/OpenData/FarmJobInfo.aspx?IsTransData=1&UnitId=B61 ｜ 見習農場職缺
+       檔：CSV https://data.moa.gov.tw/Service/OpenData/FarmJobInfo.aspx?FOTT=CSV&IsTransData=1&UnitId=B61 ｜ 見習農場職缺
+       檔：XML https://data.moa.gov.tw/Service/OpenData/FarmJobInfo.aspx?FOTT=Xml&IsTransData=1&UnitId=B61 ｜ 見習農場職缺
+   [9857] 歷年各業廠商職缺數 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230513/mp05005.xml ｜ 歷年各業廠商職缺數.xml
+   [9858] 歷年各業廠商職缺率 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230513/mp05006.xml ｜ 歷年各業廠商職缺率.xml
+   [44062] 台灣就業通網站職缺清單 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：CSV https://apiservice.mol.gov.tw/OdService/download/A17000000J-030144-MKw ｜ 台灣就業通網站職缺清單
+       檔：JSON https://apiservice.mol.gov.tw/OdService/download/A17000000J-030144-nkP ｜ 台灣就業通網站職缺清單
+       檔：WEBSERVICES https://apiservice.mol.gov.tw/OdService/rest/datastore/A17000000J-030144-VAL ｜ 台灣就業通網站職缺清單
+   [131575] 本會就業服務-企業職缺資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：XML https://www.vac.gov.tw/rss-2207-1.html ｜ title、link、description、pubDate、author、source、NewsID、DeptName
+   [128467] 臺北市政府求職徵才職缺資訊 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       檔：XML https://dop.blob.core.windows.net/ipsnworkcontainer/jobs.xml ｜ 臺北市政府各機關學校所釋出之職缺資料
+   [135021] 臺北市就業服務處求職求才職缺資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.taipei/api/dataset/9cb8ebf1-8d21-4523-908c-af853867eea1/resource/cec51213-9585-4b4a-ae18-5c9309ddf453/download ｜ 臺北市就業服務處求職求才職缺資訊
+       檔：CSV https://data.taipei/api/dataset/9cb8ebf1-8d21-4523-908c-af853867eea1/resource/b0c24ef5-06dd-4027-9a1a-5c39c3381cbe/download ｜ 臺北市就業服務處求職求才職缺資訊
+   [32432] 公平交易委員會外補職缺甄選性別統計 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：CSV https://www.ftc.gov.tw/upload/opendata-105/外補職缺甄選性別統計.csv ｜ 公平交易委員會外補職缺甄選性別統計
+   [34120] 各業廠商職缺概況－按行業及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231839/Mp05039.xml ｜ 104年8月底各業廠商短缺員工概況－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231839/Mp05039A105.xml ｜ 105年8月底各業廠商短缺員工概況－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231839/Mp05039A106.xml ｜ 106年8月底各業廠商空缺員工概況－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231839/Mp05039A107.xml ｜ 107年8月底各業廠商空缺員工概況－按行業及員工規模分
+   [7229] 行政院人事行政總處事求人機關徵才資料 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '12', 'unittime': '時'}
+       檔：XML https://web3.dgpa.gov.tw/WANT03FRONT/AP/WANTF00003.aspx?GETJOB=Y ｜ 行政院人事行政總處事求人機關徵才資料
+   [40132] 內政部移民署徵才專區 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/7EABDBDE-5FEB-42FE-81D0-4CD01B665279/resource/098FB51A-562E-4DB6-BC9D-089EA8AAE991/download ｜ 內政部移民署徵才專區
+   [162612] 客家委員會累計提列公務人員高普考試職缺數 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：CSV https://cloud.hakka.gov.tw/Pub/Opendata/DTST20230500081.csv ｜ 政府資料開放平臺資料集清單-CSV
+       檔：JSON https://cloud.hakka.gov.tw/Pub/Opendata/DTST20230500081.json ｜ 政府資料開放平臺資料集清單-JSON
+       檔：XML https://cloud.hakka.gov.tw/Pub/Opendata/DTST20230500081.xml ｜ 政府資料開放平臺資料集清單-XML
+   [34123] 各業廠商職缺計薪單位－按行業及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05042.xml ｜ 104年8月底各業廠商短缺員工計薪單位－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05042A105.xml ｜ 105年8月底各業廠商短缺員工計薪單位－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05042A106.xml ｜ 106年8月底各業廠商空缺員工計薪單位－按行業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05042A107.xml ｜ 107年8月底各業廠商空缺員工計薪單位－按行業及員工規模分
+   [161410] 臺南市政府112年徵才活動就業資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/08d22776-dfce-4d71-a231-00cde2bb2ec1 ｜ 1019期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/08d22776-dfce-4d71-a231-00cde2bb2ec1 ｜ 1019期徵才活動一覽表
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/fa6b0917-5b83-4897-adcc-01fa4346d6df ｜ 974期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/fa6b0917-5b83-4897-adcc-01fa4346d6df ｜ 974期徵才活動一覽表
+   [37979] 教育業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05062.xml ｜ 104年8月底教育服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05062A105.xml ｜ 105年8月底教育服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05062A106.xml ｜ 106年8月底教育服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05062A107.xml ｜ 107年8月底教育服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [36793] 製造業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05050.xml ｜ 104年8月底製造業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05050A105.xml ｜ 105年8月底製造業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05050A106.xml ｜ 106年8月底製造業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05050A107.xml ｜ 107年8月底製造業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [174171] 臺南市政府114年徵才活動就業資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/afae649a-ed3a-4b11-8162-097d445be7f9 ｜ 1092期職缺
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/afae649a-ed3a-4b11-8162-097d445be7f9 ｜ 1092期職缺
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/d1188b6e-31fc-47fc-a30b-13a2f607b4ca ｜ 1078期職缺
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/d1188b6e-31fc-47fc-a30b-13a2f607b4ca ｜ 1078期職缺
+   [36790] 工業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05047.xml ｜ 104年8月底工業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05047A105.xml ｜ 105年8月底工業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05047A106.xml ｜ 106年8月底工業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05047A107.xml ｜ 107年8月底工業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [176531] 臺南市政府115年徵才活動就業資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/b34b6ddc-d551-4983-a4ca-13bf8996354b ｜ 1130期職缺
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/b34b6ddc-d551-4983-a4ca-13bf8996354b ｜ 1130期職缺
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/a0285a1a-caf7-4572-87e5-145181df42e3 ｜ 1138期職缺
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/a0285a1a-caf7-4572-87e5-145181df42e3 ｜ 1138期職缺
+   [36791] 服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05048.xml ｜ 104年8月底服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05048A105.xml ｜ 105年8月底服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05048A106.xml ｜ 106年8月底服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05048A107.xml ｜ 107年8月底服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [40292] 其他服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05065.xml ｜ 104年8月底其他服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05065A105.xml ｜ 105年8月底其他服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05065A106.xml ｜ 106年8月底其他服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05065A107.xml ｜ 107年8月底其他服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [37978] 支援服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05061.xml ｜ 104年8月底支援服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05061A105.xml ｜ 105年8月底支援服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05061A106.xml ｜ 106年8月底支援服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05061A107.xml ｜ 107年8月底支援服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [37975] 金融及保險業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05058.xml ｜ 104年8月底金融及保險業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05058A105.xml ｜ 105年8月底金融及保險業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05058A106.xml ｜ 106年8月底金融及保險業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05058A107.xml ｜ 107年8月底金融及保險業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [36797] 批發及零售業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05054.xml ｜ 104年8月底批發及零售業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05054A105.xml ｜ 105年8月底批發及零售業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05054A106.xml ｜ 106年8月底批發及零售業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05054A107.xml ｜ 107年8月底批發及零售業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [40293] 科學園區廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05066.xml ｜ 104年8月底科學園區廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05066A105.xml ｜ 105年8月底科學園區廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05066A106.xml ｜ 106年8月底科學園區廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05066A107.xml ｜ 107年8月底科學園區廠商空缺員工僱用條件概況－按職類及員工規模分
+   [37976] 不動產業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05059.xml ｜ 104年8月底不動產業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05059A105.xml ｜ 105年8月底不動產業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05059A106.xml ｜ 106年8月底不動產業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05059A107.xml ｜ 107年8月底不動產業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [37972] 運輸及倉儲業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05055.xml ｜ 104年8月底運輸及倉儲業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05055A105.xml ｜ 105年8月底運輸及倉儲業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05055A106.xml ｜ 106年8月底運輸及倉儲業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05055A107.xml ｜ 107年8月底運輸及倉儲業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [34127] 工業及服務業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05046.xml ｜ 104年8月底工業及服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05046A105.xml ｜ 105年8月底工業及服務業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05046A106.xml ｜ 106年8月底工業及服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05046A107.xml ｜ 107年8月底工業及服務業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [36796] 營建工程業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05053.xml ｜ 104年8月底營造業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05053A105.xml ｜ 105年8月底營造業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05053A106.xml ｜ 106年8月底營造業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05053A107.xml ｜ 107年8月底營造業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [36794] 電力及燃氣供應業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05051.xml ｜ 104年8月底電力及燃氣供應業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05051A105.xml ｜ 105年8月底電力及燃氣供應業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05051A106.xml ｜ 106年8月底電力及燃氣供應業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05051A107.xml ｜ 107年8月底電力及燃氣供應業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [37973] 住宿及餐飲業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05056.xml ｜ 104年8月底住宿及餐飲業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05056A105.xml ｜ 105年8月底住宿及餐飲業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05056A106.xml ｜ 106年8月底住宿及餐飲業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05056A107.xml ｜ 107年8月底住宿及餐飲業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [34126] 工業及服務業廠商開出職缺原因－按行業、職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05045.xml ｜ 104年8月底工業及服務業廠商短缺員工原因－按職業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05045A105.xml ｜ 105年8月底工業及服務業廠商短缺員工原因－按職業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05045A106.xml ｜ 106年8月底工業及服務業廠商空缺員工原因－按職業及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05045A107.xml ｜ 107年8月底工業及服務業廠商空缺員工原因－按職業及員工規模分
+   [37974] 出版影音及資通訊業廠商職缺僱用條件概況－按職類及員工規模分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05057.xml ｜ 104年8月底資訊及通訊傳播業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/Mp05057A105.xml ｜ 105年8月底資訊及通訊傳播業廠商短缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05057A106.xml ｜ 106年8月底資訊及通訊傳播業廠商空缺員工僱用條件概況－按職類及員工規模分
+       檔：XML https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/231704/MP05057A107.xml ｜ 107年8月底資訊及通訊傳播業廠商空缺員工僱用條件概況－按職類及員工規模分
+   [148564] 臺南市政府111年徵才活動就業資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/c2d04074-bd4f-4ef1-aa48-0165864bfb19 ｜ 960期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/c2d04074-bd4f-4ef1-aa48-0165864bfb19 ｜ 960期徵才活動一覽表
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/8121476a-8914-4582-b97a-05f5d574dfa5 ｜ 929期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/8121476a-8914-4582-b97a-05f5d574dfa5 ｜ 929期徵才活動一覽表
+   [57289] 台灣就業通網站單一簽入網站清冊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://apiservice.mol.gov.tw/OdService/download/A17000000J-030187-T2i ｜ 台灣就業通網站單一簽入網站清冊
+       檔：JSON https://apiservice.mol.gov.tw/OdService/download/A17000000J-030187-W5u ｜ 台灣就業通網站單一簽入網站清冊
+       檔：WEBSERVICES https://apiservice.mol.gov.tw/OdService/rest/datastore/A17000000J-030187-TrR ｜ 台灣就業通網站單一簽入網站清冊
+   [146549] 就業服務之求才及求才僱用人數按職業分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：CSV https://apiservice.mol.gov.tw/OdService/download/A17000000J-030281-tXL ｜ 就業服務之求才及求才僱用人數按職業分
+       檔：JSON https://apiservice.mol.gov.tw/OdService/download/A17000000J-030281-UAk ｜ 就業服務之求才及求才僱用人數按職業分
+       檔：WEBSERVICES https://apiservice.mol.gov.tw/OdService/rest/datastore/A17000000J-030281-nQF ｜ 就業服務之求才及求才僱用人數按職業分
+   [146550] 就業服務之求才及求才僱用人數按辦理單位分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '年'}
+       檔：CSV https://apiservice.mol.gov.tw/OdService/download/A17000000J-030282-u2q ｜ 就業服務之求才及求才僱用人數按辦理單位分
+       檔：JSON https://apiservice.mol.gov.tw/OdService/download/A17000000J-030282-SPa ｜ 就業服務之求才及求才僱用人數按辦理單位分
+       檔：WEBSERVICES https://apiservice.mol.gov.tw/OdService/rest/datastore/A17000000J-030282-ZiT ｜ 就業服務之求才及求才僱用人數按辦理單位分
+   [8657] 內政部徵才資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：XML https://www.moi.gov.tw/OpenData.aspx?SN=8FA86B3F14EE463B ｜ 內政部徵才資訊
+   [7310] 交通部徵才資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：XML https://www.motc.gov.tw/ch/app/rss/JobHunt ｜ 徵才資訊
+   [52320] 嘉義市政府網站-徵才公告 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       檔：JSON https://data.chiayi.gov.tw/opendata/api/getResource?oid=f8ca2fcb-a813-4370-a503-4beca134913a&rid=398cf3b0-acba-469e-820d-f24bf45a0078 ｜ 嘉義市政府網站-徵才公告
+   [137467] 臺南市政府110年徵才活動就業資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/af6e5486-0e2c-42a2-a330-08447f4e9cfe ｜ 912期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/6b99e858-51cc-45f4-938c-340c94fce14e ｜ 913期徵才活動一覽表
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/b48cfc2f-e58e-401e-874a-44d48b1194cf ｜ 911期徵才活動一覽表
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/7d1f0005-4dfa-463c-a9cc-bf3019abeaca ｜ 887期徵才活動一覽表
+   [134082] 嘉義縣政府建設處_徵才資訊 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://works.cyhg.gov.tw/OpenData.aspx?SN=604CBAA3DB3DDA11 ｜ 嘉義縣政府建設處_徵才資訊
+       檔：JSON https://works.cyhg.gov.tw/OpenData.aspx?SN=D7E361B1290BB8C5 ｜ 嘉義縣政府建設處_徵才資訊
+   [11126] 國家通訊傳播委員會徵才資訊 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       檔：XML https://api.ncc.gov.tw/uploaddowndoc?file=datagov/11_國家通訊傳播委員會徵才資訊.xml&filedisplay=11_國家通訊傳播委員會徵才資訊.xml&flag=doc ｜ 提供國家通訊傳播委員會職缺之資格條件、工作項目及地點等資訊
+       檔：JSON https://api.ncc.gov.tw/uploaddowndoc?file=datagov/11_國家通訊傳播委員會徵才資訊.json&filedisplay=11_國家通訊傳播委員會徵才資訊.json&flag=doc ｜ 提供國家通訊傳播委員會職缺之資格條件、工作項目及地點等資訊
+   [159085] 雲林縣政府全球資訊網徵才公告 ｜  ｜ 更新：每日
+       檔：XLS https://ws.yunlin.gov.tw/001/Upload/539/opendata/0/1479/ca119fa6-adad-4d93-a09a-a5e3eb971099.xls ｜ 雲林縣政府全球資訊網徵才公告訊息
+       檔：CSV https://ws.yunlin.gov.tw/001/Upload/539/opendata/0/1479/ca119fa6-adad-4d93-a09a-a5e3eb971099.csv ｜ 雲林縣政府全球資訊網徵才公告訊息
+       檔：XML https://ws.yunlin.gov.tw/001/Upload/539/opendata/0/1479/ca119fa6-adad-4d93-a09a-a5e3eb971099.xml ｜ 雲林縣政府全球資訊網徵才公告訊息
+       檔：JSON https://ws.yunlin.gov.tw/001/Upload/539/opendata/0/1479/ca119fa6-adad-4d93-a09a-a5e3eb971099.json ｜ 雲林縣政府全球資訊網徵才公告訊息
+   [97382] 外交部全球資訊網-中文版-求才公告 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '1', 'unittime': '日'}
+       檔：JSON https://www.mofa.gov.tw/OpenData.aspx?SN=B0B4026CF1CB31ED ｜ 資料發布型態、檔案名稱、連結位置、來源網址、主旨、內容、發布時間、資料來源、相關檔案、相關連結、相關圖片、相關影音
+   [155761] 臺北市就職求才人數及求供倍數 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.taipei/api/dataset/8915d063-c82c-41ed-a480-7c1c4f1d48b7/resource/a875d9ce-7b37-441b-ba60-b5b827cbcf47/download ｜ 臺北市求職求才人數及求供倍數
+   [143432] 臺南市求職求才人數及求供倍數 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：JSON https://soa.tainan.gov.tw/Api/Service/Get/573d7407-5f99-4efc-b62a-db78e2e7f3bf ｜ 109年臺南市求職求才人數及求供倍數
+       檔：CSV https://data.tainan.gov.tw/File/ResourceCsvDownload/573d7407-5f99-4efc-b62a-db78e2e7f3bf ｜ 109年臺南市求職求才人數及求供倍數
+   [133595] 臺北市求職、求才及推介就業人數按職業別分 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.taipei/api/dataset/0bd0cf27-d158-469f-bf49-ff728ac5f0e9/resource/cfe31b0b-d0aa-46f3-8b1f-1ea6de04fb28/download ｜ 求職、求才及推介就業人數-按職業別分(111年12月份)
+       檔：CSV https://data.taipei/api/dataset/0bd0cf27-d158-469f-bf49-ff728ac5f0e9/resource/1ad4540c-1842-444c-80c6-2edf56146a2e/download ｜ 求職、求才及推介就業人數-按職業別分(111年11月份)
+       檔：CSV https://data.taipei/api/dataset/0bd0cf27-d158-469f-bf49-ff728ac5f0e9/resource/0eaf0ea7-ab69-41fb-9f98-c59a0b4eff08/download ｜ 求職、求才及推介就業人數-按職業別分(111年10月份)
+       檔：CSV https://data.taipei/api/dataset/0bd0cf27-d158-469f-bf49-ff728ac5f0e9/resource/3e57ff0b-9523-4e92-b618-d96961f49fed/download ｜ 求職、求才及推介就業人數-按職業別分(111年9月份)
+   [145736] 臺北市求職、求才及推介就業人數按年齡別分 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.taipei/api/dataset/1a827745-38a1-4ac5-a058-162f12148a2f/resource/ff54859c-292f-4921-b86a-f19ecc43cba4/download ｜ 求職、求才及推介就業人數-按年齡別分(109年10月份)
+       檔：CSV https://data.taipei/api/dataset/1a827745-38a1-4ac5-a058-162f12148a2f/resource/48963ba5-5271-49be-99c4-7e0fc7cabefd/download ｜ 求職、求才及推介就業人數-按年齡別分(111年12月份)
+       檔：CSV https://data.taipei/api/dataset/1a827745-38a1-4ac5-a058-162f12148a2f/resource/6f4094f4-4510-41fb-946e-df6d632fff22/download ｜ 求職、求才及推介就業人數-按年齡別分(111年11月份)
+       檔：CSV https://data.taipei/api/dataset/1a827745-38a1-4ac5-a058-162f12148a2f/resource/74e7954d-30a4-4c89-b90b-8394be7b9867/download ｜ 求職、求才及推介就業人數-按年齡別分(111年10月份)
+   [133596] 臺北市求職、求才及推介就業人數按教育別分 ｜  ｜ 更新：{'regularupdate': '2'}
+       檔：CSV https://data.taipei/api/dataset/65fe22f7-6d71-4497-a5c8-f31241f60aa8/resource/1337fcc8-21d2-43b8-8a71-97ecfa891d8f/download ｜ 求職、求才及推介就業人數-按教育別分(109年10月份)
+       檔：CSV https://data.taipei/api/dataset/65fe22f7-6d71-4497-a5c8-f31241f60aa8/resource/d786be86-d8df-43e2-ace7-f9f4474a19dd/download ｜  求職、求才及推介就業人數-按教育別分(111年12月份)
+       檔：CSV https://data.taipei/api/dataset/65fe22f7-6d71-4497-a5c8-f31241f60aa8/resource/bbfe2de3-12e8-40db-80a5-f6c7c4f8b14c/download ｜ 求職、求才及推介就業人數-按教育別分(111年11月份)
+       檔：CSV https://data.taipei/api/dataset/65fe22f7-6d71-4497-a5c8-f31241f60aa8/resource/90fb9ac3-5acc-43e1-ba7d-113d201fa0a1/download ｜ 求職、求才及推介就業人數-按教育別分(111年10月份)
+   [87868] 10343-01-02-2 臺中市就業服務之求職、求才及推介就業人數－按年齡分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '6', 'unittime': '月'}
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=2a9b9d8f-0447-4237-a570-38443f6cab0a ｜ 2026-08_10343-01-02-2_臺中市就業服務之求職、求才及推介就業人數－按年齡分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=4774e723-80ed-4e6d-8efa-d6471ee6b57b ｜ 2026-07_10343-01-02-2_臺中市就業服務之求職、求才及推介就業人數－按年齡分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=e0809f39-49eb-4c64-951c-cc3282f8843b ｜ 2026-06_10343-01-02-2_臺中市就業服務之求職、求才及推介就業人數－按年齡分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=562a91d8-0318-4d0d-a61b-6691d8d17d33 ｜ 2026-05_10343-01-02-2_臺中市就業服務之求職、求才及推介就業人數－按年齡分.JSON
+   [87870] 10343-01-03-2 臺中市就業服務之求職、求才及推介就業人數－按職業分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '6', 'unittime': '月'}
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=602d794e-7775-4ebb-9415-507933edef69 ｜ 2026-04_10343-01-03-2_臺中市就業服務之求職、求才及推介就業人數－按職業分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=e36641d1-12c2-4a8f-988f-adaf6673ea80 ｜ 2026-01_10343-01-03-2_臺中市就業服務之求職、求才及推介就業人數－按職業分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=9cc91726-3294-40fe-a31b-c4b5fdbf3e30 ｜ 2025-12_10343-01-03-2_臺中市就業服務之求職、求才及推介就業人數－按職業分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=5c17c034-e67d-4fb2-95d2-314321f9e132 ｜ 2025-11_10343-01-03-2_臺中市就業服務之求職、求才及推介就業人數－按職業分.JSON
+   [87866] 10343-01-01-2 臺中市就業服務之求職、求才及推介就業人數－按教育程度分 ｜  ｜ 更新：{'regularupdate': '1', 'Frequency': '6', 'unittime': '月'}
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=ccf5a94f-c346-4bfc-a9c6-b27e9e48280b ｜ 2026-08_10343-01-01-2_臺中市就業服務之求職、求才及推介就業人數－按教育程度分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=57fef8b6-0189-4931-a35b-e25c90e39f6f ｜ 2026-07_10343-01-01-2_臺中市就業服務之求職、求才及推介就業人數－按教育程度分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=b4348e5f-7df9-40bc-85b3-81d071d6bed2 ｜ 2026-06_10343-01-01-2_臺中市就業服務之求職、求才及推介就業人數－按教育程度分.JSON
+       檔：JSON https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=0c11e6c1-a26f-4a21-839c-1d232ac5967e ｜ 2026-05_10343-01-01-2_臺中市就業服務之求職、求才及推介就業人數－按教育程度分.JSON
 == C. 直接下載，看欄位、筆數、有沒有統編、新北／台北幾筆（只印統計）
+   [41883] 下載失敗 https://data.moa.gov.tw/Service/OpenData/FarmJobInfo.aspx?IsTransData=1&UnitId=B：<urlopen error timed out>
+   [41883] 下載失敗 https://data.moa.gov.tw/Service/OpenData/FarmJobInfo.aspx?FOTT=CSV&IsTransData=1：<urlopen error timed out>
+   [9857] 下載失敗 https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230513/mp05005.xml：<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.
+   [9858] 下載失敗 https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230513/mp05006.xml：<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.
+   [44062] 台灣就業通網站職缺清單 ｜ HTTP 200 ｜ text/csv;charset=UTF-8 ｜ 743,087 bytes
+       欄位（19）：['OCCU_DESC（職務名稱）', 'WK_TYPE（職務性質）', 'CJOB1_COUNT（職務大類別代碼）', 'CJOB_NAME1（職務大類別名稱）', 'CJOB2_COUNT（職務小類別代碼）', 'CJOB_NAME2（職務小類別名稱）', 'JOB_PERSON（雇用人數）', 'STOP_DATE（應徵截止日期）', 'JOB_DETAIL（工作內容）', 'CITYNAME（工作地點）', 'EXPERIENCE（工作經驗）', 'WKTIME（工作時間）', 'SALARYCD（核薪方式）', 'NT_L（薪資範圍下限）', 'NT_U（薪資範圍上限）', 'EDGRDESC（最低學歷要求）', 'URL_QUERY（職缺資料URL）', 'COMPNAME（公司名稱）', 'TRANDATE（職缺更新日期）']
+       筆數：1,000
+       像統編的欄位：無
+       含「新北市」：18；含「臺北市／台北市」：992
+       日期欄 STOP_DATE（應徵截止日期）：最早 20261023、最晚 額滿為止、91 種
+   [44062] 台灣就業通網站職缺清單 ｜ HTTP 200 ｜ application/json;charset=UTF-8 ｜ 1,371,777 bytes
+       欄位（19）：['OCCU_DESC（職務名稱）', 'WK_TYPE（職務性質）', 'CJOB1_COUNT（職務大類別代碼）', 'CJOB_NAME1（職務大類別名稱）', 'CJOB2_COUNT（職務小類別代碼）', 'CJOB_NAME2（職務小類別名稱）', 'JOB_PERSON（雇用人數）', 'STOP_DATE（應徵截止日期）', 'JOB_DETAIL（工作內容）', 'CITYNAME（工作地點）', 'EXPERIENCE（工作經驗）', 'WKTIME（工作時間）', 'SALARYCD（核薪方式）', 'NT_L（薪資範圍下限）', 'NT_U（薪資範圍上限）', 'EDGRDESC（最低學歷要求）', 'URL_QUERY（職缺資料URL）', 'COMPNAME（公司名稱）', 'TRANDATE（職缺更新日期）']
+       筆數：1,000
+       像統編的欄位：無
+       含「新北市」：18；含「臺北市／台北市」：992
+       日期欄 STOP_DATE（應徵截止日期）：最早 20261023、最晚 額滿為止、91 種
+   [131575] 本會就業服務-企業職缺資訊 ｜ HTTP 200 ｜ text/xml; charset=utf-8 ｜ 34,108 bytes
+       欄位（2）：['<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><NodeEnabled>1</NodeEnabled><channel><title><![CDATA[企業職缺資訊 - 國軍退除役官兵輔導委員會]]></title><link>https://www.vac.gov.tw/np-2207-1.html</link><description>國軍退除役官兵輔導委員會 RSS channel.</description><language>zh-tw</language><pubDate>Fri', ' 23 Oct 2026 11:03:00 GMT</pubDate><copyright>RSS發行者</copyright><ttl>20</ttl><item><title><![CDATA[【新北市榮服處】每週職缺專區(115.10.23)]]></title><link>https://www.vac.gov.tw/cp-2207-206197-1.html</link><description><![CDATA[<p>【多元工作，一起選下一站｜115年10月第4週職缺導覽】</p>']
+       筆數：78
+       像統編的欄位：無
+       含「新北市」：5；含「臺北市／台北市」：1
+       日期欄 <?xml version="1.0" encoding="utf-8"?><rss version="2.0"><NodeEnabled>1</NodeEnabled><channel><title><![CDATA[企業職缺資訊 - 國軍退除役官兵輔導委員會]]></title><link>https://www.vac.gov.tw/np-2207-1.html</link><description>國軍退除役官兵輔導委員會 RSS channel.</description><language>zh-tw</language><pubDate>Fri：最早 &bull; 傳真：、最晚 🔎促進退除役官兵穩定、35 種
+   [128467] 臺北市政府求職徵才職缺資訊 ｜ HTTP 200 ｜ text/xml ｜ 926,471 bytes
+       欄位（1）：['<?xml version="1.0" encoding="utf-8"?>']
+       筆數：8,705
+       像統編的欄位：無
+       含「新北市」：2；含「臺北市／台北市」：567
 探路結束。
