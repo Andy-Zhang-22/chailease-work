@@ -423,10 +423,20 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 }
 
 @media (max-width: 900px) {
-  .brand h1 { font-size: 15px; }
+  /*
+   * 頂欄固定兩排：第一排 logo＋名稱靠左、同步／新增客戶／⋯ 靠右，第二排整寬的搜尋框。
+   * 版本 386：iPhone 上字放大（版本 385）又有同步鈕時，第一排塞不下，按鈕整組掉到第二排、名稱那排空一半。
+   * 名稱改成可以縮（太長就 …）、間距與按鈕內距收一點，三顆鈕就一定留在第一排。
+   */
+  .brand h1 { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; }
+  .brand { flex: 1 1 0; min-width: 0; gap: 9px; }   /* 基準寬 0：換行與否不看名稱有多長，按鈕一定留在第一排，名稱再撐滿剩下的 */
+  .brand > div { min-width: 0; }
   .brand-sub { display: none; }
   .search-wrap kbd { display: none; }
-  .topbar { flex-wrap: wrap; }
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .topbar-actions { flex: none; gap: 6px; }
+  .topbar-actions .btn { padding: 7px 12px; font-size: 15px; }
+  .topbar-actions .btn-ghost { padding: 7px 9px; }
   .search-wrap { order: 3; flex-basis: 100%; max-width: none; }
   .tabs { top: 104px; }
   .drawer-panel { width: 100%; }
