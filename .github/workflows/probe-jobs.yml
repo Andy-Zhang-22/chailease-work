@@ -1,0 +1,26 @@
+# 勞動部職缺開放資料探路（probe_jobs/，一次性）。只手動觸發；記錄寫回 probe_jobs/run-log.txt（只有欄位與筆數）。
+name: 職缺開放資料探路
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python probe_jobs/probe_jobs.py 2>&1 | tee probe_jobs/run-log.txt
+      - name: 記錄寫回
+        if: always()
+        run: |
+          git add probe_jobs/run-log.txt
+          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "職缺開放資料探路：$(date -u +%Y-%m-%d)"
+          git pull --rebase -X theirs origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
