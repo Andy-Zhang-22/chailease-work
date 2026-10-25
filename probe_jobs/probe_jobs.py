@@ -37,7 +37,12 @@ def main():
             body = json.dumps({"bool": [{"fulltext": {"value": q}}], "filter": [], "page_num": page, "page_limit": 20, "tids": [], "sort": "_score_desc"}).encode()
             try:
                 st, ct, raw = get("https://data.gov.tw/api/front/dataset/list", data=body, ct="application/json")
-                rows = walk_records(json.loads(raw.decode("utf-8", "ignore")))
+                j = json.loads(raw.decode("utf-8", "ignore"))
+                rows = walk_records(j)
+                if page == 1:
+                    print(f"   查「{q}」：HTTP {st}，最外層鍵 {list(j.keys())[:8] if isinstance(j, dict) else type(j).__name__}，結果 {len(rows)} 筆")
+                    if rows: print(f"       一筆的欄位：{list(rows[0].keys())[:20]}；前 8 個標題：{[str(r.get('title',''))[:30] for r in rows[:8]]}")
+                    else: print(f"       原始回應開頭：{raw[:300].decode('utf-8','ignore')}")
                 for r in rows:
                     t = str(r.get("title", "")); i = str(r.get("id") or r.get("oid") or r.get("datasetId") or "")
                     if re.search(r"職缺|就業機會|求才|徵才|人才", t) and i and i not in found:
@@ -47,6 +52,18 @@ def main():
             except Exception as e:
                 print(f"   查「{q}」第 {page} 頁失敗：{str(e)[:120]}"); break
             pause()
+    for url in ["https://data.gov.tw/api/v2/rest/datasets?q=%E8%81%B7%E7%BC%BA&size=20", "https://data.gov.tw/api/front/dataset/list?q=%E8%81%B7%E7%BC%BA&page_num=1&page_limit=20"]:
+        try:
+            st, ct, raw = get(url)
+            j = json.loads(raw.decode("utf-8", "ignore")); rows = walk_records(j)
+            print(f"   GET {url[:70]}：HTTP {st}，結果 {len(rows)} 筆；標題：{[str(r.get('title',''))[:30] for r in rows[:8]]}")
+            for r in rows:
+                t = str(r.get("title", "")); i = str(r.get("id") or r.get("oid") or r.get("datasetId") or "")
+                if re.search(r"職缺|就業機會|求才|徵才|人才", t) and i and i not in found:
+                    found[i] = {"title": t, "org": str(r.get("providerOrganization") or ""), "fmt": str(r.get("fileType") or ""), "freq": str(r.get("updateFrequency") or "")}
+        except Exception as e:
+            print(f"   GET {url[:70]} 失敗：{str(e)[:120]}")
+        pause()
     print(f"   共 {len(found)} 個：")
     for i, d in found.items(): print(f"   - {i} {d['title'][:70]} ｜ {d['org'][:24]} ｜ {d['fmt']} ｜ {d['freq']}")
 
