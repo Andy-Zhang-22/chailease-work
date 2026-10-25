@@ -5095,3 +5095,13 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - **行事曆**：拜訪列改成跟卡片一樣的白底、圓角、淡影；日期格圓角一致；分組標題加字距。
 - **抽屜、視窗**：資料表列距稍鬆、視窗圓角 18px；編輯表單的三欄維持（視窗內距不變，不然會掉成兩欄）。
 - 測試：`npm test` 125 項；e2e 四組全跑（test-chattel-link 跟 test-biz 搶連接埠，單獨重跑通過）。版號 20261024-384。
+
+## 字型：數字用 Inter、Windows 的中文用 Noto Sans TC（版本 385）
+
+使用者 10/25：「字體風格能變更什麼呢」→「照你說的做」。
+
+- **數字與英文用 Inter**：電話、金額、日期在 Mac、iPhone、Windows 上長一樣，數字等寬（`font-feature-settings: "tnum"`），0933 跟 0922 一眼分得出來。字型檔自己放在 `assets/fonts/inter-latin.woff2`（拉丁字集 48KB、可變字重 400～700），同網域，離線快取照存。
+- **中文**：字型順序改成 Inter → 蘋方 → Noto Sans TC → 微軟正黑。Mac、iPhone 有蘋方就用蘋方；沒有蘋方的 Windows 才會去載 `index.html` 連的 Google Fonts Noto Sans TC（瀏覽器只在排到那個字型時才下載，Mac 不會多載）。離線時 Windows 退回微軟正黑。
+- **行距、字距**：內文行距 1.6 → 1.65；標題字距收一點。
+- **手機**：內文 15 → 16px，電話鈕 13.5 → 14.5px。
+- 測試：`npm test` 125 項；e2e 四組全跑。版號 20261025-385。
