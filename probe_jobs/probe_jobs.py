@@ -28,6 +28,10 @@ def walk_records(j):
     return []
 
 def pause(): time.sleep(2.0)
+TITLE_KEYS = ["title", "dataset_name", "name", "dataset_title", "title_zh"]
+ID_KEYS = ["tid", "dataset_tid", "oid", "id", "datasetId", "nid"]
+def titleOf(r): return next((r[k] for k in TITLE_KEYS if r.get(k)), "")
+def idOf(r): return next((r[k] for k in ID_KEYS if r.get(k)), "")
 
 def main():
     print("== A. data.gov.tw 搜尋職缺相關資料集")
@@ -39,31 +43,18 @@ def main():
                 st, ct, raw = get("https://data.gov.tw/api/front/dataset/list", data=body, ct="application/json")
                 j = json.loads(raw.decode("utf-8", "ignore"))
                 rows = walk_records(j)
+                if page == 1 and q == "就業機會" and rows:
+                    print(f"   一筆的全部欄位：{list(rows[0].keys())}")
                 if page == 1:
-                    print(f"   查「{q}」：HTTP {st}，最外層鍵 {list(j.keys())[:8] if isinstance(j, dict) else type(j).__name__}，結果 {len(rows)} 筆")
-                    if rows: print(f"       一筆的欄位：{list(rows[0].keys())[:20]}；前 8 個標題：{[str(r.get('title',''))[:30] for r in rows[:8]]}")
-                    else: print(f"       原始回應開頭：{raw[:300].decode('utf-8','ignore')}")
+                    print(f"   查「{q}」：HTTP {st}，結果 {len(rows)} 筆；標題：{[str(titleOf(r))[:28] for r in rows[:10]]}")
                 for r in rows:
-                    t = str(r.get("title", "")); i = str(r.get("id") or r.get("oid") or r.get("datasetId") or "")
-                    if re.search(r"職缺|就業機會|求才|徵才|人才", t) and i and i not in found:
-                        found[i] = {"title": t, "org": str(r.get("providerOrganization") or r.get("organization") or r.get("orgName") or ""),
-                                    "fmt": str(r.get("fileType") or r.get("format") or r.get("resourceFormat") or ""), "freq": str(r.get("updateFrequency") or r.get("frequency") or "")}
+                    t = str(titleOf(r)); i = str(idOf(r))
+                    if re.search(r"職缺|就業機會|求才|徵才|人才|就業通", t) and i and i not in found:
+                        found[i] = {"title": t, "org": str(r.get("agency_name") or ""), "fmt": str(r.get("file_type") or r.get("format") or ""), "freq": str(r.get("check_freq_name") or "")}
                 if not rows: break
             except Exception as e:
                 print(f"   查「{q}」第 {page} 頁失敗：{str(e)[:120]}"); break
             pause()
-    for url in ["https://data.gov.tw/api/v2/rest/datasets?q=%E8%81%B7%E7%BC%BA&size=20", "https://data.gov.tw/api/front/dataset/list?q=%E8%81%B7%E7%BC%BA&page_num=1&page_limit=20"]:
-        try:
-            st, ct, raw = get(url)
-            j = json.loads(raw.decode("utf-8", "ignore")); rows = walk_records(j)
-            print(f"   GET {url[:70]}：HTTP {st}，結果 {len(rows)} 筆；標題：{[str(r.get('title',''))[:30] for r in rows[:8]]}")
-            for r in rows:
-                t = str(r.get("title", "")); i = str(r.get("id") or r.get("oid") or r.get("datasetId") or "")
-                if re.search(r"職缺|就業機會|求才|徵才|人才", t) and i and i not in found:
-                    found[i] = {"title": t, "org": str(r.get("providerOrganization") or ""), "fmt": str(r.get("fileType") or ""), "freq": str(r.get("updateFrequency") or "")}
-        except Exception as e:
-            print(f"   GET {url[:70]} 失敗：{str(e)[:120]}")
-        pause()
     print(f"   共 {len(found)} 個：")
     for i, d in found.items(): print(f"   - {i} {d['title'][:70]} ｜ {d['org'][:24]} ｜ {d['fmt']} ｜ {d['freq']}")
 
