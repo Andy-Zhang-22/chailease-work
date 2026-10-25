@@ -33,7 +33,9 @@ ID_KEYS = ["tid", "dataset_tid", "oid", "id", "datasetId", "nid"]
 def titleOf(r): return next((r[k] for k in TITLE_KEYS if r.get(k)), "")
 def idOf(r): return next((r[k] for k in ID_KEYS if r.get(k)), "")
 
+import os
 def main():
+    if os.environ.get("ONLY_D"): return part_d()
     print("== A. data.gov.tw 搜尋職缺相關資料集")
     found = {}
     for q in ["就業機會", "職缺", "台灣就業通", "徵才", "求才"]:
@@ -112,6 +114,53 @@ def main():
             except Exception as e:
                 print(f"   [{i}] 下載失敗 {url[:80]}：{str(e)[:120]}")
             pause()
+    part_d()
+
+def part_d():
+    print("== D. 台灣就業通職缺清單（44062）的 datastore API：能不能翻頁、篩縣市、總筆數")
+    base = "https://apiservice.mol.gov.tw/OdService/rest/datastore/A17000000J-030144-VAL"
+    def peek(label, url):
+        try:
+            st, ct, raw = get(url)
+            text = raw.decode("utf-8-sig", "ignore"); s2 = text.lstrip()
+            if s2.startswith("{") or s2.startswith("["):
+                j = json.loads(s2); rows = walk_records(j)
+                top = list(j.keys())[:12] if isinstance(j, dict) else "list"
+                meta = {k: j[k] for k in j if isinstance(j, dict) and k != "result" and not isinstance(j[k], (list, dict))} if isinstance(j, dict) else {}
+                res = j.get("result") if isinstance(j, dict) else None
+                rmeta = {k: res[k] for k in res if not isinstance(res[k], (list, dict))} if isinstance(res, dict) else {}
+                cities = {}
+                for r in rows: c = str(r.get("CITYNAME（工作地點）") or r.get("CITYNAME") or "")[:3]; cities[c] = cities.get(c, 0) + 1
+                first = str(rows[0].get("TRANDATE（職缺更新日期）") or rows[0].get("TRANDATE") or "")[:10] if rows else ""
+                print(f"   {label}：HTTP {st} ｜ {len(raw):,} bytes ｜ 最外層 {top} ｜ {meta} ｜ result 的純量 {rmeta} ｜ 筆數 {len(rows)} ｜ 縣市前 5 {sorted(cities.items(), key=lambda x: -x[1])[:5]} ｜ 第一筆更新日 {first}")
+            else:
+                print(f"   {label}：HTTP {st} ｜ {ct[:30]} ｜ {len(raw):,} bytes ｜ 開頭：{text[:160]!r}")
+        except Exception as e:
+            print(f"   {label}：失敗 {str(e)[:140]}")
+        pause()
+    peek("無參數", base)
+    peek("limit=5", base + "?limit=5")
+    peek("offset=1000&limit=5", base + "?offset=1000&limit=5")
+    peek("$top=5", base + "?$top=5")
+    peek("$skip=1000&$top=5", base + "?$skip=1000&$top=5")
+    peek("page=2&size=5", base + "?page=2&size=5")
+    peek("CITYNAME=新北市", base + "?CITYNAME=" + urllib.parse.quote("新北市"))
+    peek("q=新北市", base + "?q=" + urllib.parse.quote("新北市"))
+    peek("filters JSON", base + "?filters=" + urllib.parse.quote(json.dumps({"CITYNAME": "新北市"}, ensure_ascii=False)))
+    print("   CSV 下載加參數：")
+    for extra in ["?limit=5000", "?offset=1000", "?$skip=1000", "?page=2"]:
+        try:
+            st, ct, raw = get("https://apiservice.mol.gov.tw/OdService/download/A17000000J-030144-MKw" + extra)
+            import csv, io
+            rd = list(csv.reader(io.StringIO(raw.decode("utf-8-sig", "ignore"))))
+            cities = {}
+            ci = next((i for i, h in enumerate(rd[0]) if h.startswith("CITYNAME")), None) if rd else None
+            for r in rd[1:]:
+                c = (r[ci] if ci is not None and ci < len(r) else "")[:3]; cities[c] = cities.get(c, 0) + 1
+            print(f"   CSV{extra}：HTTP {st} ｜ {len(raw):,} bytes ｜ {max(0, len(rd) - 1)} 筆 ｜ 縣市前 3 {sorted(cities.items(), key=lambda x: -x[1])[:3]}")
+        except Exception as e:
+            print(f"   CSV{extra}：失敗 {str(e)[:120]}")
+        pause()
     print("探路結束。")
 
 if __name__ == "__main__":
