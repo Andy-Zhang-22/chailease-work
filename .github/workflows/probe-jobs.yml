@@ -13,11 +13,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: ONLY_D=1 python probe_jobs/probe_jobs.py 2>&1 | tee probe_jobs/run-log-d.txt
+      - run: ONLY_E=1 python probe_jobs/probe_jobs.py 2>&1 | tee probe_jobs/run-log-e.txt
       - name: 記錄寫回
         if: always()
         run: |
-          git add probe_jobs/run-log.txt probe_jobs/run-log-d.txt
+          git add probe_jobs/run-log*.txt
           if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

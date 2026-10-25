@@ -34,7 +34,40 @@ def titleOf(r): return next((r[k] for k in TITLE_KEYS if r.get(k)), "")
 def idOf(r): return next((r[k] for k in ID_KEYS if r.get(k)), "")
 
 import os
+def part_e():
+    print("== E. 臺北市就業服務處求職求才職缺（135021）的欄位與縣市筆數；其他人力銀行從 Actions 連不連得到（只看狀態）")
+    import csv, io
+    for url in ["https://data.taipei/api/dataset/9cb8ebf1-8d21-4523-908c-af853867eea1/resource/cec51213-9585-4b4a-ae18-5c9309ddf453/download",
+                "https://data.taipei/api/dataset/9cb8ebf1-8d21-4523-908c-af853867eea1/resource/b0c24ef5-06dd-4027-9a1a-5c39c3381cbe/download"]:
+        try:
+            st, ct, raw = get(url)
+            text = raw.decode("utf-8-sig", "ignore")
+            rd = list(csv.reader(io.StringIO(text)))
+            fields = rd[0] if rd else []
+            rows = rd[1:]
+            blob = lambda r: " ".join(r)
+            print(f"   135021 {url[-40:]}：HTTP {st} ｜ {len(raw):,} bytes ｜ 欄位（{len(fields)}）：{fields[:25]} ｜ 筆數 {len(rows):,} ｜ 含新北市 {sum(1 for r in rows if '新北市' in blob(r)):,} ｜ 含臺北市／台北市 {sum(1 for r in rows if '臺北市' in blob(r) or '台北市' in blob(r)):,}")
+            keys = [k for k in fields if re.search(r"統一?編|統編", str(k))]
+            print(f"       像統編的欄位：{keys or '無'}")
+        except Exception as e:
+            print(f"   135021 失敗：{str(e)[:140]}")
+        pause()
+    for label, url in [("1111 搜尋", "https://www.1111.com.tw/search/job?ks=%E6%A9%9F%E6%A2%B0&c0=10&page=1"),
+                       ("518 搜尋", "https://www.518.com.tw/job-index.html?ad=1&i=1&aa=10001000"),
+                       ("yes123 搜尋", "https://www.yes123.com.tw/wk_index/joblist.asp?find_key2=%E6%A9%9F%E6%A2%B0"),
+                       ("104 找公司（對照）", "https://www.104.com.tw/company/ajax/list?keyword=%E6%A9%9F%E6%A2%B0&jobsource=index_s_cs&features=1&pageSize=18")]:
+        try:
+            st, ct, raw = get(url, timeout=40)
+            text = raw[:3000].decode("utf-8", "ignore").lower()
+            print(f"   {label}：HTTP {st} ｜ {ct[:30]} ｜ {len(raw):,} bytes ｜ {'有驗證碼／擋' if ('captcha' in text or 'blocked' in text or 'robot' in text) else '看起來正常'}")
+        except urllib.error.HTTPError as e:
+            print(f"   {label}：HTTP {e.code}")
+        except Exception as e:
+            print(f"   {label}：失敗 {str(e)[:100]}")
+        pause()
+
 def main():
+    if os.environ.get("ONLY_E"): return part_e()
     if os.environ.get("ONLY_D"): return part_d()
     print("== A. data.gov.tw 搜尋職缺相關資料集")
     found = {}
