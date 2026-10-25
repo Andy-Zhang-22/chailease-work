@@ -27,8 +27,11 @@
 - `/company/ajax/joblist/<custNo>` 回的是 HTML，不是 JSON（舊路徑），不用。
 - 探路腳本裡的 `/jobs/search/list` 是舊端點，正式版換成上面兩支。
 
-**Google 雲端硬碟同步檔**：這台 Mac 沒裝雲端硬碟桌面版，`~/Library/CloudStorage/` 不存在，所以 `--from-sync` 找不到檔。
-同步檔在雲端硬碟上是有的（`電話推廣名單-同步資料.json`，約 2 MB，10/25 有更新），正式版要嘛讀雲端硬碟 API，要嘛由對話窗從系統頁面直接拿今天的新名單。
+**Google 雲端硬碟同步檔**：使用者 10/25 晚上裝了雲端硬碟桌面版後，`--from-sync` 找得到：
+`~/Library/CloudStorage/GoogleDrive-<帳號>/我的雲端硬碟/電話推廣名單-同步資料.json`（約 2 MB）。
+頂層鍵 exportedAt／logs／records／settings／states／tombstones／version；records 812 筆，每筆有 company、taxId、source、addedDate、lastDate、nextDate、outcome…。
+`source` 是匯入檔名，每日新名單的長這樣：`每日新名單-2026-10-21.csv`、`每日新名單-2026-10-19-補1.csv`（腳本用 startswith 比對沒問題）。
+10/25 當天新名單 0 家（最近一次是 10/21，3 家），所以探路沒查到 104；正式版挑公司時建議改看 `addedDate`，比 source 檔名穩。
 
 **正式版的做法建議**：每天的新名單 → 本機對話窗用 Claude in Chrome 在 104 找公司頁內逐家呼叫 `/company/ajax/list`（一家一次、間隔 2 秒），
 記 `jobCount` 與最近職缺的 `appearDate`；403／驗證碼就停。結果只回系統要的欄位，104 內容不存、不轉貼。
