@@ -53,14 +53,33 @@
  */
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
+/*
+ * 字型（版本 385，使用者：「字體風格能變更什麼呢」→「照你說的做」）：
+ * - 數字與英文用 Inter（自己放在 assets/fonts，拉丁字集 48KB，可變字重 400～700）：電話、金額、日期各裝置長一樣，數字等寬。
+ * - 中文：Mac／iPhone 用系統的蘋方；沒有蘋方的（Windows）才會去載 index.html 連的 Noto Sans TC，不再是微軟正黑。
+ *   瀏覽器只在排到那個字型時才下載，所以 Mac 不會多載。離線時 Windows 退回微軟正黑。
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 body {
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.6 -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC",
-        "Microsoft JhengHei", "Hiragino Sans", sans-serif;
+  font: 15px/1.65 "Inter", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Hiragino Sans", sans-serif;
   -webkit-text-size-adjust: 100%;
+  font-feature-settings: "tnum" 1;   /* 數字等寬：電話、金額一欄對得齊 */
 }
-h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: .01em; }
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: .005em; }
+/* 手機：內文與電話鈕放大一號，邊走邊看好按 */
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  .tel, .remind-tel { font-size: 14.5px; }
+}
 button, input, select { font: inherit; color: inherit; }
 a { color: var(--primary); }
 /* 輸入框聚焦：細細一圈主色，不要瀏覽器預設的粗藍框 */
