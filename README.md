@@ -5114,3 +5114,44 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 修：手機寬度時名稱那塊 `flex: 1 1 0`（基準寬 0，換不換行不看它多長）、太窄就 …；頂欄間距 16 → 10、按鈕內距收一點、名稱 14.5px。
   390 寬（iPhone 14／15）名稱完整、三顆鈕都在第一排；375（SE）剛好；360 名稱會 …。
 - 只動 `assets/css/app.css` 的手機那段。版號 20261025-386。
+
+## 104 徵才：有徵才的公司進每日名單（版本 387）
+
+使用者 10/25：「透過 104 徵才網進一步再篩選每天的名單，增加一條規則：有在 104 有徵才的公司推給我每日的名單」；並授權 104 走「在自己的 Chrome 裡查」（直接連會被擋，見 `probe_104/README.md` 的探路結論）。
+
+照使用者的原則「排序不是門檻」：清晨那 15 家照舊，104 有徵才的**另外加進來**、排前面。三段：
+
+1. **清晨（後台 `feed-drive.mjs`）**：挑完 15 家、重排完之後，`window.hiringCandidates(45)` 再算一份候選池——揉合排序接下來的 45 家（都有電話、資本額符合、還沒進名單、沒刪過）加商行前 12 家，每家連「可以直接匯入的那一列」（各頁 `toStandardCsv`，下次聯絡日先放 `__DAY__`）一起寫進同步檔的設定 `hiring-candidates`（JSON：day、head、list[{key, name, src, row}]）。私人的雲端硬碟，不進 repo。
+2. **早上（Mac，本機對話窗）**：從雲端硬碟桌面版的同步檔讀候選池，在使用者的 Chrome 裡逐家呼叫 104「找公司」API（`/company/ajax/list?keyword=`，全名比對、去掉結尾括號），把職缺數寫回設定 `hiring-results`（JSON：at、list[{key, count, at}]）。沒查到算 0。做法與排程由本機那邊寫在 `tools/`。
+3. **網站（`applyHiring`）**：同步完看到結果，職缺數 > 0、在候選池、還沒加過（設定 `hiring-applied`）、不在名單上的，職缺多的先、一天最多 5 家，用候選列組成 CSV `每日新名單-日期-104.csv` 走一般匯入（排在今天，放假排下個上班日），追蹤狀態存 `hiring: { count, at }`：卡片標「104 徵才 N 件」、今天要打排在到期與有時間的後面、其他之前，職缺多的先。沒徵才的不動、留在候選池。
+
+- 測試：`tests/e2e/test-hiring.js`（候選池 4 家、結果 3／0／1／9 件，其中 1 家已在名單：加 2 家、籤、順序、不重複加）。版號 20261025-387。
+
+## 104 徵才：Mac 這一段（版本 388）
+
+使用者 10/25：「你負責中間那段：讀候選池 → 在使用者的 Chrome 裡查 104 → 把職缺數寫回同步檔，並排成每個上班日早上自動跑」。版本 387 的三段裡的第 2 段。
+
+- **`tools/hiring-104.py`**（只用 Python 標準函式庫，檔頭有流程與格式）：
+  - `prepare`：從雲端硬碟桌面版的同步檔讀設定 `hiring-candidates`，候選池不是今天的就說「今天沒有候選池」不查（`--any-day` 可硬查）；
+    把候選清單（統編／名稱／縣市，縣市從候選列的「地址」欄取前三字）包進要在 104 頁面裡執行的 JavaScript，寫到 `/tmp/hiring-104/snippet.js`。終端機只印「候選 N 家」。
+  - 那段 JavaScript 在使用者自己的 Chrome 裡跑（104 擋程式，只走這條）：對每一家呼叫找公司 API `/company/ajax/list?keyword=<全名>…`，
+    `name` 去掉結尾括號、全形括號轉半形、臺＝台後與全名完全相同才算；同名多筆再用 `areaDesc` 比候選的縣市，對不上算 0；查無算 0。
+    一家一次、間隔 2 秒，背景跑完約 2～3 分鐘；`window.__hiring104.poll()` 看進度（只有筆數）；403／429／驗證碼／不是 JSON 就停，`stopped` 記原因，已查到的照留。
+  - `write <結果檔>`：先備份同步檔到 `/tmp/hiring-104/backup-時間.json`，再把結果寫進設定 `hiring-results = { v: JSON({ at, list: [{ key, count, at }] }), at }`，
+    `at` 一定比舊的大（網站合併設定取 `at` 大的）；被擋沒查到的不寫（不是 0）；其他設定、records、logs、states、tombstones 不動；整個 JSON 照網站的樣子重新序列化（UTF-8、不縮排）。
+    終端機只印「查了 N 家、M 家有徵才」。
+  - `status`：看同步檔裡候選池與結果的筆數。
+- **例行步驟**（本機對話窗的 Claude 照做，人手動跑也是這三步；repo 的資料夾裡）：
+  1. `python3 tools/hiring-104.py prepare`
+  2. Claude in Chrome 開 `https://www.104.com.tw/company/`，把 `/tmp/hiring-104/snippet.js` 整段當 JavaScript 執行；每 30 秒 `window.__hiring104.poll()`，
+     `finished` 為 true 就把 `window.__hiring104.result` 原封不動存成 `/tmp/hiring-104/results.json`。
+  3. `python3 tools/hiring-104.py write /tmp/hiring-104/results.json`
+  4. 回報候選幾家、查了幾家、幾家有徵才；不講公司名。網站重新整理後有徵才的會排在「今天要打」最前面、卡片標「104 徵才 N 件」。
+- **排程**：Cowork 的排程任務，每個上班日（週一到週五）早上 07:40（清晨後台約 06:30 前寫好候選池，使用者開始用網站之前）。
+  提示詞：「到電推系統的 repo 資料夾，照 tools/hiring-104.py 檔頭的『例行步驟』跑 104 徵才查詢，回報候選幾家、查了幾家、幾家有徵才，不要講公司名。」
+  關掉：在 Cowork 的排程任務裡停用或刪掉那一條；或把 `tools/hiring-104.py` 的 prepare 不跑就不會查。國定假日清晨沒有新候選池時，prepare 會自己說今天沒有候選池就結束。
+  這條排程要在使用者 Mac 上的 Cowork 對話窗建（它要用 Mac 的雲端硬碟資料夾與 Chrome），雲端這邊建不了；第一次手動跑也一樣要在 Mac 上。
+- 不碰 records、不改洽談狀態；`/tmp/hiring-104/` 的檔案（候選清單、結果、備份）不進 repo；104 的內容只留職缺數。
+- 版號：只加了 `tools/` 與 README 段落，但守門員規定改 `tools/` 就要換版號，所以三處改成 20261025-388。
+- 測試（在這邊用假資料）：Python 三個子命令對假同步檔跑一遍（候選池重複的 key 只留一個、縣市從地址取、結果 `at` 比舊的大、其他鍵不動、UTF-8 不縮排、
+  候選池不是今天的不查）；JavaScript 用 Node 假的 104 API 跑（結尾括號去掉才相同、分公司不算、臺／台相同、同名兩筆用縣市挑、都對不上算 0、403 停且已查的留、間隔有等）。`npm test` 全過。
