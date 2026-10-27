@@ -56,20 +56,28 @@ const rec={id:'1',source:'A.csv',company:'甲公司',aliases:[],taxId:'11111111'
  chk(v2==='2026-09-29', `9/24 按「明天」→ 中秋連假，順延到 9/29：${v2}`);
 
  // 自己用日期框挑到假日，一樣順延（使用者要求：反正那天打不到人）
- await pg.fill('#drawerBody input[type="date"]','2026-10-10');
- await pg.dispatchEvent('#drawerBody input[type="date"]','change'); await pg.waitForTimeout(400);
- const v3=await pg.inputValue('#drawerBody input[type="date"]');
- chk(v3==='2026-10-12', `自己挑 10/10（週六，10/9 補假）也順延到 10/12：${v3}`);
+ // 版本 390：一格一格打字時不能被半路改掉（要打 11/11，打到 11/01 週日時不能先挪成 11/02）
+ const di='#drawerBody input[type="date"]';
+ await pg.focus(di);
+ for (const v of ['2026-11-01','2026-11-11']) { await pg.evaluate(([sel,v])=>{const e=document.querySelector(sel); e.value=v; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change'));},[di,v]); await pg.waitForTimeout(300); }
+ const typed=await pg.inputValue(di);
+ await pg.waitForTimeout(2300);
+ chk(typed==='2026-11-11' && await pg.inputValue(di)==='2026-11-11', `打字打到一半（11/01 週日）不會被挪走，打完 11/11 照留：${typed}`);
+ // 自己挑到假日，離開欄位就順延
+ await pg.fill(di,'2026-10-10');
+ await pg.dispatchEvent(di,'change'); await pg.locator(di).blur(); await pg.waitForTimeout(400);
+ const v3=await pg.inputValue(di);
+ chk(v3==='2026-10-12', `自己挑 10/10（週六，10/9 補假），離開欄位就順延到 10/12：${v3}`);
  chk(/順延/.test(await pg.textContent('#toast')), `而且講明原因：${await pg.textContent('#toast')}`);
  const hint=await pg.textContent('#drawerBody .date-hint');
  chk(!/放假/.test(hint), `順延後的提示就不會再說放假了：${hint}`);
  // 挑到上班日不會被亂動
  await pg.fill('#drawerBody input[type="date"]','2026-10-13');
- await pg.dispatchEvent('#drawerBody input[type="date"]','change'); await pg.waitForTimeout(300);
+ await pg.dispatchEvent('#drawerBody input[type="date"]','change'); await pg.locator('#drawerBody input[type="date"]').blur(); await pg.waitForTimeout(300);
  chk((await pg.inputValue('#drawerBody input[type="date"]'))==='2026-10-13', '挑到上班日照留，不會亂動');
  // 挑到春節：整串連假跳過
  await pg.fill('#drawerBody input[type="date"]','2026-02-18');
- await pg.dispatchEvent('#drawerBody input[type="date"]','change'); await pg.waitForTimeout(300);
+ await pg.dispatchEvent('#drawerBody input[type="date"]','change'); await pg.locator('#drawerBody input[type="date"]').blur(); await pg.waitForTimeout(300);
  chk((await pg.inputValue('#drawerBody input[type="date"]'))==='2026-02-23', `挑到春節跳到收假後：${await pg.inputValue('#drawerBody input[type="date"]')}`);
 
  // 回撥提醒的自訂時間：撞到連假就順延，時間點留著
