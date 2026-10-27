@@ -5230,3 +5230,14 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 - `tools/fetch-pcc.py`：開頭 `try: import truststore; truststore.inject_into_ssl()`，有裝就改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證），沒裝（Mac、Actions）照舊。
 - README 版本 389 的設定步驟補上：沒有管理員權限的裝法、winget 壞掉、Store 空殼 python、`pip install --user truststore`、GitHub SSH 被擋只能走 HTTPS、API 回 500 那天怎麼補抓。
 - 測試：`python -m unittest pcc_test.test_fetch_pcc` 3 個通過；公司電腦實跑 `fetch-pcc.py --date 20261023` 567 案 → 留 195 家（寫到暫存資料夾，數字在版本 389 那段）。版號 20261027-391。
+
+## 公司電腦：標案 API 連不上就不寫記號、不推（版本 392）
+
+公司電腦 10/27 第一次照排程的方式跑：抓昨天（10/26）API 回 500，`fetch-pcc.py` 印「API 連不上」、0 筆，但 180 天清理動了 1 列，`pcc-daily.ps1` 就照樣 commit、push、寫記號，當天不會再重試，那一天的決標就漏了。Mac 版 390 的 `pcc-daily.sh` 有處理，Windows 版沒有。使用者：「把 pcc-daily.ps1 改成 API 連不上就不寫記號檔、不推，照 Mac 版 390 的做法，推上分支。」
+
+- `tools/pcc-daily.ps1` 照 `pcc-daily.sh` 補齊三件事：
+  1. 剛登入網路可能還沒通：最多等 2 分鐘（每 10 秒試連 GitHub 一次），還是不通就印「網路還沒通，這次先不抓」結束，不寫記號。
+  2. 抓取的輸出留一份，看到「API 連不上」就 `git checkout -- leads/pcc` 還原、印「標案 API 連不上，這次先不算」結束，不寫記號、不推；抓取失敗（非 0）也先還原再丟錯。
+  3. `git pull` 加 `--autostash`；記號檔位置可用環境變數 `CHAILEASE_STAMP_DIR` 改（跟 Mac 版同名，測試用）。
+- 登入排程不用重建，任務跑的是同一個檔。排程試跑過是「今天抓過了」幾秒結束。
+- 測試（公司電腦實跑，記號指到暫存資料夾）：API 500 的日子 → 印「這次先不算」、記號沒寫、`leads/pcc` 乾淨、沒有新 commit；記號是今天 → 「今天抓過了」；`-Force` 加 API 500 → 照跑、仍不寫記號。版號 20261027-392。
