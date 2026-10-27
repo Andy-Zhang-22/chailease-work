@@ -19,12 +19,14 @@
 
 用法（三步，由本機對話窗的 Claude 照「例行步驟」跑；人也可以手動跑）：
   python3 tools/hiring-104.py prepare            # 讀候選池，寫 /tmp/hiring-104/snippet.js（要在 Chrome 的 104 頁面裡執行的程式）
+                                                 # 今天已經寫過結果（hiring-results 的 at 是今天）就印「今天查過了」不再查；--force 才再查
   python3 tools/hiring-104.py write /tmp/hiring-104/results.json    # 把 Chrome 查到的結果寫回同步檔
   python3 tools/hiring-104.py status             # 看同步檔裡現在的候選池與結果（只印筆數）
-  選項：--sync <路徑> 指定同步檔；prepare --any-day 候選池不是今天的也照查。
+  選項：--sync <路徑> 指定同步檔；prepare --any-day 候選池不是今天的也照查；prepare --force 今天查過也再查。
 
-例行步驟（每個上班日早上 07:40，Cowork 的排程任務；手動跑也是這三步）：
-  1. 終端機：python3 tools/hiring-104.py prepare → 印「候選 N 家」。印「今天沒有候選池」就結束，不用查。
+例行步驟（版本 390 起：Mac 當天醒著的第一個排程時間跑一次，今天查過就不重跑；Cowork 的排程任務排在上班日 07:40、09:40、12:40、15:40，
+  Mac 睡著錯過的，桌面版醒來會補跑最近一次；每次都先走第 1 步，今天查過了就直接結束。手動跑也是這三步）：
+  1. 終端機：python3 tools/hiring-104.py prepare → 印「候選 N 家」。印「今天沒有候選池」或「今天查過了」就結束，不用查。
   2. Claude in Chrome：開新分頁到 https://www.104.com.tw/company/ ，把 /tmp/hiring-104/snippet.js 整個內容當 JavaScript 執行
      （它會自己一家一次、間隔 2 秒，背景跑，約 2～3 分鐘）；每 30 秒執行 window.__hiring104.poll() 看進度，
      finished 為 true 就把 window.__hiring104.result（字串）原封不動存成 /tmp/hiring-104/results.json。
@@ -129,6 +131,11 @@ def cmd_prepare(a):
     if not pool or not isinstance(pool.get('list'), list):
         print('同步檔裡沒有候選池（設定 hiring-candidates），清晨的後台可能還沒跑；不查。'); return 0
     today = datetime.date.today().isoformat()
+    done = setting_json(data, RESULT_KEY)
+    done_day = datetime.date.fromtimestamp(int(done.get('at') or 0) / 1000).isoformat() if done and done.get('at') else ''
+    if done_day == today and not a.force:
+        n = len(done['list']) if isinstance(done.get('list'), list) else 0
+        print(f'今天查過了（查了 {n} 家，{datetime.datetime.fromtimestamp(int(done["at"]) / 1000):%H:%M} 寫的）；不重查（要再查就加 --force）。'); return 0
     if pool.get('day') != today and not a.any_day:
         print(f'候選池是 {pool.get("day")} 的，今天（{today}）沒有候選池；不查（要查就加 --any-day）。'); return 0
     seen, lst = set(), []
@@ -207,7 +214,7 @@ def main():
     ap = argparse.ArgumentParser(description='104 徵才查詢：讀候選池、寫回職缺數（只印筆數）')
     ap.add_argument('--sync', help='同步檔路徑（預設自己找雲端硬碟桌面版的資料夾）')
     sub = ap.add_subparsers(dest='cmd', required=True)
-    p = sub.add_parser('prepare', help='讀候選池，寫要在 Chrome 裡執行的程式'); p.add_argument('--any-day', action='store_true')
+    p = sub.add_parser('prepare', help='讀候選池，寫要在 Chrome 裡執行的程式'); p.add_argument('--any-day', action='store_true', help='候選池不是今天的也查'); p.add_argument('--force', action='store_true', help='今天查過也再查')
     w = sub.add_parser('write', help='把 Chrome 查到的結果寫回同步檔'); w.add_argument('results', nargs='?', default=RESULTS)
     sub.add_parser('status', help='看候選池與結果的筆數')
     a = ap.parse_args()

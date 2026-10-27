@@ -5183,3 +5183,33 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 固定 07:40 要 Mac 醒著；改成當天第一次開機或喚醒時跑、今天跑過就不重跑（104 那段與標案都一樣），由本機對話窗設。公司電腦有抓標案之後，Mac 那份當備援。
 
 - 測試：`npm test`；PowerShell 腳本在這邊沒有 Windows 可跑，語法照 Mac 版一比一對照，第一次在公司電腦手動跑一遍就是測試。版號 20261027-389。
+
+## Mac 的兩個每日作業改成「當天第一次醒來就跑、今天跑過不重跑」（版本 390）
+
+使用者 10/27：「可以設定成我當天第一次開啟網頁時去跑嗎」→ 網頁做不到，改成開機就跑；「那公司呢」→「好」。版本 389 預告的 Mac 這段。
+兩個作業都不再綁 07:40，改成 Mac 當天第一次登入或喚醒之後就跑，而且「今天跑過」就不重跑，一天只做一次。
+
+### 標案（`tools/pcc-daily.sh` ＋ `tools/mac-schedule.sh`）
+- `pcc-daily.sh` 照 Windows 版（`pcc-daily.ps1`）加了記號檔 `~/Library/Application Support/chailease-work/pcc-last.txt`：裡面是今天的日期就印「今天抓過了」直接結束；`--force` 再跑一次。
+  只有真的抓完（有推、或確定沒新資料）才寫記號；剛喚醒網路還沒通（最多等 2 分鐘）或標案 API 連不上，就不寫記號、不留半套改動，下次再試。
+  `git pull` 加了 `--autostash`，launchd 叫起來時 PATH 補上 Homebrew 的路徑。
+- `mac-schedule.sh install`：寫一個 launchd 的 LaunchAgent（`~/Library/LaunchAgents/com.chailease-work.pcc-daily.plist`）：登入就跑（RunAtLoad）、之後每 30 分鐘再叫一次（StartInterval，Mac 睡著時錯過的，醒來會補一次）。
+  配合記號檔，實際就是「醒來後最多半小時內抓一次，今天抓過就不動」。記錄在 `~/Library/Logs/chailease-work/pcc-daily.log`。
+- 公司的 Windows 電腦（版本 389）之後是主要抓標案的那台，Mac 這份當備援；兩台都跑也不會重複（`cases.csv` 去重，第二台會印「沒有新資料」）。
+- **怎麼設**（在 repo 資料夾，做一次）：`bash tools/mac-schedule.sh install`。**手動跑**：`bash tools/pcc-daily.sh`（今天跑過就加 `--force`）。**看狀態**：`bash tools/mac-schedule.sh status`。**關掉**：`bash tools/mac-schedule.sh remove`。
+
+### 104 徵才（`tools/hiring-104.py`）
+- 這段要用 Claude 加使用者自己的 Chrome，shell 腳本叫不動，所以不走 launchd；查了文件，Claude Code 的 Chrome 整合只寫了互動模式，背景無人的 `claude -p` 沒有說能用，不賭這條。
+- 做法：`prepare` 多了「今天查過就不重查」——同步檔設定 `hiring-results` 的 `at` 是今天就印「今天查過了」結束（`--force` 才再查）；
+  排程則靠桌面版的兩個行為：Mac 睡著或 App 沒開而錯過的時間，醒來／開 App 會補跑最近錯過的那一次；加上一天多排幾個時間。
+  所以把 Cowork 那條排程任務改成上班日 `07:40、09:40、12:40、15:40`（編輯那條任務，週期選自訂，cron `40 7,9,12,15 * * 1-5`，本機時間；提示詞不變），
+  效果就是「當天醒著的第一個時間跑一次，其餘的幾秒內因『今天查過了』結束」。編輯表單沒有自訂 cron 的話，維持上班日 07:40 一天一次也可以，錯過的醒來會補。
+- **手動跑**：照 `hiring-104.py` 檔頭的例行步驟三步（本機對話窗跟 Claude 說「跑 104 徵才查詢」也是）；今天查過要重查就 `prepare --force`。**關掉**：停用或刪掉 Cowork 那條排程任務。
+- 規則照舊：只在使用者自己的 Chrome 裡查、一家一次、間隔 2 秒、被擋就停；`/tmp/hiring-104/` 與同步檔不進 repo。
+
+### 這一版沒做到、要使用者在 Mac 上做的
+- 雲端這邊連不到標案 API、也沒有 Mac 的 Chrome 與同步檔，所以「兩個都手動跑一次」要在 Mac 的本機對話窗做：`bash tools/pcc-daily.sh` 看印出抓到幾家；
+  跟 Claude 說「跑 104 徵才查詢」看候選幾家、查了幾家、幾家有徵才。然後 `bash tools/mac-schedule.sh install`、把 Cowork 的排程改成四個時間。
+- 測試（這邊，用假資料）：`pcc-daily.sh` 記號是今天 → 不重跑；記號是昨天 → 往下跑，API 連不上 → 不寫記號、`leads/pcc` 還原乾淨。
+  `hiring-104.py`：沒結果 → 候選 2 家寫出程式；寫入假結果後 `prepare` → 今天查過了；`--force` → 照查；結果 `at` 改成昨天 → 照查；其他設定與 records 不動。`npm test` 全過。
+- 版號：改了 `tools/`，三處改成 20261027-390。
