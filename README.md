@@ -5165,14 +5165,21 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 
 **第一次設定（十分鐘，只做一次）**
 1. 裝 Python 3（python.org，安裝時勾「Add python.exe to PATH」）、裝 Git for Windows（預設選項即可）。
-2. 開「PowerShell」，把 repo 抓下來到自己的資料夾，例如 `C:\Users\<你>\chailease-work`：
+   沒有管理員權限也行：兩個安裝程式都選「只裝給目前使用者」。公司電腦的 winget 壞掉（會當掉），直接去官網下載安裝檔。
+   裝好在 PowerShell 打 `python --version` 要看到版本號；若跳出 Microsoft Store，是 Windows 內建的空殼捷徑排在前面，重開 PowerShell 再試。
+2. 公司網路會攔截 HTTPS、把 `pcc-api.openfun.app` 的憑證換成公司自己的 CA（2026/10/27 實測；GitHub 沒被攔）。Windows 和瀏覽器信任它，Python 不信，所以要裝 truststore 讓 Python 改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證）：
+   `python -m pip install --user truststore`
+   `fetch-pcc.py` 有裝就自動用，沒裝（Mac、Actions）照舊。
+3. 開「PowerShell」，把 repo 抓下來到自己的資料夾，例如 `C:\Users\<你>\chailease-work`：
    `git clone -b claude/telemarketing-website-hf2uwj https://github.com/Andy-Zhang-22/chailease-work.git`
-3. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。第一次 push 會跳出 GitHub 登入視窗，登入一次就記住。畫面印「推上 … 了」或「沒有新資料」都算成功。
-4. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）：
+   公司防火牆擋 GitHub 的 SSH（22 與 443 都擋），只能走 HTTPS；push 的登入交給 Git for Windows 內附的 Git Credential Manager，第一次會開瀏覽器登 GitHub，之後記住。
+4. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。畫面印「推上 … 了」或「沒有新資料」都算成功。
+5. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）：
    `schtasks /Create /SC ONLOGON /DELAY 0002:00 /TN "電推-抓標案" /TR "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1" /F`
-5. 關掉：`schtasks /Delete /TN "電推-抓標案" /F`。
+6. 關掉：`schtasks /Delete /TN "電推-抓標案" /F`。
 
 週末、假日沒決標就是 0 筆；公司網路要連得到 `pcc-api.openfun.app`（g0v 的標案 API），連不到會印「API 連不上」就結束。
+API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那天就抓不到，隔天補抓用 `-Date 20261024 -Days 1 -Force`。
 
 ### 探路收尾（照「新資料來源的做法」：看完就刪腳本，結論寫這裡）
 - **104**（`probe_104/`，本機 10/25 做的）：用程式直接連 104（urllib、curl、Actions、Claude 內建瀏覽器）都 403，是對自動化用戶端的封鎖；只有在使用者自己的 Chrome 裡（Claude in Chrome）在 104 頁面內呼叫才通。找公司 API `/company/ajax/list?keyword=<公司名>&jobsource=index_s_cs&features=1&pageSize=18` 回 `data[]`（name、areaDesc、capitalDesc、employeeCountDesc、jobCount…），一家 0.1～0.5 秒；要「有沒有在徵才」看 `jobCount` 就夠。使用者授權走這條（CLAUDE.md）。做成版本 387／388。
@@ -5183,6 +5190,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 固定 07:40 要 Mac 醒著；改成當天第一次開機或喚醒時跑、今天跑過就不重跑（104 那段與標案都一樣），由本機對話窗設。公司電腦有抓標案之後，Mac 那份當備援。
 
 - 測試：`npm test`；PowerShell 腳本在這邊沒有 Windows 可跑，語法照 Mac 版一比一對照，第一次在公司電腦手動跑一遍就是測試。版號 20261027-389。
+- 公司電腦實測（10/27，Windows 11，無管理員權限）：Python 3.15.2 加 truststore 後，`fetch-pcc.py --date 20261023` 抓 567 案決標、投標廠商 1013 家、得標 633 家、篩完留 195 家，約 27 分鐘（每次請求隔 1 秒），結果只寫到暫存資料夾。沒裝 truststore 前在 TLS 交握就失敗（`certificate signature failure`）。
 
 ## Mac 的兩個每日作業改成「當天第一次醒來就跑、今天跑過不重跑」（版本 390）
 
@@ -5213,3 +5221,11 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 測試（這邊，用假資料）：`pcc-daily.sh` 記號是今天 → 不重跑；記號是昨天 → 往下跑，API 連不上 → 不寫記號、`leads/pcc` 還原乾淨。
   `hiring-104.py`：沒結果 → 候選 2 家寫出程式；寫入假結果後 `prepare` → 今天查過了；`--force` → 照查；結果 `at` 改成昨天 → 照查；其他設定與 records 不動。`npm test` 全過。
 - 版號：改了 `tools/`，三處改成 20261027-390。
+
+## 公司電腦的 Python 改用 Windows 憑證庫（版本 391）
+
+使用者 10/27 在公司電腦照版本 389 的步驟設定時發現：公司網路會攔截 HTTPS、把 `pcc-api.openfun.app` 的憑證換成公司自己的 CA（GitHub 沒被攔），Windows 和瀏覽器信任它，Python 內建的 OpenSSL 不信，`fetch-pcc.py` 在 TLS 交握就失敗。使用者：「在 fetch-pcc.py 加 try import truststore 並 inject，安裝步驟寫進 README 版本 389，推上分支。」
+
+- `tools/fetch-pcc.py`：開頭 `try: import truststore; truststore.inject_into_ssl()`，有裝就改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證），沒裝（Mac、Actions）照舊。
+- README 版本 389 的設定步驟補上：沒有管理員權限的裝法、winget 壞掉、Store 空殼 python、`pip install --user truststore`、GitHub SSH 被擋只能走 HTTPS、API 回 500 那天怎麼補抓。
+- 測試：`python -m unittest pcc_test.test_fetch_pcc` 3 個通過；公司電腦實跑 `fetch-pcc.py --date 20261023` 567 案 → 留 195 家（寫到暫存資料夾，數字在版本 389 那段）。版號 20261027-391。
