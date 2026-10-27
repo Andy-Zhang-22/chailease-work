@@ -5155,3 +5155,31 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 - 版號：只加了 `tools/` 與 README 段落，但守門員規定改 `tools/` 就要換版號，所以三處改成 20261025-388。
 - 測試（在這邊用假資料）：Python 三個子命令對假同步檔跑一遍（候選池重複的 key 只留一個、縣市從地址取、結果 `at` 比舊的大、其他鍵不動、UTF-8 不縮排、
   候選池不是今天的不查）；JavaScript 用 Node 假的 104 API 跑（結尾括號去掉才相同、分公司不算、臺／台相同、同名兩筆用縣市挑、都對不上算 0、403 停且已查的留、間隔有等）。`npm test` 全過。
+
+## 公司電腦自動抓標案、探路收尾（版本 389）
+
+使用者 10/27：「可以設定成我當天第一次開啟網頁時去跑嗎」→ 網頁做不到（靜態網頁跑不了電腦上的程式、也進不了 104），改成「電腦當天第一次登入就跑」；「那公司呢」→「好」：標案改放公司的 Windows 電腦，104 留在 Mac。
+
+### 公司電腦（Windows）抓標案：`tools/pcc-daily.ps1`
+跟 Mac 的 `pcc-daily.sh` 一樣：更新 repo → `fetch-pcc.py` 抓前一天 → 推上分支 → Actions 補成立日、資本額、自動合併進 main。多了「今天跑過就不重跑」（記在 `%LOCALAPPDATA%\chailease-pcc-last.txt`），所以可以排成「登入就跑」；兩台電腦都跑也不會重複（`cases.csv` 去重）。
+
+**第一次設定（十分鐘，只做一次）**
+1. 裝 Python 3（python.org，安裝時勾「Add python.exe to PATH」）、裝 Git for Windows（預設選項即可）。
+2. 開「PowerShell」，把 repo 抓下來到自己的資料夾，例如 `C:\Users\<你>\chailease-work`：
+   `git clone -b claude/telemarketing-website-hf2uwj https://github.com/Andy-Zhang-22/chailease-work.git`
+3. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。第一次 push 會跳出 GitHub 登入視窗，登入一次就記住。畫面印「推上 … 了」或「沒有新資料」都算成功。
+4. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）：
+   `schtasks /Create /SC ONLOGON /DELAY 0002:00 /TN "電推-抓標案" /TR "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1" /F`
+5. 關掉：`schtasks /Delete /TN "電推-抓標案" /F`。
+
+週末、假日沒決標就是 0 筆；公司網路要連得到 `pcc-api.openfun.app`（g0v 的標案 API），連不到會印「API 連不上」就結束。
+
+### 探路收尾（照「新資料來源的做法」：看完就刪腳本，結論寫這裡）
+- **104**（`probe_104/`，本機 10/25 做的）：用程式直接連 104（urllib、curl、Actions、Claude 內建瀏覽器）都 403，是對自動化用戶端的封鎖；只有在使用者自己的 Chrome 裡（Claude in Chrome）在 104 頁面內呼叫才通。找公司 API `/company/ajax/list?keyword=<公司名>&jobsource=index_s_cs&features=1&pageSize=18` 回 `data[]`（name、areaDesc、capitalDesc、employeeCountDesc、jobCount…），一家 0.1～0.5 秒；要「有沒有在徵才」看 `jobCount` 就夠。使用者授權走這條（CLAUDE.md）。做成版本 387／388。
+- **職缺開放資料**（`probe_jobs/`，10/25 在 Actions 跑）：想找一份後台連得到、不靠 Mac 的「目前有職缺的公司」資料，取代 104。結果：勞動部「台灣就業通網站職缺清單」（data.gov.tw 44062，`apiservice.mol.gov.tw/OdService/...A17000000J-030144`）每日更新、有公司名與工作地點、沒統編，但整份只有 1,000 筆（offset 1000 之後是空的，翻頁、篩縣市的參數都不認），992 筆台北市、新北市 7 筆，是樣本不是全量；臺北市就業服務處（135021）只有幾場徵才活動；其餘是統計表；新北市沒有職缺資料集。順便看人力銀行從 Actions 連：104 擋（403）、1111 與 518 頁面有驗證碼或阻擋字樣、yes123 頁面正常但規模小、要抓網頁。**結論：公開資料這條走不通，維持版本 388（Mac 有開的日子 104 多加幾家）。**
+- 兩個探路資料夾與一次性的 `probe-jobs.yml` workflow 都刪了。
+
+### Mac 的排程改成「開機就跑」
+固定 07:40 要 Mac 醒著；改成當天第一次開機或喚醒時跑、今天跑過就不重跑（104 那段與標案都一樣），由本機對話窗設。公司電腦有抓標案之後，Mac 那份當備援。
+
+- 測試：`npm test`；PowerShell 腳本在這邊沒有 Windows 可跑，語法照 Mac 版一比一對照，第一次在公司電腦手動跑一遍就是測試。版號 20261027-389。
