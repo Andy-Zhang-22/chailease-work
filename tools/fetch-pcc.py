@@ -17,6 +17,14 @@
 """
 import csv, io, json, os, re, sys, time, datetime, urllib.parse, urllib.request, urllib.error
 
+# 公司電腦（Windows）的網路會攔截 HTTPS、把憑證換成公司自己的 CA；Windows 與瀏覽器信任它，Python 內建的 OpenSSL 不信（2026/10/27 實測）。
+# 有裝 truststore 就改用 Windows 的憑證庫，跟瀏覽器同一套信任，不是關閉驗證；沒裝（Mac、Actions）照舊。安裝步驟在 README「版本 389」。
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 # ---------- 設定（使用者要改的都在這） ----------
 CONFIG = {
     "cities": ["新北市", "臺北市", "台北市"],          # 廠商地址開頭要是這些（臺／台都認）

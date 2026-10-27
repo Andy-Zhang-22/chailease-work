@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261027-389';
+  const APP_VERSION = '20261027-393';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -168,11 +168,16 @@
      * 本來只有快捷鍵（明天、一週後…）會順延，自己用日期框挑的照留、旁邊標一行警告；
      * 使用者說不用留，挑到假日就直接跳到下一個上班日——反正那天打不到人。
      *
-     * 只在 change（挑完、關掉日期選擇器）時改，不在 input 時改：邊打年份邊被改會很煩。
+     * 不在每次 change 就改（版本 393）：Chrome 的日期框是一格一格打的，每打一個數字只要湊得成日期就送一次 change。
+     * 要打 11/11，打第一個「1」時是 11/01（週日），馬上被挪成 11/02，第二個「1」接上去就變 11/12——使用者 10/27：
+     * 「下次聯絡日要輸入 2026 年 11 月 11 號時，因為 1 號放假，系統不讓我輸入」。
+     * 改成：離開欄位（blur，按儲存紀錄之前一定會先 blur）就檢查；還在欄位裡的，停手 2 秒才檢查（用日期選擇器挑完也是走這條）。
      * 改完再送一次 change，讓草稿那些跟著存到順延後的日期；fixing 擋住自己觸發自己。
      */
     let fixing = false;
+    let shiftTimer = 0;
     const shift = () => {
+      clearTimeout(shiftTimer);
       if (fixing || !warnHoliday || !input.value || !window.Holidays) return;
       // 選「今天」就是今天，今天放假也是他自己知道——快捷鍵那顆也是走這條
       if (input.value === todayISO()) return;
@@ -185,7 +190,15 @@
       toast(`${dateLabel(got.from)} 是${got.reason}，順延到 ${dateLabel(got.iso)}（${window.Holidays.weekLabel(got.iso)}）`);
     };
     input.addEventListener('input', sync);
-    input.addEventListener('change', () => { shift(); sync(); });
+    input.addEventListener('change', () => {
+      sync();
+      if (fixing) return;
+      clearTimeout(shiftTimer);
+      // 還在欄位裡（正在打字或剛用選擇器挑完）：停手 2 秒再看；已經不在欄位裡（程式改的）：馬上看
+      if (document.activeElement === input) shiftTimer = setTimeout(() => { shift(); sync(); }, 2000);
+      else { shift(); sync(); }
+    });
+    input.addEventListener('blur', () => { shift(); sync(); });
     sync();
     return el('span', { className: 'date-with-hint' }, [input, hint]);
   }

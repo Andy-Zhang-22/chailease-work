@@ -5165,14 +5165,22 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 
 **第一次設定（十分鐘，只做一次）**
 1. 裝 Python 3（python.org，安裝時勾「Add python.exe to PATH」）、裝 Git for Windows（預設選項即可）。
-2. 開「PowerShell」，把 repo 抓下來到自己的資料夾，例如 `C:\Users\<你>\chailease-work`：
+   沒有管理員權限也行：兩個安裝程式都選「只裝給目前使用者」。公司電腦的 winget 壞掉（會當掉），直接去官網下載安裝檔。
+   裝好在 PowerShell 打 `python --version` 要看到版本號；若跳出 Microsoft Store，是 Windows 內建的空殼捷徑排在前面，重開 PowerShell 再試。
+2. 公司網路會攔截 HTTPS、把 `pcc-api.openfun.app` 的憑證換成公司自己的 CA（2026/10/27 實測；GitHub 沒被攔）。Windows 和瀏覽器信任它，Python 不信，所以要裝 truststore 讓 Python 改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證）：
+   `python -m pip install --user truststore`
+   `fetch-pcc.py` 有裝就自動用，沒裝（Mac、Actions）照舊。
+3. 開「PowerShell」，把 repo 抓下來到自己的資料夾，例如 `C:\Users\<你>\chailease-work`：
    `git clone -b claude/telemarketing-website-hf2uwj https://github.com/Andy-Zhang-22/chailease-work.git`
-3. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。第一次 push 會跳出 GitHub 登入視窗，登入一次就記住。畫面印「推上 … 了」或「沒有新資料」都算成功。
-4. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）：
-   `schtasks /Create /SC ONLOGON /DELAY 0002:00 /TN "電推-抓標案" /TR "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1" /F`
-5. 關掉：`schtasks /Delete /TN "電推-抓標案" /F`。
+   公司防火牆擋 GitHub 的 SSH（22 與 443 都擋），只能走 HTTPS；push 的登入交給 Git for Windows 內附的 Git Credential Manager，第一次會開瀏覽器登 GitHub，之後記住。
+4. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。畫面印「推上 … 了」或「沒有新資料」都算成功。
+5. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）。沒有管理員權限時 `schtasks /SC ONLOGON` 會「Access is denied」（它預設是任何人登入都觸發），要改成只在自己登入時觸發，在 PowerShell 貼這段（一行）：
+   `$u="$env:USERDOMAIN\$env:USERNAME"; $a=New-ScheduledTaskAction -Execute powershell.exe -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1'; $t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT2M'; Register-ScheduledTask -TaskName "電推-抓標案" -Action $a -Trigger $t -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)) -Force`
+   確認：`Get-ScheduledTask -TaskName "電推-抓標案"` 的 State 是 Ready；立刻試跑 `Start-ScheduledTask -TaskName "電推-抓標案"`，今天抓過會幾秒內結束。
+6. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓標案" -Confirm:$false`。
 
 週末、假日沒決標就是 0 筆；公司網路要連得到 `pcc-api.openfun.app`（g0v 的標案 API），連不到會印「API 連不上」就結束。
+API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那天就抓不到，隔天補抓用 `-Date 20261024 -Days 1 -Force`。
 
 ### 探路收尾（照「新資料來源的做法」：看完就刪腳本，結論寫這裡）
 - **104**（`probe_104/`，本機 10/25 做的）：用程式直接連 104（urllib、curl、Actions、Claude 內建瀏覽器）都 403，是對自動化用戶端的封鎖；只有在使用者自己的 Chrome 裡（Claude in Chrome）在 104 頁面內呼叫才通。找公司 API `/company/ajax/list?keyword=<公司名>&jobsource=index_s_cs&features=1&pageSize=18` 回 `data[]`（name、areaDesc、capitalDesc、employeeCountDesc、jobCount…），一家 0.1～0.5 秒；要「有沒有在徵才」看 `jobCount` 就夠。使用者授權走這條（CLAUDE.md）。做成版本 387／388。
@@ -5183,3 +5191,61 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 固定 07:40 要 Mac 醒著；改成當天第一次開機或喚醒時跑、今天跑過就不重跑（104 那段與標案都一樣），由本機對話窗設。公司電腦有抓標案之後，Mac 那份當備援。
 
 - 測試：`npm test`；PowerShell 腳本在這邊沒有 Windows 可跑，語法照 Mac 版一比一對照，第一次在公司電腦手動跑一遍就是測試。版號 20261027-389。
+- 公司電腦實測（10/27，Windows 11，無管理員權限）：Python 3.15.2 加 truststore 後，`fetch-pcc.py --date 20261023` 抓 567 案決標、投標廠商 1013 家、得標 633 家、篩完留 195 家，約 27 分鐘（每次請求隔 1 秒），結果只寫到暫存資料夾。沒裝 truststore 前在 TLS 交握就失敗（`certificate signature failure`）。
+
+## Mac 的兩個每日作業改成「當天第一次醒來就跑、今天跑過不重跑」（版本 390）
+
+使用者 10/27：「可以設定成我當天第一次開啟網頁時去跑嗎」→ 網頁做不到，改成開機就跑；「那公司呢」→「好」。版本 389 預告的 Mac 這段。
+兩個作業都不再綁 07:40，改成 Mac 當天第一次登入或喚醒之後就跑，而且「今天跑過」就不重跑，一天只做一次。
+
+### 標案（`tools/pcc-daily.sh` ＋ `tools/mac-schedule.sh`）
+- `pcc-daily.sh` 照 Windows 版（`pcc-daily.ps1`）加了記號檔 `~/Library/Application Support/chailease-work/pcc-last.txt`：裡面是今天的日期就印「今天抓過了」直接結束；`--force` 再跑一次。
+  只有真的抓完（有推、或確定沒新資料）才寫記號；剛喚醒網路還沒通（最多等 2 分鐘）或標案 API 連不上，就不寫記號、不留半套改動，下次再試。
+  `git pull` 加了 `--autostash`，launchd 叫起來時 PATH 補上 Homebrew 的路徑。
+- `mac-schedule.sh install`：寫一個 launchd 的 LaunchAgent（`~/Library/LaunchAgents/com.chailease-work.pcc-daily.plist`）：登入就跑（RunAtLoad）、之後每 30 分鐘再叫一次（StartInterval，Mac 睡著時錯過的，醒來會補一次）。
+  配合記號檔，實際就是「醒來後最多半小時內抓一次，今天抓過就不動」。記錄在 `~/Library/Logs/chailease-work/pcc-daily.log`。
+- 公司的 Windows 電腦（版本 389）之後是主要抓標案的那台，Mac 這份當備援；兩台都跑也不會重複（`cases.csv` 去重，第二台會印「沒有新資料」）。
+- **怎麼設**（在 repo 資料夾，做一次）：`bash tools/mac-schedule.sh install`。**手動跑**：`bash tools/pcc-daily.sh`（今天跑過就加 `--force`）。**看狀態**：`bash tools/mac-schedule.sh status`。**關掉**：`bash tools/mac-schedule.sh remove`。
+
+### 104 徵才（`tools/hiring-104.py`）
+- 這段要用 Claude 加使用者自己的 Chrome，shell 腳本叫不動，所以不走 launchd；查了文件，Claude Code 的 Chrome 整合只寫了互動模式，背景無人的 `claude -p` 沒有說能用，不賭這條。
+- 做法：`prepare` 多了「今天查過就不重查」——同步檔設定 `hiring-results` 的 `at` 是今天就印「今天查過了」結束（`--force` 才再查）；
+  排程則靠桌面版的兩個行為：Mac 睡著或 App 沒開而錯過的時間，醒來／開 App 會補跑最近錯過的那一次；加上一天多排幾個時間。
+  所以把 Cowork 那條排程任務改成上班日 `07:40、09:40、12:40、15:40`（編輯那條任務，週期選自訂，cron `40 7,9,12,15 * * 1-5`，本機時間；提示詞不變），
+  效果就是「當天醒著的第一個時間跑一次，其餘的幾秒內因『今天查過了』結束」。編輯表單沒有自訂 cron 的話，維持上班日 07:40 一天一次也可以，錯過的醒來會補。
+- **手動跑**：照 `hiring-104.py` 檔頭的例行步驟三步（本機對話窗跟 Claude 說「跑 104 徵才查詢」也是）；今天查過要重查就 `prepare --force`。**關掉**：停用或刪掉 Cowork 那條排程任務。
+- 規則照舊：只在使用者自己的 Chrome 裡查、一家一次、間隔 2 秒、被擋就停；`/tmp/hiring-104/` 與同步檔不進 repo。
+
+### 這一版沒做到、要使用者在 Mac 上做的
+- 雲端這邊連不到標案 API、也沒有 Mac 的 Chrome 與同步檔，所以「兩個都手動跑一次」要在 Mac 的本機對話窗做：`bash tools/pcc-daily.sh` 看印出抓到幾家；
+  跟 Claude 說「跑 104 徵才查詢」看候選幾家、查了幾家、幾家有徵才。然後 `bash tools/mac-schedule.sh install`、把 Cowork 的排程改成四個時間。
+- 測試（這邊，用假資料）：`pcc-daily.sh` 記號是今天 → 不重跑；記號是昨天 → 往下跑，API 連不上 → 不寫記號、`leads/pcc` 還原乾淨。
+  `hiring-104.py`：沒結果 → 候選 2 家寫出程式；寫入假結果後 `prepare` → 今天查過了；`--force` → 照查；結果 `at` 改成昨天 → 照查；其他設定與 records 不動。`npm test` 全過。
+- 版號：改了 `tools/`，三處改成 20261027-390。
+
+## 公司電腦的 Python 改用 Windows 憑證庫（版本 391）
+
+使用者 10/27 在公司電腦照版本 389 的步驟設定時發現：公司網路會攔截 HTTPS、把 `pcc-api.openfun.app` 的憑證換成公司自己的 CA（GitHub 沒被攔），Windows 和瀏覽器信任它，Python 內建的 OpenSSL 不信，`fetch-pcc.py` 在 TLS 交握就失敗。使用者：「在 fetch-pcc.py 加 try import truststore 並 inject，安裝步驟寫進 README 版本 389，推上分支。」
+
+- `tools/fetch-pcc.py`：開頭 `try: import truststore; truststore.inject_into_ssl()`，有裝就改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證），沒裝（Mac、Actions）照舊。
+- README 版本 389 的設定步驟補上：沒有管理員權限的裝法、winget 壞掉、Store 空殼 python、`pip install --user truststore`、GitHub SSH 被擋只能走 HTTPS、API 回 500 那天怎麼補抓。
+- 測試：`python -m unittest pcc_test.test_fetch_pcc` 3 個通過；公司電腦實跑 `fetch-pcc.py --date 20261023` 567 案 → 留 195 家（寫到暫存資料夾，數字在版本 389 那段）。版號 20261027-391。
+
+## 公司電腦：標案 API 連不上就不寫記號、不推（版本 392）
+
+公司電腦 10/27 第一次照排程的方式跑：抓昨天（10/26）API 回 500，`fetch-pcc.py` 印「API 連不上」、0 筆，但 180 天清理動了 1 列，`pcc-daily.ps1` 就照樣 commit、push、寫記號，當天不會再重試，那一天的決標就漏了。Mac 版 390 的 `pcc-daily.sh` 有處理，Windows 版沒有。使用者：「把 pcc-daily.ps1 改成 API 連不上就不寫記號檔、不推，照 Mac 版 390 的做法，推上分支。」
+
+- `tools/pcc-daily.ps1` 照 `pcc-daily.sh` 補齊三件事：
+  1. 剛登入網路可能還沒通：最多等 2 分鐘（每 10 秒試連 GitHub 一次），還是不通就印「網路還沒通，這次先不抓」結束，不寫記號。
+  2. 抓取的輸出留一份，看到「API 連不上」就 `git checkout -- leads/pcc` 還原、印「標案 API 連不上，這次先不算」結束，不寫記號、不推；抓取失敗（非 0）也先還原再丟錯。
+  3. `git pull` 加 `--autostash`；記號檔位置可用環境變數 `CHAILEASE_STAMP_DIR` 改（跟 Mac 版同名，測試用）。
+- 登入排程不用重建，任務跑的是同一個檔。排程試跑過是「今天抓過了」幾秒結束。
+- 測試（公司電腦實跑，記號指到暫存資料夾）：API 500 的日子 → 印「這次先不算」、記號沒寫、`leads/pcc` 乾淨、沒有新 commit；記號是今天 → 「今天抓過了」；`-Force` 加 API 500 → 照跑、仍不寫記號。版號 20261027-392。
+
+## 下次聯絡日打字打到一半被挪走（版本 393）
+
+使用者 10/27 傳截圖：「下次聯絡日要輸入 2026 年 11 月 11 號時，因為 1 號放假，於是系統不讓我輸入，他會判斷 1 號是假日會自動延後，請幫我更正」。
+
+- 原因：Chrome 的日期框是一格一格打的，每打一個數字只要湊得成日期就送一次 change。打 11/11 的第一個「1」時是 11/01（週日），自己挑日期撞假日會順延（版本 314 起）馬上把它挪成 11/02，第二個「1」接上去就變 11/12。
+- 修（`dateWithHint`）：不在每次 change 就順延。**離開欄位**（blur；按「儲存紀錄」之前一定會先離開）就檢查；還在欄位裡的，**停手 2 秒**才檢查（用日期選擇器挑完也走這條）。程式改的（快捷鍵）照舊馬上檢查。挑到假日照樣順延、照樣跳提示，只是不會在打字途中跳。
+- 測試：`tests/e2e/test-holiday-shift.js` 加一項「打到 11/01 再打成 11/11，等 2 秒，還是 11/11」；原本自己挑 10/10、10/13、春節三項改成離開欄位後再看。版號 20261027-393（另一個對話窗同時推了 390～392，這版接在後面）。
