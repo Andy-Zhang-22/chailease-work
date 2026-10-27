@@ -17,6 +17,10 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
+ // 版本 394：丙三的候選列沒電話（候選列來自排第一的名單），標案那份有它的手機，加進來要一起補上
+ const PCC='\ufeff統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額\n20000013,丙三工程有限公司,公司登記,新北市新莊區中正路1號,(0912)333444,2026-10-14,某工程,某機關,3890000,1,2026-10-14,1,108/09/03,12000000\n';
+ await ctx.route('**/leads/pcc/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({generatedAt:'2026-10-26T20:00:00.000Z',cities:['新北市'],days:180,total:1,withPhone:1,latestDate:'2026-10-14',files:[{path:'pcc.csv',rows:1}]})}));
+ await ctx.route('**/leads/pcc/pcc.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:PCC}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9616/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async({recs,head,rows})=>{ await window.Store.saveRecords(recs); ['registry-auto','daily-feed-auto','leads-hunt','auto-rebalance'].forEach(k=>localStorage.setItem(k,'0'));
@@ -27,7 +31,7 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
      {key:'20000001',name:'主力1有限公司',src:'登記清冊',row:rows[3]}]}));
    await window.Store.setSetting('hiring-results', JSON.stringify({at:Date.now(),list:[
      {key:'20000011',count:3,at:Date.now()},{key:'20000012',count:0,at:Date.now()},{key:'20000013',count:1,at:Date.now()},{key:'20000001',count:9,at:Date.now()}]}));
- },{recs:[1,2].map(mk),head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('乙二機械股份有限公司','20000012','0933-111-222'),row('丙三工程有限公司','20000013','02-2222-3333'),row('主力1有限公司','20000001','02-2222-3333')]});
+ },{recs:[1,2].map(mk),head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('乙二機械股份有限公司','20000012','0933-111-222'),row('丙三工程有限公司','20000013',''),row('主力1有限公司','20000001','02-2222-3333')]});
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1200);
  const r1=await pg.evaluate(()=>window.applyHiring()); await pg.waitForTimeout(800);
  chk(r1.added===2 && /^每日新名單-2026-10-27-104\.csv$/.test(r1.name), `有徵才的 2 家加進來（0 件的不加、已在名單的不重複）：${JSON.stringify(r1)}`);
@@ -36,6 +40,8 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  chk(jia && jia.badges.includes('104 徵才 3 件') && !yi, `甲一在名單上標 104 徵才 3 件、乙二（0 件）沒加：${JSON.stringify(recs.map(r=>r.name))}`);
  const rows=await pg.$$eval('#remindBar .remind-row .remind-name',a=>a.map(x=>x.textContent.trim()));
  chk(rows.length===4 && rows[0]==='甲一精密有限公司' && rows[1]==='丙三工程有限公司', `今天要打：104 有徵才的排最前、職缺多的先：${rows.join('|')}`);
+ const bing=await pg.evaluate(async()=>{const all=await window.Store.allRecords(); const r=all.find(x=>x.company==='丙三工程有限公司'); const st=await window.Store.allStates(); const s=Object.values(st||{}).find(x=>x.recordId===r.id)||{}; return {raw:r.phoneRaw, edit:s.edits&&s.edits.phoneRaw, from:s.phoneSource&&s.phoneSource.name};});
+ chk(bing.edit==='(0912)333444' && bing.from==='政府標案得標', `候選列沒電話的，從公開資料（標案）補上手機：${JSON.stringify(bing)}`);
  const r2=await pg.evaluate(()=>window.applyHiring());
  chk(r2.added===0, `再套一次不會重複加：${JSON.stringify(r2)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');

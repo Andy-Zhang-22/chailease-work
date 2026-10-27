@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261027-393';
+  const APP_VERSION = '20261027-394';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3620,6 +3620,12 @@
       const batches = new Set(state.records.map((r) => r.source).filter((x) => String(x || '').startsWith(`每日新名單-${today}-104`)));
       const name = `每日新名單-${today}-104${batches.size ? `-${batches.size + 1}` : ''}.csv`;
       await importFiles([new File([csv], name, { type: 'text/csv' })]);
+      /*
+       * 從公開資料補電話、補手機（版本 394）：候選列是那家排第一的名單（多半是登記清冊）的那一列，常常沒電話；
+       * 同一家在標案、新設工廠那幾份有電話或手機，各頁「加入」與每日新名單都會補，這條原本漏了
+       * （使用者 10/27：「為甚麼手機沒有一起加到主力名單內？」）。
+       */
+      try { await publicPhones(name); } catch (e) { console.error('104 加進來的補電話', e); }
       const now = Date.now();
       for (const v of allViews().filter((x) => x.source === name)) {
         const hit = todo.find((x) => { const c = byKey.get(x.key); return window.Normalize.companyKeys({ company: c.name, taxId: /^\d{8}$/.test(c.key) ? c.key : '' }).some((k) => window.Normalize.companyKeys({ company: v.company, taxId: v.taxId }).includes(k)); });
