@@ -5174,9 +5174,10 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
    `git clone -b claude/telemarketing-website-hf2uwj https://github.com/Andy-Zhang-22/chailease-work.git`
    公司防火牆擋 GitHub 的 SSH（22 與 443 都擋），只能走 HTTPS；push 的登入交給 Git for Windows 內附的 Git Credential Manager，第一次會開瀏覽器登 GitHub，之後記住。
 4. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。畫面印「推上 … 了」或「沒有新資料」都算成功。
-5. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）：
-   `schtasks /Create /SC ONLOGON /DELAY 0002:00 /TN "電推-抓標案" /TR "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1" /F`
-6. 關掉：`schtasks /Delete /TN "電推-抓標案" /F`。
+5. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）。沒有管理員權限時 `schtasks /SC ONLOGON` 會「Access is denied」（它預設是任何人登入都觸發），要改成只在自己登入時觸發，在 PowerShell 貼這段（一行）：
+   `$u="$env:USERDOMAIN\$env:USERNAME"; $a=New-ScheduledTaskAction -Execute powershell.exe -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1'; $t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT2M'; Register-ScheduledTask -TaskName "電推-抓標案" -Action $a -Trigger $t -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)) -Force`
+   確認：`Get-ScheduledTask -TaskName "電推-抓標案"` 的 State 是 Ready；立刻試跑 `Start-ScheduledTask -TaskName "電推-抓標案"`，今天抓過會幾秒內結束。
+6. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓標案" -Confirm:$false`。
 
 週末、假日沒決標就是 0 筆；公司網路要連得到 `pcc-api.openfun.app`（g0v 的標案 API），連不到會印「API 連不上」就結束。
 API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那天就抓不到，隔天補抓用 `-Date 20261024 -Days 1 -Force`。
