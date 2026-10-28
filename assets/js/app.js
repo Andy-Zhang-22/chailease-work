@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261028-396';
+  const APP_VERSION = '20261028-397';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2891,7 +2891,7 @@
          * 存起來的資料本來就沒動，只是顯示時不再被組蓋掉。
          */
         const booked = latestMeetLog(m.id);
-        if (booked && m.nextDate && booked.meetingDate === m.nextDate && m.nextDate >= todayISO()) return;
+        if (booked && m.nextDate && booked.meetingDate === m.nextDate && m.nextDate >= todayISO() && !visitWent(booked, members.map((x) => x.id))) return;
         m.nextDate = nextDate;
         m.bucket = dueBucket(nextDate);
       });
@@ -3090,6 +3090,14 @@
    * （使用者：「為什麼我今天有一個利昇的拜訪消失了？」）。改看最近一則勾了約到拜訪的。
    */
   const visitBooked = (v) => { const m = latestMeetLog(v.id); return !!(m && m.meetingDate === v.nextDate); };
+  /*
+   * 去過了沒：約了之後、在約的那天又記了一通（版本 335）。版本 397 起整組都算：同老闆連結的關係企業那家記的也算
+   * （使用者 10/28：「我在關企的紀錄為什麼沒有讓他也劃記上已拜訪的記錄呢？」）——一次拜訪談的是整個老闆，
+   * 記錄頁也寫著「這通電話同老闆的幾家也會一起看到」。ids 是這家和同組每一家的 id。
+   */
+  function visitWent(meetLog, ids) {
+    return state.logs.some((o) => ids.includes(o.recordId) && o.date === meetLog.meetingDate && o.logId !== meetLog.logId && (o.createdAt || 0) >= (meetLog.createdAt || 0));
+  }
 
   function bucketByWorkday(days) {
     const today = todayISO();
@@ -5132,6 +5140,8 @@
     const logsOn = new Map();
     state.logs.forEach((l) => { const k = `${l.recordId}|${l.date}`; if (!logsOn.has(k)) logsOn.set(k, []); logsOn.get(k).push(l); });
     const loggedAfter = (k, l) => (logsOn.get(k) || []).some((o) => o.logId !== l.logId && (o.createdAt || 0) >= (l.createdAt || 0));
+    const groupIds = new Map();   // 同老闆連結的一組 → 每一家的 id（關企那家記的也算去過，版本 397）
+    byId.forEach((v) => { if (!v.group) return; if (!groupIds.has(v.group)) groupIds.set(v.group, []); groupIds.get(v.group).push(v.id); });
     const lastMeet = new Map();   // 每家最近一則勾過約到拜訪的
     state.logs.forEach((l) => { if (l.meeting && l.meetingDate) { const cur = lastMeet.get(l.recordId); if (!cur || (l.createdAt || 0) > (cur.createdAt || 0)) lastMeet.set(l.recordId, l); } });
     const seen = new Set();
@@ -5142,7 +5152,7 @@
       const k = `${l.recordId}|${l.meetingDate}`;
       if (seen.has(k)) return;
       const past = l.meetingDate < today;
-      const went = loggedAfter(k, l) || (l.meetingDate === today && v.dueDoneOn === today);
+      const went = loggedAfter(k, l) || visitWent(l, v.group ? (groupIds.get(v.group) || [v.id]) : [v.id]) || (l.meetingDate === today && v.dueDoneOn === today);
       if (!past && (lastMeet.get(l.recordId) !== l || (v.nextDate !== l.meetingDate && !went))) return;
       seen.add(k);
       const done = past || went;
@@ -5964,6 +5974,24 @@
     ]);
     const syncMeetTimes = () => { meetTimes.hidden = !meet.checked; };
     /*
+     * 整組約了、還沒過也還沒去過的那次拜訪（版本 397；使用者 10/28：「我要你幫我修正到不管是到客戶那或關企紀錄拜訪內容都可以做修改」）。
+     * 自己或同老闆連結的哪一家約的都算：記錄欄寫出來；勾「約到拜訪」就是改這次拜訪（日期、出發、抵達先帶入原本的），
+     * 存的時候那則勾了約到拜訪的紀錄記在約的那家，整組不會變成兩個拜訪。
+     */
+    const groupVisit = (() => {
+      const ids = [r.id, ...members.map((m) => m.id)];
+      const day0 = todayISO();
+      let best = null;
+      ids.forEach((id) => {
+        const l = latestMeetLog(id);
+        if (!l || !l.meetingDate || l.meetingDate < day0 || visitWent(l, ids)) return;
+        const v = allViews().find((x) => x.id === id);
+        if (!v || v.nextDate !== l.meetingDate) return;
+        if (!best || (l.createdAt || 0) > (best.log.createdAt || 0)) best = { log: l, owner: id, company: v.company };
+      });
+      return best;
+    })();
+    /*
      * 固定這天：使用者「打完這通電話，我確定一定要下週二再撥，但我怕會因為每天上線通數洗掉」。
      * 勾了就記 pinDate：照上限重排、「今天的 N 家挪到下個上班日」、週五「未跟完的移到下週」、關係企業日期連動
      * 都跳過這家；卡片標 📌。下次再記一通沒勾就解除。
@@ -6024,7 +6052,16 @@
     memo.addEventListener('input', writeDraft);
     outcomeSel.addEventListener('change', writeDraft);
     nextInput.addEventListener('change', writeDraft);
-    meet.addEventListener('change', () => { if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted'; syncMeetTimes(); if (meet.checked) departInput.focus(); writeDraft(); });
+    meet.addEventListener('change', () => {
+      if (meet.checked && outcomeSel.value === 'noanswer') outcomeSel.value = 'contacted';
+      // 整組已經約了：先帶入原本約的日期與時間，要改哪個改哪個（版本 397）
+      if (meet.checked && groupVisit) {
+        if (!departInput.value) departInput.value = groupVisit.log.meetingDepart || '';
+        if (!arriveInput.value) arriveInput.value = groupVisit.log.meetingArrive || '';
+        if (nextInput.value === (r.nextDate || '') && nextInput.value !== groupVisit.log.meetingDate) { nextInput.value = groupVisit.log.meetingDate; nextInput.dispatchEvent(new Event('change')); }
+      }
+      syncMeetTimes(); if (meet.checked) departInput.focus(); writeDraft();
+    });
     departInput.addEventListener('change', writeDraft);
     arriveInput.addEventListener('change', writeDraft);
     pin.addEventListener('change', writeDraft);
@@ -6102,6 +6139,7 @@
        * try 裡，第二次失敗也講「存不進去」——但那時紀錄其實已經存好了，使用者照著
        * 訊息重打一次就變成兩則一模一樣的紀錄。所以要分開講。
        */
+      let logTarget = r.id;               // 這則紀錄記在哪一家（版本 397：改同組那次拜訪時是約的那家）
       save.disabled = true;               // 存的時候連點兩下會變成兩則一樣的紀錄
       const wasLabel = save.textContent;
       save.textContent = '儲存中…';
@@ -6123,14 +6161,16 @@
         toast(`${what}：${why}`);
       };
       try {
-        // 只寫這一家：同組其他家靠訪談互通與日期、狀態連動看得到同一通電話，不用各寫一則
+        // 只寫這一家：同組其他家靠訪談互通與日期、狀態連動看得到同一通電話，不用各寫一則。
+        // 勾了約到拜訪、而同老闆的另一家已經約了：改的是那次拜訪，記在約的那家（版本 397）
+        logTarget = meet.checked && groupVisit && groupVisit.owner !== r.id ? groupVisit.owner : r.id;
         await window.Store.addLog({
-          recordId: r.id, date: today, text, outcome: outcomeSel.value, createdAt,
+          recordId: logTarget, date: today, text, outcome: outcomeSel.value, createdAt,
           // 約到見面：記在這則紀錄上，本週節奏算「約到幾個」、週三列拜訪名單用
           ...(meet.checked ? { meeting: true, meetingDate: picked || '', meetingDepart: departInput.value || '', meetingArrive: arriveInput.value || '' } : {}),
         });
         state.logs = await window.Store.allLogs();
-        if (!state.logs.some((l) => l.recordId === r.id && l.createdAt === createdAt)) {
+        if (!state.logs.some((l) => l.recordId === logTarget && l.createdAt === createdAt)) {
           throw new Error('寫得進去卻讀不回來');
         }
       } catch (err) {
@@ -6141,6 +6181,8 @@
       // 紀錄已經進去了：草稿可以清掉，再按一次也不會變兩則
       clearDraft();
       try {
+        // 拜訪記在約的那家：那家的下次聯絡日跟著改到約的那天，行事曆才對得上
+        if (logTarget !== r.id) await saveState(logTarget, { outcome: outcomeSel.value, nextDate: picked || null, lastDate: today });
         await saveState(r.id, {
           outcome: outcomeSel.value,
           nextDate: picked || null,
@@ -6161,7 +6203,7 @@
           + (auto.movedFrom ? `（${dateLabel(auto.movedFrom)} 是${auto.reason}，順延了）` : '')
         : '';
       const coolNote = cooled === 'cold' ? `；連續未接 ${streak} 次，移到冷名單、不再排日期（打通一次就解除）` : cooled === 'cool' ? `；連續未接 ${streak} 次，自動排到兩週後 ${dateLabel(picked)}` : '';
-      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? `，約到 ${dateLabel(picked)} 拜訪 🚗${arriveInput.value ? ` ${departInput.value ? `${departInput.value} 出發、` : ''}${arriveInput.value} 到` : ''}` : ''));
+      toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? `，${logTarget !== r.id ? `改了「${groupVisit.company}」的拜訪：` : '約到 '}${dateLabel(picked)} 拜訪 🚗${arriveInput.value ? ` ${departInput.value ? `${departInput.value} 出發、` : ''}${arriveInput.value} 到` : ''}` : ''));
       // 存完直接回到名單（版本 315；使用次數顯示每存一次就要再按一次關閉）。要設回撥提醒的再點開那一家
       render();
       closeOverlays();
@@ -6173,6 +6215,10 @@
       el('span', { className: 'muted', textContent: '下次聯絡' }), withDateHint(nextInput, true), meetLabel, meetTimes, pinLabel, save,
     ]));
     form.append(quick);
+    if (groupVisit) {
+      const t = [groupVisit.log.meetingDepart ? `${groupVisit.log.meetingDepart} 出發` : '', groupVisit.log.meetingArrive ? `${groupVisit.log.meetingArrive} 抵達` : ''].filter(Boolean).join('・');
+      form.append(el('p', { className: 'muted meet-current', textContent: `🚗 ${groupVisit.owner === r.id ? '這家' : `同老闆的「${groupVisit.company}」`}約了 ${dateLabel(groupVisit.log.meetingDate)}${t ? ` ${t}` : ''} 拜訪；勾「約到拜訪」改的就是這次，拜訪完在這裡記一筆就算去過了。` }));
+    }
     if (members.length) {
       form.append(el('p', { className: 'muted apply-group', textContent: `這通電話同老闆的 ${members.length} 家（${members.map((m) => m.company).join('、')}）也會一起看到，日期與狀態一起連動。` }));
     }
