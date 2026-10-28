@@ -23,6 +23,7 @@
   python3 tools/hiring-104.py write /tmp/hiring-104/results.json    # 把 Chrome 查到的結果寫回同步檔
   python3 tools/hiring-104.py status             # 看同步檔裡現在的候選池與結果（只印筆數）
   選項：--sync <路徑> 指定同步檔；prepare --any-day 候選池不是今天的也照查；prepare --force 今天查過也再查。
+        prepare 讀到的候選池不是今天的，會每 30 秒重讀、最多等 5 分鐘（等雲端硬碟同步；--wait 秒數 可改，--wait 0 不等）。
 
 例行步驟（版本 390 起：Mac 當天醒著的第一個排程時間跑一次，今天查過就不重跑；Cowork 的排程任務排在上班日 07:40、09:40、12:40、15:40，
   Mac 睡著錯過的，桌面版醒來會補跑最近一次；每次都先走第 1 步，今天查過了就直接結束。手動跑也是這三步）：
@@ -124,13 +125,34 @@ def norm_name(s):
     return ''.join(str(s or '').split()).replace('（', '(').replace('）', ')').replace('臺', '台')
 
 
+def fresh_pool(path, today, any_day, force, wait, poll):
+    """讀同步檔；候選池不是今天的（或還沒有），每 poll 秒重讀一次，最多等 wait 秒。
+    Mac 剛醒時雲端硬碟桌面版可能還沒把清晨寫好的新檔同步下來（10/28 晚了 2 分鐘），等一下再讀就有。
+    今天已經查過（又沒加 --force）就不等，交給 cmd_prepare 印「今天查過了」。"""
+    end = time.time() + max(0, wait)
+    said = False
+    while True:
+        data = load(path)
+        pool = setting_json(data, POOL_KEY)
+        ok = pool and isinstance(pool.get('list'), list)
+        if ok and (any_day or pool.get('day') == today):
+            return data, pool
+        done = setting_json(data, RESULT_KEY)
+        if not force and done and done.get('at') and datetime.date.fromtimestamp(int(done['at']) / 1000).isoformat() == today:
+            return data, pool
+        if time.time() + poll > end:
+            return data, pool
+        if not said:
+            print(f'同步檔裡還不是今天的候選池，等雲端硬碟同步中（最多 {round(wait / 60)} 分鐘）…', flush=True); said = True
+        time.sleep(poll)
+
+
 def cmd_prepare(a):
     path = find_sync(a.sync)
-    data = load(path)
-    pool = setting_json(data, POOL_KEY)
+    today = datetime.date.today().isoformat()
+    data, pool = fresh_pool(path, today, a.any_day, a.force, a.wait, a.poll)
     if not pool or not isinstance(pool.get('list'), list):
         print('同步檔裡沒有候選池（設定 hiring-candidates），清晨的後台可能還沒跑；不查。'); return 0
-    today = datetime.date.today().isoformat()
     done = setting_json(data, RESULT_KEY)
     done_day = datetime.date.fromtimestamp(int(done.get('at') or 0) / 1000).isoformat() if done and done.get('at') else ''
     if done_day == today and not a.force:
@@ -215,6 +237,7 @@ def main():
     ap.add_argument('--sync', help='同步檔路徑（預設自己找雲端硬碟桌面版的資料夾）')
     sub = ap.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('prepare', help='讀候選池，寫要在 Chrome 裡執行的程式'); p.add_argument('--any-day', action='store_true', help='候選池不是今天的也查'); p.add_argument('--force', action='store_true', help='今天查過也再查')
+    p.add_argument('--wait', type=float, default=300, help='候選池不是今天的，最多等雲端硬碟同步幾秒（預設 300）'); p.add_argument('--poll', type=float, default=30, help=argparse.SUPPRESS)
     w = sub.add_parser('write', help='把 Chrome 查到的結果寫回同步檔'); w.add_argument('results', nargs='?', default=RESULTS)
     sub.add_parser('status', help='看候選池與結果的筆數')
     a = ap.parse_args()

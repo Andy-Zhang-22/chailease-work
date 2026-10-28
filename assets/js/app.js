@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261027-394';
+  const APP_VERSION = '20261028-396';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2884,6 +2884,14 @@
         m.groupDatesFrom = lead.company;
         m.lastDate = lastDate;
         if (m.pinDate) return;   // 這家固定了日期：最近聯絡跟著組，下次聯絡日留自己的
+        /*
+         * 這家約了拜訪（最近一則勾約到拜訪的、約的那天就是它自己的下次聯絡日、還沒過）：跟固定日期一樣，下次聯絡日留自己的（版本 396）。
+         * 不然在關係企業那家記一通、填了別天，整組的下次聯絡日跟著換，「約的那天＝下次聯絡日」對不上，
+         * 行事曆與今天要打就看不到這次拜訪（使用者 10/28：「我明明今天有約訪的客戶，我只是透過他的關企去修改拜訪內容，就被刪掉了」）。
+         * 存起來的資料本來就沒動，只是顯示時不再被組蓋掉。
+         */
+        const booked = latestMeetLog(m.id);
+        if (booked && m.nextDate && booked.meetingDate === m.nextDate && m.nextDate >= todayISO()) return;
         m.nextDate = nextDate;
         m.bucket = dueBucket(nextDate);
       });
