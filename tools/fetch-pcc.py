@@ -14,6 +14,7 @@
 輸出：leads/pcc/pcc.csv（一家一列，跨期同統編不重複；同一家得好幾標留最近那一標，件數另外記）、cases.csv（去重用）、index.json；
       另外寫 pcc_test/result-YYYYMMDD.csv（當天得標廠商一家一列，給使用者看）。只印筆數與統計，不印公司名。
 用法：python3 tools/fetch-pcc.py [--date YYYYMMDD] [--days 1] [--out leads/pcc]
+結束代碼（版本 398）：0＝每天都抓到；4＝有幾天 API 連不上、其他天照寫；3＝每天都連不上、什麼都沒寫。外層的 pcc-daily.sh／.ps1 靠這個決定推不推、記不記「今天抓過」。
 """
 import csv, io, json, os, re, sys, time, datetime, urllib.parse, urllib.request, urllib.error
 
@@ -139,6 +140,16 @@ def merge_rows(prev_head, prev_rows, prev_cases, wins, today, cfg=CONFIG):
     for t in dropped: del by[t]
     return by, cases, {"added": added, "updated": updated, "dup": dup, "dropped": len(dropped)}
 
+EXIT_OK, EXIT_ALL_DOWN, EXIT_PARTIAL = 0, 3, 4
+
+def outcome(day_stats):
+    """這次抓的幾天 → (結束代碼, 沒抓到的日期)。
+    以前外層腳本看到輸出有「API 連不上」就把 leads/pcc 整批還原，補好幾天時只要一天掛、成功的天也一起丟（2026/10/28 補 10/26～27，10/26 回 500，10/27 的 60 家跟著沒了）。
+    改成：全掛＝3（什麼都不寫，之後再試）；有掛有成功＝4（成功的照寫、照推，掛的那幾天列出來之後補）；全成功＝0。"""
+    down = [st["date"] for st in day_stats if st.get("api_down")]
+    if not down: return EXIT_OK, []
+    return (EXIT_ALL_DOWN if len(down) == len(day_stats) else EXIT_PARTIAL), down
+
 # ---------- 網路 ----------
 def get_json(url, cfg=CONFIG, log=print):
     last = None
@@ -226,6 +237,10 @@ def main():
         res = [RESULT_HEAD] + [[r["award"]["date"], r["award"]["tender"], r["award"]["agency"], r["award"]["case_no"], r["name"], r["tax"], r["org"], r["address"], r["tel"], r["amount"] or "", r["award"]["total"] or "", r["sme"], r["staff"], "是" if r["keep"] else "", r["why"]] for r in won]
         with open(os.path.join("pcc_test", f"result-{d}.csv"), "w", encoding="utf-8", newline="") as f: f.write(csv_text(res))
         all_wins += [r for r in rows if r["keep"]]
+    code, down = outcome(day_stats)
+    if code == EXIT_ALL_DOWN:
+        print(f"→ 這次 {len(down)} 天標案 API 都連不上，什麼都沒寫；之後再試")
+        sys.exit(code)
     by, cases, m = merge_rows(prev_head, prev_rows, prev_cases, all_wins, today)
     rows_out = sorted(by.values(), key=lambda o: (o["最近決標日"], o["名稱"]), reverse=True)
     with open(os.path.join(out, "pcc.csv"), "w", encoding="utf-8", newline="") as f: f.write(csv_text([HEAD] + [[o.get(h, "") for h in HEAD] for o in rows_out]))
@@ -239,6 +254,9 @@ def main():
                   "apiDown": any(st["api_down"] for st in day_stats), "dates": dates, "files": [{"path": "pcc.csv", "rows": len(rows_out)}]})
     with open(os.path.join(out, "index.json"), "w", encoding="utf-8") as f: f.write(json.dumps(index, ensure_ascii=False, indent=1) + "\n")
     print(f"→ {out}/pcc.csv 共 {len(rows_out)} 家（新增 {m['added']}、既有再得標 {m['updated']}、重複案件略過 {m['dup']}、超過 {CONFIG['keep_days']} 天刪掉 {m['dropped']}；有電話 {index['withPhone']}）；給你看的在 pcc_test/result-{date}.csv")
+    if down:
+        print(f"→ 其中 {len(down)} 天標案 API 連不上、沒抓到：{'、'.join(down)}；其他天照寫。這幾天之後要補：bash tools/pcc-daily.sh <日期>")
+    sys.exit(code)
 
 if __name__ == "__main__":
     main()
