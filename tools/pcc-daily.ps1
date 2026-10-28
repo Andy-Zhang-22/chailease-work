@@ -1,6 +1,7 @@
 ﻿# 政府標案得標：在公司的 Windows 電腦上跑——抓前一天的決標公告，推上 GitHub 分支，之後 GitHub Actions 會接著補成立日與資本額、自動合併進 main。
 # 跟 Mac 的 tools/pcc-daily.sh 做一樣的事，多了「今天跑過就不重跑」，所以可以排成「登入就跑」。
 # 版本 392 起照 Mac 版 390：剛登入網路還沒通就等（最多 2 分鐘）、標案 API 連不上就把 leads/pcc 還原、不寫記號、不推，當天之後再跑會重試。
+# 版本 398 照 Mac 版：補好幾天時有一天 API 掛，成功的天照推（以前整批丟）；但這次不記「今天抓過」，之後再跑會重試。
 # 用法（PowerShell）：  powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1
 #                      powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1 -Date 20261023 -Days 3   （抓指定日期、往回幾天）
 #                      加 -Force 今天跑過也再跑一次
@@ -24,15 +25,18 @@ $python = if (Get-Command python -ErrorAction SilentlyContinue) { 'python' } els
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 git pull --rebase --autostash -q origin $branch
 if ($LASTEXITCODE -ne 0) { throw 'git pull 失敗（網路或登入問題）' }
-# 抓取的輸出照樣印出來，同時留一份判斷「API 連不上」（fetch-pcc.py 那天抓不到就會印這句；進度列走 stderr，直接到畫面）
-$out = Invoke-Expression "$python tools\fetch-pcc.py --date `"$Date`" --days $Days" | ForEach-Object { Write-Host $_; $_ }
-if ($LASTEXITCODE -ne 0) { git checkout -q -- leads/pcc; throw '抓取失敗（看上面的訊息）' }
-if (($out -join "`n") -match 'API 連不上') { git checkout -q -- leads/pcc; Write-Host '標案 API 連不上，這次先不算（之後會再試）'; exit 0 }
+# fetch-pcc.py 的結束代碼：0 每天都抓到；4 有幾天 API 掛、成功的天照寫；3 全掛、什麼都沒寫
+Invoke-Expression "$python tools\fetch-pcc.py --date `"$Date`" --days $Days"
+$rc = $LASTEXITCODE
+if ($rc -eq 3) { git checkout -q -- leads/pcc; Write-Host '標案 API 連不上，這次先不算（之後會再試）'; exit 0 }
+if ($rc -ne 0 -and $rc -ne 4) { git checkout -q -- leads/pcc; throw "抓取失敗（結束代碼 $rc，看上面的訊息）" }
 git add leads/pcc
 git diff --cached --quiet
-if ($LASTEXITCODE -eq 0) { Write-Host '沒有新資料，不用推'; Set-Content $stamp $today; exit 0 }
-git commit -q -m "政府標案得標名單：$today"
+if ($LASTEXITCODE -eq 0) { Write-Host '沒有新資料，不用推'; if ($rc -eq 0) { Set-Content $stamp $today }; exit 0 }
+$msg = if ($rc -eq 4) { "政府標案得標名單：$today（部分日期 API 連不上）" } else { "政府標案得標名單：$today" }
+git commit -q -m $msg
 git push -q origin "HEAD:$branch"
 if ($LASTEXITCODE -ne 0) { throw 'git push 失敗（第一次會要你登入 GitHub；之後多半是網路）' }
+if ($rc -eq 4) { Write-Host "推上 $branch 了，但有幾天 API 連不上沒抓到（看上面）；這次不記「今天抓過」，之後會再試"; exit 0 }
 Set-Content $stamp $today
 Write-Host "推上 $branch 了；GitHub Actions 會接著補成立日與資本額、合併進 main"

@@ -45,5 +45,14 @@ class T(unittest.TestCase):
         by3, _, m3 = fp.merge_rows([], [], [], [dict(w1, tax="99999999", award=old)], "2026-10-24")
         self.assertEqual(m3["dropped"], 1); self.assertNotIn("99999999", by3)
 
+    def test_outcome(self):
+        # 版本 398：補好幾天時一天掛，成功的天要留（以前外層看到「API 連不上」就整批還原）
+        ok = {"date": "20261027", "api_down": False}; bad = {"date": "20261026", "api_down": True}
+        self.assertEqual(fp.outcome([ok]), (fp.EXIT_OK, []))
+        self.assertEqual(fp.outcome([bad]), (fp.EXIT_ALL_DOWN, ["20261026"]))
+        self.assertEqual(fp.outcome([ok, bad]), (fp.EXIT_PARTIAL, ["20261026"]))
+        self.assertEqual(fp.outcome([bad, dict(bad, date="20261025")]), (fp.EXIT_ALL_DOWN, ["20261026", "20261025"]))
+        self.assertEqual((fp.EXIT_OK, fp.EXIT_ALL_DOWN, fp.EXIT_PARTIAL), (0, 3, 4))   # pcc-daily.sh／.ps1 寫死這三個數字
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
