@@ -1188,3 +1188,8 @@ body.has-registry-bar .update-bar { bottom: 60px; }
 .depart-row.is-due { color: var(--danger); }
 .depart-row.is-due .depart-time { color: var(--danger); }
 .depart-name { background: none; border: 0; padding: 0; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 14px; }
+
+/* 同老闆的其他電話（版本 399）：客戶抽屜電話底下一小排，標明是哪一家的 */
+.group-phones { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.group-phones-cap { font-size: 12px; letter-spacing: .06em; }
+.group-phone { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
