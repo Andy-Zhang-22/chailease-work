@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261028-398';
+  const APP_VERSION = '20261029-399';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5673,6 +5673,24 @@
       }
     } else if (r.phoneRaw) {
       body.append(el('p', { className: 'muted', textContent: `電話：${r.phoneRaw}` }));
+    }
+    /*
+     * 同老闆的其他電話（版本 399；使用者 10/29：「這兩個是關企，為甚麼電話沒有同步」→「好」）。
+     * 連動只在自己沒號碼時才借別家的（自己的總機優先，打過去才不會說錯公司名），所以兩家各有號碼時互相看不到；
+     * 可是關企那家的常是老闆或二代的手機，打哪一支談的都是同一個老闆。這裡把同組每一家「自己的」號碼裡、
+     * 這家上面沒列出的列出來，標明是哪一家的；可以撥、可以複製。卡片照舊只放一支；不改任何一家存的電話。
+     */
+    if (r.group) {
+      const shown = new Set((r.phones || []).map((p) => dialOf(p)).filter(Boolean));
+      const extra = [];
+      allViews().filter((v) => v.group === r.group && v.id !== r.id && !v.phonesFrom).forEach((v) => {
+        (v.phones || []).forEach((p) => { const d = dialOf(p); if (!d || shown.has(d)) return; shown.add(d); extra.push({ v, p }); });
+      });
+      if (extra.length) {
+        const box = el('div', { className: 'group-phones' }, [el('span', { className: 'muted group-phones-cap', textContent: '同老闆的其他電話' })]);
+        extra.forEach(({ v, p }) => box.append(el('div', { className: 'group-phone' }, [el('span', { className: 'muted', textContent: `${v.company}：` }), telGroup(p, r)])));
+        body.append(box);
+      }
     }
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
     // 登記現況不是營業中（版本 323）：講白，禁不禁止推廣使用者決定
