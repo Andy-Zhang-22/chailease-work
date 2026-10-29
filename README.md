@@ -5161,7 +5161,7 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
 使用者 10/27：「可以設定成我當天第一次開啟網頁時去跑嗎」→ 網頁做不到（靜態網頁跑不了電腦上的程式、也進不了 104），改成「電腦當天第一次登入就跑」；「那公司呢」→「好」：標案改放公司的 Windows 電腦，104 留在 Mac。
 
 ### 公司電腦（Windows）抓標案：`tools/pcc-daily.ps1`
-跟 Mac 的 `pcc-daily.sh` 一樣：更新 repo → `fetch-pcc.py` 抓前一天 → 推上分支 → Actions 補成立日、資本額、自動合併進 main。多了「今天跑過就不重跑」（記在 `%LOCALAPPDATA%\chailease-pcc-last.txt`），所以可以排成「登入就跑」；兩台電腦都跑也不會重複（`cases.csv` 去重）。
+跟 Mac 的 `pcc-daily.sh` 一樣：更新 repo → `fetch-pcc.py` 抓前一天 → 推上分支 → Actions 補成立日、資本額、自動合併進 main。多了「今天跑過就不重跑」（記在 `%LOCALAPPDATA%\chailease-pcc-last.txt`），所以可以排成「登入或解鎖就跑」；兩台電腦都跑也不會重複（`cases.csv` 去重）。
 
 **第一次設定（十分鐘，只做一次）**
 1. 裝 Python 3（python.org，安裝時勾「Add python.exe to PATH」）、裝 Git for Windows（預設選項即可）。
@@ -5174,9 +5174,10 @@ GitHub 變數 `GCP_WIF_PROVIDER`、`GCP_SERVICE_ACCOUNT` 使用者自己填，�
    `git clone -b claude/telemarketing-website-hf2uwj https://github.com/Andy-Zhang-22/chailease-work.git`
    公司防火牆擋 GitHub 的 SSH（22 與 443 都擋），只能走 HTTPS；push 的登入交給 Git for Windows 內附的 Git Credential Manager，第一次會開瀏覽器登 GitHub，之後記住。
 4. 手動跑一次確認：`cd chailease-work` 然後 `powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1`。畫面印「推上 … 了」或「沒有新資料」都算成功。
-5. 排成登入就跑（把路徑換成自己的；登入後延遲 2 分鐘等網路）。沒有管理員權限時 `schtasks /SC ONLOGON` 會「Access is denied」（它預設是任何人登入都觸發），要改成只在自己登入時觸發，在 PowerShell 貼這段（一行）：
-   `$u="$env:USERDOMAIN\$env:USERNAME"; $a=New-ScheduledTaskAction -Execute powershell.exe -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1'; $t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT2M'; Register-ScheduledTask -TaskName "電推-抓標案" -Action $a -Trigger $t -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)) -Force`
-   確認：`Get-ScheduledTask -TaskName "電推-抓標案"` 的 State 是 Ready；立刻試跑 `Start-ScheduledTask -TaskName "電推-抓標案"`，今天抓過會幾秒內結束。
+5. 排成登入或解鎖螢幕就跑（把路徑換成自己的；延遲 2 分鐘等網路）。只排「登入」不夠：平常是鎖定螢幕、沒有登出，解鎖不算登入，排程會好幾天都沒跑（2026/10/28、10/29 實際發生）；所以多加一個「解鎖」觸發，今天跑過的話解鎖幾秒就結束、不重抓。沒有管理員權限時 `schtasks /SC ONLOGON` 會「Access is denied」（它預設是任何人登入都觸發），要改成只在自己登入、解鎖時觸發，在 PowerShell 貼這段（一行；舊的排程會直接蓋掉）：
+   `$u="$env:USERDOMAIN\$env:USERNAME"; $a=New-ScheduledTaskAction -Execute powershell.exe -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\pcc-daily.ps1'; $t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT2M'; $c=Get-CimClass -Namespace ROOT\Microsoft\Windows\TaskScheduler -ClassName MSFT_TaskSessionStateChangeTrigger; $k=New-CimInstance -CimClass $c -ClientOnly -Property @{StateChange=8; UserId=$u; Delay='PT2M'}; Register-ScheduledTask -TaskName "電推-抓標案" -Action $a -Trigger $t,$k -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)) -Force`
+   （`StateChange=8` 是「解鎖」；`New-ScheduledTaskTrigger` 沒有解鎖的選項，所以用這個寫法。）
+   確認：`Get-ScheduledTask -TaskName "電推-抓標案"` 的 State 是 Ready，`(Get-ScheduledTask -TaskName "電推-抓標案").Triggers` 要有兩個（LogonTrigger、SessionStateChangeTrigger）；立刻試跑 `Start-ScheduledTask -TaskName "電推-抓標案"`，今天抓過會幾秒內結束。
 6. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓標案" -Confirm:$false`。
 
 週末、假日沒決標就是 0 筆；公司網路要連得到 `pcc-api.openfun.app`（g0v 的標案 API），連不到會印「API 連不上」就結束。
@@ -5309,3 +5310,12 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 - 原因：關係企業的電話共享（`linkGroupDates`）只在「自己沒號碼」時才借同組那家的，自己有號碼一律用自己的（打過去才不會說錯公司名）。兩家各有號碼，就互相看不到。
 - 做了：客戶抽屜電話底下多一小排「同老闆的其他電話」，列同組每一家**自己的**號碼裡、這家上面沒列出的，前面標是哪一家的（例：「某某工程行：09…」），可以撥、可以複製（打完切回來開的是這家的通話紀錄）。卡片照舊只放一支；不改任何一家存的電話，解除連結就沒了。
 - 測試：`tests/e2e/test-group-phones.js`（甲乙連結各有手機：甲的抽屜列乙的、乙的列甲的、可撥；沒連結的沒有這排；卡片只有一支）。版號 20261029-399。
+
+## 去完今天、又約了下一次，今天的拜訪從行事曆消失（版本 400）
+
+使用者 10/29 傳行事曆截圖（10/29 空的、11/02 有）：「我今天有拜訪禾正，下周一還是要在拜訪一次，但為甚麼我填寫完今天的紀錄後並且約好下周一的拜訪日期後今天的行事曆又跑掉了」。
+
+- 原因：行事曆每一家只列「最近一則勾約到拜訪的」（還沒過的日子）。今天去完、在紀錄裡勾約到拜訪約下週一，那則變成最近的；今天這次不是最近、也還不算過去的日子，就被跳過。
+- 修（`renderCal` 列拜訪那段）：**去過了的照樣列、劃 ✓**；還沒去的才要求「最近一則、約的那天＝下次聯絡日」（改期、取消的舊約照舊不列）。同一家同一天約過好幾次（改過時間）的，改成新的先看，列最後約的那次。
+- 規則照舊：「拜訪當天、約好之後又記了一筆」就算去過（自己或同老闆連結的那家記的都算）。
+- 測試：`tests/e2e/test-visit-group.js` 加一段：拜訪當天在甲記紀錄並約下一次 → 當天那次照樣在、劃 ✓（時間是改過的 16:00），新約的那天也有。拿掉修正時這項失敗（當天那格空了）。版號 20261029-400。

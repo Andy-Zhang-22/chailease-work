@@ -1,5 +1,6 @@
 // 關係企業與約了拜訪的那家（版本 396、397）：
 // 396「我明明今天有約訪的客戶，我只是透過他的關企去修改拜訪內容，就被刪掉了」→ 在關企記一通、填別天，約了拜訪的那家日期不被蓋掉
+// 400「填寫完今天的紀錄並約好下週一後，今天的行事曆又跑掉了」→ 去過的那次照樣列
 // 397「我在關企的紀錄為什麼沒有讓他也劃記上已拜訪」「不管是到客戶那或關企紀錄拜訪內容都可以做修改」：
 //   在關企那家勾約到拜訪＝改同一次拜訪（帶入原本的時間、不多生一個）；拜訪當天在關企記一筆＝去過了
 const { chromium } = require('playwright');
@@ -66,6 +67,12 @@ const mk=(id,company)=>({id,source:'測試',company,aliases:[],taxId:'',grade:''
  e=await evs(); n=await nd();
  chk(e.length===1 && e[0].done && /拜訪甲/.test(e[0].t), `在乙記完：甲 10/28 那次拜訪劃成去過了：${JSON.stringify(e)}`);
  chk(n.a==='2026-11-10' && n.b==='2026-11-10', `去過之後甲照常跟組：${JSON.stringify(n)}`);
+ // 版本 400：拜訪當天去完，在甲記紀錄並約下一次（11/09）→ 10/28 那次照樣在行事曆、劃 ✓；11/09 有新的一個
+ await logOn('a','拜訪完，下週一再過去','2026-11-09',{meet:true,arrive:'11:00'});
+ e=await evs();
+ const e9=await pg.evaluate(async()=>{ await window.openCalendar('2026-11-09'); await new Promise(r=>setTimeout(r,400)); return [...document.querySelectorAll('#paneCal .cal-ev')].filter(x=>/拜訪甲/.test(x.textContent)).map(x=>({t:x.textContent.trim(),done:x.classList.contains('is-done')})); });
+ chk(e.length>=1 && e.some(x=>x.done && /16:00 拜訪甲/.test(x.t)), `約了下一次之後，今天去過的那次照樣在行事曆、劃 ✓：${JSON.stringify(e)}`);
+ chk(e9.some(x=>!x.done && /11:00 拜訪甲/.test(x.t)), `11/09 有新約的那次：${JSON.stringify(e9)}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

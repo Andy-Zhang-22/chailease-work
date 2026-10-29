@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261029-399';
+  const APP_VERSION = '20261029-400';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5145,7 +5145,8 @@
     const lastMeet = new Map();   // 每家最近一則勾過約到拜訪的
     state.logs.forEach((l) => { if (l.meeting && l.meetingDate) { const cur = lastMeet.get(l.recordId); if (!cur || (l.createdAt || 0) > (cur.createdAt || 0)) lastMeet.set(l.recordId, l); } });
     const seen = new Set();
-    state.logs.forEach((l) => {
+    // 新的先看：同一家同一天約了好幾次（改過時間），列最後約的那次（版本 400：去過的不再只列最近一則，同一天要挑對那則）
+    [...state.logs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach((l) => {
       if (!l.meeting || !l.meetingDate) return;
       const v = byId.get(l.recordId);
       if (!v) return;
@@ -5153,7 +5154,13 @@
       if (seen.has(k)) return;
       const past = l.meetingDate < today;
       const went = loggedAfter(k, l) || visitWent(l, v.group ? (groupIds.get(v.group) || [v.id]) : [v.id]) || (l.meetingDate === today && v.dueDoneOn === today);
-      if (!past && (lastMeet.get(l.recordId) !== l || (v.nextDate !== l.meetingDate && !went))) return;
+      /*
+       * 去過了的照樣列（版本 400）：以前只要不是這家最近一則約的就不列，可是今天去完、在紀錄裡又約了下一次，
+       * 今天這次就變成「不是最近的」而從行事曆消失（使用者 10/29：「我今天有拜訪禾正，下周一還是要再拜訪一次，
+       * 但為甚麼我填寫完今天的紀錄後並且約好下周一的拜訪日期後今天的行事曆又跑掉了」）。
+       * 還沒去的才要求「最近一則、約的那天＝下次聯絡日」（改期、取消的舊約不列）。
+       */
+      if (!past && !went && (lastMeet.get(l.recordId) !== l || v.nextDate !== l.meetingDate)) return;
       seen.add(k);
       const done = past || went;
       const noteText = String(l.text || '').replace(/\s+/g, ' ').trim();
