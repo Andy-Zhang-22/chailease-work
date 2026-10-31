@@ -1,14 +1,14 @@
 {
- "dailyAt": "2026-10-30T01:59:11.076Z",
- "newsAt": "2026-10-29",
- "newsCount": 2986,
+ "dailyAt": "2026-10-31T01:36:05.548Z",
+ "newsAt": "2026-10-30",
+ "newsCount": 3228,
  "revenueYm": "2026-09",
- "generatedAt": "2026-10-30T01:58:40.026Z",
+ "generatedAt": "2026-10-31T01:35:48.061Z",
  "total": 2363,
  "markets": {
-  "上市": 1098,
-  "上櫃": 896,
-  "興櫃": 369
+  "上市": 1099,
+  "上櫃": 897,
+  "興櫃": 367
  },
  "chairmen": 2010,
  "chairmenLeft": 0,
@@ -24,11 +24,11 @@
   },
   {
    "path": "changes.json",
-   "rows": 195
+   "rows": 202
   },
   {
    "path": "news.json",
-   "rows": 2986
+   "rows": 3228
   },
   {
    "path": "revenue.json",
