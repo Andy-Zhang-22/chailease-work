@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261029-400';
+  const APP_VERSION = '20261031-401';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -513,10 +513,44 @@
       // 不是今天的就講明（版本 360；使用者：「為什麼日期還是怪怪的」——後台兩天沒寫成，那行停在 10-17 看起來像今天的）
       if (days >= 0 && days <= 3) bar.append(el('div', { className: 'feed-backend muted', textContent: days ? `後台今天還沒跑；最近一次 ${stamp}` : `後台 ${stamp}` }));
     }
+    /*
+     * 本機今天跑了沒（版本 401；使用者：「我現在有mac跟公司電腦可以在本機上使用，有什麼建議讓我增強我的系統」→「1、2都做」）：
+     * 104 看同步檔設定 hiring-results（Mac 在 Chrome 查完寫的），標案看 leads/pcc/index.json 的 generatedAt（Mac 或公司電腦抓完推上來的）。
+     * 兩個都是非同步讀，先放一格空的，讀到再填字；沒有跑過的（還沒設定 Mac）就整行不顯示。
+     */
+    const dev = el('div', { className: 'feed-devices muted', hidden: true });
+    bar.append(dev);
+    deviceStatus(today).then((t) => { if (t) { dev.textContent = t; dev.hidden = false; } }).catch(() => {});
     // Google 地圖本月查了幾次（版本 349）：免費 1,000 次，超過每次約 NT$1
     const gm = googleMonth();
     if (gm.n > 0) bar.append(el('div', { className: 'feed-google muted', textContent: `Google 地圖本月查了 ${gm.n}／1,000 次（免費額度，超過每次約 NT$1）` }));
     bar.hidden = false;
+  }
+
+  /*
+   * 「104：13:50 查了 57 家、8 家徵才、加了 4 家｜標案：09:29 抓了，資料到 2026/10/29」（版本 401）。
+   * 今天沒跑就講明：「104 今天還沒查（最近 2026/10/28）」「標案今天還沒抓（資料到 2026/10/29）」。
+   * 標案那段是抓完推上 GitHub、Pages 部署完才看得到，會慢個幾分鐘。
+   */
+  async function deviceStatus(today) {
+    const parts = [];
+    const res = await settingJson('hiring-results');
+    if (res && Array.isArray(res.list) && res.list.length && Number(res.at) > 0) {
+      if (isoOfMs(res.at) === today) {
+        const hiring = res.list.filter((x) => Number(x && x.count) > 0).length;
+        const added = state.records.filter((r) => String(r.source || '').startsWith(`每日新名單-${today}-104`)).length;
+        parts.push(`104：${timeLabel(Number(res.at))} 查了 ${res.list.length} 家、${hiring} 家徵才${added ? `、加了 ${added} 家` : ''}`);
+      } else parts.push(`104 今天還沒查（最近 ${dateLabel(isoOfMs(res.at))}）`);
+    }
+    try {
+      const r = await fetch(`leads/pcc/index.json?t=${Date.now()}`, { cache: 'no-store' });
+      const idx = r.ok ? await r.json() : null;
+      const at = idx && Date.parse(idx.generatedAt || '');
+      if (at > 0 && idx.latestDate) {
+        parts.push(isoOfMs(at) === today ? `標案：${timeLabel(at)} 抓了，資料到 ${dateLabel(idx.latestDate)}` : `標案今天還沒抓（資料到 ${dateLabel(idx.latestDate)}）`);
+      }
+    } catch (e) { /* 離線或還沒有資料 */ }
+    return parts.join('｜');
   }
 
   /*

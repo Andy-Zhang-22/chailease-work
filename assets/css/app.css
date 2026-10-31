@@ -578,7 +578,7 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 /* 回撥提醒 */
 .feed-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 2px 4px; margin-bottom: 12px; font-size: 13.5px; }
 .feed-bar .feed-text { color: var(--muted); }
-.feed-bar .feed-backend, .feed-bar .feed-google { flex-basis: 100%; font-size: 12px; }
+.feed-bar .feed-backend, .feed-bar .feed-devices, .feed-bar .feed-google { flex-basis: 100%; font-size: 12px; }
 .badge-cold { background: var(--surface-2); color: var(--muted); }
 .share-row { flex-wrap: wrap; align-items: center; }
 .share-name { font-size: 12px; margin-left: 6px; }
