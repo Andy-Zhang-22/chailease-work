@@ -1,18 +1,18 @@
 {
- "generatedAt": "2026-10-30T01:29:48.403Z",
+ "generatedAt": "2026-11-02T09:50:17.000Z",
  "source": "https://pcc-api.openfun.app（政府電子採購網決標公告）",
  "cities": [
   "新北市",
   "臺北市"
  ],
  "days": 180,
- "total": 1466,
- "withPhone": 1466,
- "latestDate": "2026-10-29",
+ "total": 1619,
+ "withPhone": 1619,
+ "latestDate": "2026-10-30",
  "files": [
   {
    "path": "pcc.csv",
-   "rows": 1466
+   "rows": 1619
   }
  ],
  "note": "佔位檔：抓取在使用者電腦跑（tools/fetch-pcc.py），推上來才有資料",
@@ -20,8 +20,8 @@
   "公司登記",
   "商業登記"
  ],
- "lastFetched": "20261029",
- "apiDown": false,
+ "lastFetched": "20261101",
+ "apiDown": true,
  "dates": {
   "20261016": {
    "notices": 2915,
@@ -117,6 +117,30 @@
    "vendors": 1429,
    "won": 901,
    "kept": 334,
+   "api_down": false
+  },
+  "20261101": {
+   "notices": 0,
+   "awards": 0,
+   "vendors": 0,
+   "won": 0,
+   "kept": 0,
+   "api_down": true
+  },
+  "20261031": {
+   "notices": 0,
+   "awards": 0,
+   "vendors": 0,
+   "won": 0,
+   "kept": 0,
+   "api_down": true
+  },
+  "20261030": {
+   "notices": 3402,
+   "awards": 816,
+   "vendors": 1381,
+   "won": 859,
+   "kept": 276,
    "api_down": false
   }
  },
