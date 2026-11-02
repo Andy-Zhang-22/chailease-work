@@ -5319,3 +5319,36 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 - 修（`renderCal` 列拜訪那段）：**去過了的照樣列、劃 ✓**；還沒去的才要求「最近一則、約的那天＝下次聯絡日」（改期、取消的舊約照舊不列）。同一家同一天約過好幾次（改過時間）的，改成新的先看，列最後約的那次。
 - 規則照舊：「拜訪當天、約好之後又記了一筆」就算去過（自己或同老闆連結的那家記的都算）。
 - 測試：`tests/e2e/test-visit-group.js` 加一段：拜訪當天在甲記紀錄並約下一次 → 當天那次照樣在、劃 ✓（時間是改過的 16:00），新約的那天也有。拿掉修正時這項失敗（當天那格空了）。版號 20261029-400。
+
+## 名單上方一行：Mac 的 104、公司電腦的標案今天跑了沒（版本 401）
+
+使用者 10/30：「我現在有mac跟公司電腦可以在本機上使用，有什麼建議讓我增強我的系統」→ 建議三項，使用者：「1、2都做」。這是第 1 項。
+
+- 原本要知道 Mac 早上有沒有查 104、標案有沒有抓，得去看同步檔或標案分頁；現在首頁「今天的新名單」那條下面多一行：
+  - 都跑了：`104：13:50 查了 57 家、8 家徵才、加了 4 家｜標案：09:29 抓了，資料到 2026/10/29`
+  - 沒跑：`104 今天還沒查（最近 2026/10/28）｜標案今天還沒抓（資料到 2026/10/29）`
+  - 從來沒查過 104、也沒標案資料（還沒設定本機）就整行不顯示。
+- 來源：104 看同步檔設定 `hiring-results` 的 `at`（Mac 的 `tools/hiring-104.py write` 寫的）與職缺數；「加了 N 家」數今天來源是 `每日新名單-日期-104` 的筆數。標案看 `leads/pcc/index.json` 的 `generatedAt`（Mac 或公司電腦抓完推上來、auto-merge 進 main、Pages 部署完才會變，會慢幾分鐘）。
+- 程式：`renderFeedBar` 加 `.feed-devices` 一格、`deviceStatus()` 非同步讀完填字；樣式跟後台摘要那行一樣。
+- 測試：`tests/e2e/test-device-status.js`（沒跑過不顯示、都跑了的字、今天還沒跑的字）。版號 20261031-401。
+
+## 公司電腦當產業名單的備援：Actions 被經濟部擋就由它抓（版本 402）
+
+使用者 10/30：「我現在有mac跟公司電腦可以在本機上使用，有什麼建議讓我增強我的系統」→「1、2都做」，第 3 項約好 11/02 週一提醒；11/02：「做」。
+
+- 為什麼：產業名單（`monthly-industry.yml`，每月 14 日）10/23～24 手動跑四次都在十幾秒內失敗——經濟部的下載網站對 GitHub 的機器回 503；10/23 清晨那次與 10/13 排程的都成功（11～16 分鐘）。公司電腦是台灣 IP、每天開機，當備援最省事。
+- `tools/industry-monthly.ps1`（照 `pcc-daily.ps1`）：等網路 → `git pull` → `node --use-system-ca tools/fetch-industry.mjs` → 推上分支。**只在該跑的時候跑**：每月 15 日起（14 日先讓 Actions 抓）、`leads/industry/index.json` 這個月還沒更新（Actions 失敗）才動；今天跑過就不重跑（`%LOCALAPPDATA%\chailease-industry-last.txt`），失敗隔天登入再試；每次在 `%LOCALAPPDATA%\chailease-industry.log` 留一行。`-Force` 不管條件立刻抓一次。
+- 推上分支後跟 Actions 抓的一樣，等使用者說「合併」才進 main（自動合併只開給標案 `leads/pcc/`）。
+- 公司網路攔 HTTPS（10/27 標案那次實測），Node 要加 `--use-system-ca`（Node 22.15 起）改用 Windows 的憑證庫，腳本自己會加；沒有這個選項就提醒更新 Node。
+
+### 公司電腦第一次設定（五分鐘；Git 與 repo 照「版本 389」已經裝好）
+1. 裝 Node.js 22 LTS（nodejs.org 的 Windows Installer；沒有管理員權限就下載「Standalone Binary」zip，解開放到自己的資料夾，把那個資料夾加進使用者的 PATH）。開新的 PowerShell 打 `node --version` 要看到 v22 以上。
+2. 手動試一次（抓 10～20 分鐘，印「推上 … 了」或「抓完沒有變動」都算成功）：
+   `cd chailease-work` 然後 `git pull` 再 `powershell -ExecutionPolicy Bypass -File tools\industry-monthly.ps1 -Force`
+   被經濟部擋會印「HTTP 503」之類的訊息、結束代碼 1——那就是公司網路也被擋，這條備援不成立，回報我。
+3. 排成登入或解鎖就跑（跟標案那個一樣兩個觸發；延遲 5 分鐘，排在標案後面）。在 PowerShell 貼這段（一行；路徑換成自己的）：
+   `$u="$env:USERDOMAIN\$env:USERNAME"; $a=New-ScheduledTaskAction -Execute powershell.exe -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<你>\chailease-work\tools\industry-monthly.ps1'; $t=New-ScheduledTaskTrigger -AtLogOn -User $u; $t.Delay='PT5M'; $c=Get-CimClass -Namespace ROOT\Microsoft\Windows\TaskScheduler -ClassName MSFT_TaskSessionStateChangeTrigger; $k=New-CimInstance -CimClass $c -ClientOnly -Property @{StateChange=8; UserId=$u; Delay='PT5M'}; Register-ScheduledTask -TaskName "電推-抓產業名單" -Action $a -Trigger $t,$k -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)) -Force`
+   確認：`Get-ScheduledTask -TaskName "電推-抓產業名單"` 的 State 是 Ready。平常登入它幾秒就結束（不到 15 日、或這個月抓過了），不佔電腦。
+4. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓產業名單" -Confirm:$false`。
+
+- 測試：PowerShell 這裡跑不了，語法照 `pcc-daily.ps1`；真正的驗證是公司電腦 `-Force` 試跑一次（任務卡）。網站沒改，版號 20261102-402 只為了對齊 README。
