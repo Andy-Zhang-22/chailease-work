@@ -1,6 +1,7 @@
 // tools/hire104-weekly.py（版本 405）：104 徵才中每週候選池。全部假資料：假公司名、假統編、假電話（四碼相同），檔案放暫存資料夾。
 // 測：write 對稅籍檔（同名挑縣市、兩家以上不猜、外商分公司去後綴）、排除已在名單與刪過的、資本額門檻、沒電話不收、排序、寫回同步檔不動其他鍵；
 //     prepare 這週抓過就不抓；接收器只收 104 來源＋對的暗號、收到就關。
+// 版本 406：接收器多一頁 /recv.html（104 網頁開它、postMessage 給它，它再同源 POST），網頁程式先放按鈕、點了才開始。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -106,6 +107,8 @@ test('prepare：這週抓過就不抓；--force 照樣開接收器', async () =>
   assert.match(r2.out, /接收器開好了/);
   const js = fs.readFileSync(path.join(fx.work, 'snippet.js'), 'utf8');
   assert.match(js, /sw=2/);
+  assert.match(js, /recv\.html/);
+  assert.match(js, /開始抓 104 徵才中/);
   assert.match(js, new RegExp(`127\\.0\\.0\\.1:${PORT}`));
   const pid = Number(fs.readFileSync(path.join(fx.work, 'receiver.pid'), 'utf8'));
   try { process.kill(pid); } catch (e) { /* 已經結束 */ }
@@ -118,18 +121,42 @@ function post(headers, body) {
     rq.end(body);
   });
 }
+function getPage(p) {
+  return new Promise((resolve) => {
+    http.get({ host: '127.0.0.1', port: PORT, path: p }, (rs) => { let b = ''; rs.on('data', (c) => { b += c; }); rs.on('end', () => resolve({ code: rs.statusCode, body: b })); }).on('error', () => resolve({ code: 0, body: '' }));
+  });
+}
+function receiver(fx, token) {
+  const p = spawn('python3', [TOOL, 'receive', '--token', token, '--hours', '0.05'], { env: { ...process.env, ...fx.env } });
+  return { p, done: new Promise((r) => p.on('close', r)) };
+}
 
-test('接收器：不是 104 來源、暗號不對 → 403；對的 → 存檔、關掉', async () => {
+test('接收器：本機接收分頁帶暗號；不是 104／本機來源、暗號不對 → 403；本機分頁同源送的 → 存檔、關掉', async () => {
   const fx = fixture();
   fs.rmSync(path.join(fx.work, 'result.json'));
   const token = 'a'.repeat(32);
-  const p = spawn('python3', [TOOL, 'receive', '--token', token, '--hours', '0.05'], { env: { ...process.env, ...fx.env } });
+  const rv = receiver(fx, token);
   await new Promise((r) => setTimeout(r, 800));
+  const pg = await getPage('/recv.html');
+  assert.strictEqual(pg.code, 200);
+  assert.ok(pg.body.includes(token) && pg.body.includes('"https://www.104.com.tw"'), '分頁帶暗號、只收 104 來的訊息');
+  assert.strictEqual((await getPage('/other')).code, 404);
   assert.strictEqual(await post({ Origin: 'https://evil.example', 'X-Token': token }, '{"list":[]}'), 403);
-  assert.strictEqual(await post({ Origin: 'https://www.104.com.tw', 'X-Token': 'wrong' }, '{"list":[]}'), 403);
+  assert.strictEqual(await post({ Origin: `http://127.0.0.1:${PORT}`, 'X-Token': 'wrong' }, '{"list":[]}'), 403);
   assert.ok(!fs.existsSync(path.join(fx.work, 'result.json')));
-  assert.strictEqual(await post({ Origin: 'https://www.104.com.tw', 'X-Token': token }, '{"list":[{"name":"x","count":1}]}'), 200);
-  const code = await new Promise((r) => p.on('close', r));
-  assert.strictEqual(code, 0);
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(fx.work, 'result.json'), 'utf8')).list.length, 1);
+  assert.strictEqual(await post({ Origin: `http://127.0.0.1:${PORT}`, 'X-Token': token }, '{"list":[{"name":"x","count":1}]}'), 200);
+  assert.strictEqual(await rv.done, 0);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(fx.work, 'result.json'), 'utf8')).list.length, 1);
+});
+
+test('接收器：104 網頁直接送（Chrome 允許存取區域網路時）也收', async () => {
+  const fx = fixture();
+  fs.rmSync(path.join(fx.work, 'result.json'));
+  const token = 'c'.repeat(32);
+  const rv = receiver(fx, token);
+  await new Promise((r) => setTimeout(r, 800));
+  assert.strictEqual(await post({ Origin: 'https://www.104.com.tw', 'X-Token': 'wrong' }, '{"list":[]}'), 403);
+  assert.strictEqual(await post({ Origin: 'https://www.104.com.tw', 'X-Token': token }, '{"list":[{"name":"y","count":2}]}'), 200);
+  assert.strictEqual(await rv.done, 0);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(fx.work, 'result.json'), 'utf8')).list[0].count, 2);
 });

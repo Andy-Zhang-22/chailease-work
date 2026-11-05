@@ -7,8 +7,11 @@
 每次查詢最多 100 頁，抓不出「今天新出現」的，所以每週抓一次、收進每日新名單的候選，不另開分頁）。
 
 為什麼要本機接收器：一次約兩萬家、結果兩三 MB，Claude in Chrome 讀網頁的輸出一次只帶得回一千字左右。所以 prepare 在 127.0.0.1 開一個
-只收 https://www.104.com.tw 送來、帶對暗號的一次性接收器，網頁抓完直接 POST 回 Mac，收到就關（最多等 3 小時）。
-Chrome 155 起網頁連本機要使用者在「存取區域網路」的詢問按一次允許（之後會記住）；沒允許的話網頁那段會停在「傳回 Mac 失敗」。
+一次性接收器（帶暗號、收到就關、最多等 3 小時），結果這樣送回 Mac（版本 406）：
+  網頁程式在 104 頁面放一顆「開始抓」按鈕 → 按下去先開一個本機分頁 http://127.0.0.1:<埠>/recv.html（開分頁要真的點擊；打開網址不受「存取區域網路」權限管）
+  → 抓完用 postMessage 把結果交給那個分頁（它只收 https://www.104.com.tw 來的、暗號對的）→ 那個分頁再 POST 給同一台的接收器。
+  原本（版本 405）是 104 網頁直接 POST 到 127.0.0.1，但 Chrome 155 要使用者允許「存取區域網路」，而 Claude 控制的分頁按了也不會跳詢問、直接拒絕（11/05 實測）。
+  直接 POST 仍留著當備援（哪天 Chrome 允許了就通）。
 
 同步檔：跟 tools/hiring-104.py 同一份（~/Library/CloudStorage/GoogleDrive-<帳號>/我的雲端硬碟/電話推廣名單-同步資料.json）。
   寫 settings['hiring-pool-104'] = { v: JSON.stringify({ week, at, head, list: [{ key, name, src, count, row }], stats }), at }
@@ -24,9 +27,11 @@ Chrome 155 起網頁連本機要使用者在「存取區域網路」的詢問按
 
 例行步驟（每週一 08:30，Cowork 的排程任務；手動跑也是這三步）：
   1. 終端機：python3 tools/hire104-weekly.py prepare → 「這週抓過了」就結束。
-  2. Claude in Chrome：開新分頁到 https://www.104.com.tw/company/ ，把 /tmp/hire104/snippet.js 整段當 JavaScript 執行；
-     約每 40 秒執行 window.__hire104.poll() 看進度（只有數字），finished 為 true 就停。全部約 45～60 分鐘。
-     被 403／429／驗證碼擋會自己停（stopped 有原因），已抓到的照樣送回 Mac。sent 為 false 時看 sendError（多半是沒允許存取區域網路）。
+  2. Claude in Chrome：開新分頁到 https://www.104.com.tw/company/ ，把 /tmp/hire104/snippet.js 整段當 JavaScript 執行，它回傳按鈕的座標（JSON 的 x、y）；
+     用 computer 的 left_click 點那顆按鈕（要真的點擊，Chrome 才肯開本機分頁）。會多開一個「電推系統接收」分頁，不要關。
+     之後約每 40 秒執行 window.__hire104.poll() 看進度（只有數字），finished 為 true 就停。全部約 45～60 分鐘。
+     被 403／429／驗證碼擋會自己停（stopped 有原因），已抓到的照樣送回 Mac。sent 為 false 時看 sendError；
+     頁面上會出現「重送到 Mac」的按鈕，點它（同樣用 left_click，座標在 window.__hire104.resendAt）會重開本機分頁再送一次。做完關掉這兩個分頁。
   3. 終端機：python3 tools/hire104-weekly.py write → 印「抓了 N 家、對上統編 M 家、進候選池 K 家」。
   回報只講筆數，不講公司名。/tmp/hire104/ 的東西不進 repo。
 
@@ -59,13 +64,30 @@ HEAD = ['公司名稱', '統編', '分級', '成立', '資本額', '電話', '�
 DAY = '__DAY__'
 
 # 在 104 頁面裡執行的程式。臺北（6001001xxx）、新北（6001002xxx）逐區、只看徵才中（sw=2），每區最多 100 頁（104 的上限），
-# 一頁一次、間隔 GAP；同一家（encodedCustNo）只留一次。抓完 POST 回 Mac 的接收器（帶暗號）。
+# 一頁一次、間隔 GAP；同一家（encodedCustNo）只留一次。按鈕按下去才開始（要開本機分頁），抓完經本機分頁交給接收器。
 JS = r"""(() => {
   const GAP = __GAP__, MAXP = 100, URL_ = __URL__, TOKEN = __TOKEN__;
+  const RECV_ORIGIN = new URL(URL_).origin, RECV_PAGE = URL_ + 'recv.html';
   const seen = new Map();
-  const st = window.__hire104 = { started: Date.now(), areas: 0, areaDone: 0, pages: 0, overflow: 0, stopped: '', finished: false, sent: false, sendError: '' };
-  st.poll = () => JSON.stringify({ areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError });
+  const st = window.__hire104 = { started: 0, areas: 0, areaDone: 0, pages: 0, overflow: 0, stopped: '', finished: false, sent: false, sendError: '', resendAt: null };
+  st.poll = () => JSON.stringify({ started: !!st.started, areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError, resendAt: st.resendAt });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let win = null;
+  const fromRecv = (pred, ms) => new Promise((res) => {
+    const t = setTimeout(() => { removeEventListener('message', h); res(null); }, ms);
+    const h = (e) => { if (e.origin === RECV_ORIGIN && e.data && pred(e.data)) { clearTimeout(t); removeEventListener('message', h); res(e.data); } };
+    addEventListener('message', h);
+  });
+  const openRecv = () => { const ready = fromRecv((d) => d.ready, 15000); win = window.open(RECV_PAGE, 'hire104recv'); return ready; };   // 要在點擊裡同步叫
+  const button = (label, onclick) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    Object.assign(b.style, { position: 'fixed', top: '120px', left: '40px', zIndex: 2147483647, padding: '14px 20px', fontSize: '18px', background: '#1f6feb', color: '#fff', border: '0', borderRadius: '8px', cursor: 'pointer' });
+    b.onclick = () => { b.remove(); onclick(); };
+    document.body.appendChild(b);
+    const r = b.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  };
   const get = async (url) => {
     let res;
     try { res = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } }); } catch (e) { throw new Error('連線錯誤'); }
@@ -75,12 +97,22 @@ JS = r"""(() => {
   };
   const send = async () => {
     const body = JSON.stringify({ at: Date.now(), areas: st.areas, areaDone: st.areaDone, pages: st.pages, overflow: st.overflow, stopped: st.stopped, list: [...seen.values()] });
-    try {
+    st.sendError = '';
+    if (win && !win.closed) {
+      const reply = fromRecv((d) => 'ok' in d, 60000);
+      win.postMessage({ token: TOKEN, body }, RECV_ORIGIN);
+      const r = await reply;
+      if (r && r.ok) { st.sent = true; return; }
+      st.sendError = r ? `接收器拒收（${r.status || ''}）` : '接收分頁沒回應';
+    } else st.sendError = '接收分頁被關掉了';
+    try {   // 備援：直接連（Chrome 允許這個網站存取區域網路才會通）
       const r = await fetch(URL_, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, body });
-      st.sent = r.ok; if (!r.ok) st.sendError = `接收器回 HTTP ${r.status}`;
-    } catch (e) { st.sendError = `傳回 Mac 失敗（${e && e.message}；Chrome 要允許這個網站存取區域網路）`; }
+      if (r.ok) { st.sent = true; st.sendError = ''; return; }
+    } catch (e) { /* 照留上面的原因 */ }
+    st.resendAt = button('重送到 Mac（電推系統）', async () => { st.resendAt = null; await openRecv(); await send(); });
   };
-  (async () => {
+  const crawl = async () => {
+    st.started = Date.now();
     try {
       const tree = await get('/jobs/search/ajax/function-tree/area');
       const areas = Object.keys((tree && tree.data) || {}).filter((k) => /^60010(01|02)\d{3}$/.test(k) && !k.endsWith('000'));
@@ -106,8 +138,8 @@ JS = r"""(() => {
     } catch (e) { st.stopped = (e && e.message) || String(e); }
     await send();
     st.finished = true;
-  })();
-  return `started`;
+  };
+  return JSON.stringify(button('開始抓 104 徵才中（電推系統）', () => { openRecv(); crawl(); }));
 })()"""
 
 
@@ -312,9 +344,26 @@ def cmd_prepare(a):
     return 0
 
 
+RECV_PAGE = """<!doctype html><meta charset="utf-8"><title>電推系統接收</title>
+<body style="font:16px sans-serif;padding:24px">電推系統：等 104 網頁把結果送過來（這個分頁不要關）…
+<script>
+const TOKEN = __TOKEN__, FROM = __FROM__;
+addEventListener('message', async (e) => {
+  if (e.origin !== FROM || !e.data || e.data.token !== TOKEN || typeof e.data.body !== 'string') return;
+  let ok = false, status = 0;
+  try { const r = await fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, body: e.data.body }); ok = r.ok; status = r.status; } catch (err) { status = -1; }
+  document.body.textContent = ok ? '電推系統：收到了，這個分頁可以關掉。' : '電推系統：沒存成（' + status + '）';
+  e.source.postMessage({ ok, status }, e.origin);
+});
+if (window.opener) window.opener.postMessage({ ready: true }, FROM);
+</script>"""
+
+
 def cmd_receive(a):
     token = a.token
     deadline = time.time() + a.hours * 3600
+    self_origin = f'http://127.0.0.1:{PORT}'
+    page = RECV_PAGE.replace('__TOKEN__', json.dumps(token)).replace('__FROM__', json.dumps(ORIGIN)).encode('utf-8')
 
     class H(http.server.BaseHTTPRequestHandler):
         def _cors(self):
@@ -327,8 +376,17 @@ def cmd_receive(a):
             if self.headers.get('Origin') != ORIGIN: self.send_response(403); self.end_headers(); return
             self.send_response(204); self._cors(); self.end_headers()
 
-        def do_POST(self):
-            if self.headers.get('Origin') != ORIGIN or self.headers.get('X-Token') != token:
+        def do_GET(self):   # 本機接收分頁（104 網頁開它、postMessage 給它）
+            if self.path.split('?')[0] != '/recv.html': self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(page)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(page)
+
+        def do_POST(self):   # 本機接收分頁（同源）或 104 網頁直接送（Chrome 允許存取區域網路時）
+            if self.headers.get('Origin') not in (ORIGIN, self_origin) or self.headers.get('X-Token') != token:
                 self.send_response(403); self.end_headers(); return
             n = int(self.headers.get('Content-Length') or 0)
             if n <= 0 or n > 40 * 1024 * 1024: self.send_response(413); self.end_headers(); return
