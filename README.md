@@ -5375,3 +5375,4 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 - `tools/industry-monthly.ps1`：拿掉 `--use-system-ca` 那段，改成確認有 `curl.exe`、設 `CHAILEASE_FETCH_VIA=curl`；log 的「結束代碼 0」瑕疵修掉（`git checkout` 之前先把 `$LASTEXITCODE` 存起來）。
 - 測試：`tests/industry.test.js` 加一項——`curlFetch` 抓 `file://` 的檔案讀得到內容、檔案不存在讀內容時丟錯（有「curl」字樣）；curl 支援 `file://`，Actions、Mac 不用網路也能跑。公司電腦實測：`data.gov.tw` 的 JSON 讀得到、404 丟「curl (22) … returned error」、逾時 curl 被砍掉（SIGTERM）。公司電腦跑 `npm test` 有 25 項失敗，全是 Windows 環境（測試用絕對路徑 `import()`、`hiring-104` 要 bash），跟這版無關，CI 在 Linux 上照常。
 - 網站沒改，版號 20261105-404 只為了對齊 README。公司電腦 `-Force` 試跑的結果寫在這段下面。
+- **11/05 公司電腦 `-Force` 試跑：成功。** Node v22.23.4，12 分鐘，四份車輛業 4,438／762／1,133／2,266 列、食品 828,416 列、環保列管 455 頁 454,543 列、新北建照 14,343 列、稅籍檔 1,715,525 列（出檔 05-NOV-26）；留 11,939 家（剛出現 18、有電話 4,549），推上分支（`db7d9a6`，等使用者說「合併」）。log 最後一行：`產業名單抓好、推上 claude/telemarketing-website-hf2uwj 了（等使用者說「合併」才進 main）`。排程「電推-抓產業名單」照步驟 3 設好（登入、解鎖兩個觸發，延遲 5 分鐘），State Ready。
