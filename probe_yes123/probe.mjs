@@ -15,12 +15,14 @@ for (const c of pick) {
   try {
     const { status, text } = await get(`https://www.yes123.com.tw/wk_index/joblist.asp?find_key1=${encodeURIComponent(short)}`);
     stats.status[status] = (stats.status[status] || 0) + 1; stats.checked++;
-    const comps = new Set([...text.matchAll(/comp_info\.asp\?p_id=([a-z]?\d+_\d+)/g)].map((m) => m[1]));
-    const jobs = new Set([...text.matchAll(/job\.asp\?p_id=([a-z]?\d+_\d+)&(?:amp;)?job_id=(\d+_\d+)/g)].map((m) => m[2]));
-    const hit = text.includes(short);
+    // 第三輪：關鍵字搜尋是全文比對，職缺連結數不代表這家；要看公司連結的文字是不是這家，再數同一個 p_id 的職缺
+    const compLinks = [...text.matchAll(/comp_info\.asp\?p_id=([a-z]?\d+_\d+)[^>]*>([\s\S]{0,200}?)<\/a>/g)].map((m) => ({ id: m[1], label: m[2].replace(/<[^>]+>/g, '').replace(/\s+/g, '') }));
+    const mine = new Set(compLinks.filter((x) => x.label.includes(short)).map((x) => x.id));
+    const jobs = [...text.matchAll(/job\.asp\?p_id=([a-z]?\d+_\d+)&(?:amp;)?job_id=(\d+_\d+)/g)].filter((m) => mine.has(m[1])).map((m) => m[2]);
+    const hit = mine.size > 0;
     if (hit) stats.nameHit++;
-    if (hit && jobs.size) { stats.withJobs++; stats.jobs.push(jobs.size); stats.comps.push(comps.size); }
-    if (stats.checked === 1) { const m = /(\d[\d,]*)\s*筆/.exec(text); console.log(`第一家的頁面：${text.length} 字，公司連結 ${comps.size}、職缺連結 ${jobs.size}、「N 筆」字樣 ${m ? m[1] : '無'}`); }
+    if (hit && jobs.length) { stats.withJobs++; stats.jobs.push(new Set(jobs).size); stats.comps.push(mine.size); }
+    if (stats.checked === 1) console.log(`第一家的頁面：${text.length} 字，公司連結共 ${compLinks.length}（有文字的 ${compLinks.filter((x) => x.label).length}），文字像「${compLinks[0] ? compLinks[0].label.replace(/[\u4e00-\u9fff]/g, '＊').slice(0, 20) : ''}」`);
   } catch (e) { stats.status[`err:${e.message.slice(0, 40)}`] = (stats.status[`err:${e.message.slice(0, 40)}`] || 0) + 1; }
   await sleep(1500);
 }
