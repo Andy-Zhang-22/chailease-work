@@ -1,5 +1,6 @@
 // 104 徵才（版本 387）：Mac 在使用者的 Chrome 查好的職缺數寫在同步檔設定 hiring-results，網站套用：有徵才的從候選池加進今天的名單、
 // 卡片標「104 徵才 N 件」、今天要打排前面；沒徵才的不加；同一家不重複加；一天最多 5 家
+// 版本 405：每週 104 徵才中候選池（hiring-pool-104）每天再補最多 3 家
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -44,6 +45,27 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  chk(bing.edit==='(0912)333444' && bing.from==='政府標案得標', `候選列沒電話的，從公開資料（標案）補上手機：${JSON.stringify(bing)}`);
  const r2=await pg.evaluate(()=>window.applyHiring());
  chk(r2.added===0, `再套一次不會重複加：${JSON.stringify(r2)}`);
+ // 版本 405：每週 104 徵才中候選池（hiring-pool-104）：每天補最多 3 家、照池子的順序；已加過、0 件、刪過的不加；同一天再套不會再加
+ await pg.evaluate(async({head,rows})=>{
+   await window.Store.addTombstone('companies','tax:30000005',{company:'戊五被刪有限公司',taxId:'30000005'});
+   await window.Store.setSetting('hiring-pool-104', JSON.stringify({week:'2026-W44',day:'2026-10-26',at:Date.now(),head,list:[
+     {key:'20000011',name:'甲一精密有限公司',src:'104 徵才中',count:3,row:rows[0]},
+     {key:'30000001',name:'子一電子有限公司',src:'104 徵才中',count:7,row:rows[1]},
+     {key:'30000002',name:'丑二工業有限公司',src:'104 徵才中',count:0,row:rows[2]},
+     {key:'30000005',name:'戊五被刪有限公司',src:'104 徵才中',count:9,row:rows[3]},
+     {key:'30000003',name:'寅三實業有限公司',src:'104 徵才中',count:4,row:rows[4]},
+     {key:'30000004',name:'卯四科技有限公司',src:'104 徵才中',count:2,row:rows[5]},
+     {key:'30000006',name:'辰六精機有限公司',src:'104 徵才中',count:2,row:rows[6]}]}));
+ },{head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('子一電子有限公司','30000001','02-2666-7777'),row('丑二工業有限公司','30000002','02-2888-9999'),
+   row('戊五被刪有限公司','30000005','02-2555-0000'),row('寅三實業有限公司','30000003','02-2444-5555'),row('卯四科技有限公司','30000004','02-2777-8888'),row('辰六精機有限公司','30000006','02-2111-2222')]});
+ const r3=await pg.evaluate(()=>window.applyHiring()); await pg.waitForTimeout(800);
+ chk(r3.added===3 && /^每日新名單-2026-10-27-104-2\.csv$/.test(r3.name), `每週池補 3 家、另一批來源名：${JSON.stringify(r3)}`);
+ const wk=await pg.evaluate(()=>[...document.querySelectorAll('#cards .card')].map(c=>({name:c.querySelector('.card-name').textContent.trim(),badges:[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim())})));
+ const has=(n)=>wk.find(r=>r.name===n);
+ chk(has('子一電子有限公司') && has('子一電子有限公司').badges.includes('104 徵才 7 件') && has('寅三實業有限公司') && has('卯四科技有限公司'), `照池子順序加子一、寅三、卯四，標 104 徵才 N 件：${JSON.stringify(wk.filter(r=>/子一|寅三|卯四/.test(r.name)))}`);
+ chk(!has('丑二工業有限公司') && !has('戊五被刪有限公司') && !has('辰六精機有限公司') && wk.filter(r=>r.name==='甲一精密有限公司').length===1, `0 件、刪過、超過 3 家的不加，甲一不重複：${JSON.stringify(wk.map(r=>r.name))}`);
+ const r4=await pg.evaluate(()=>window.applyHiring());
+ chk(r4.added===0, `同一天再套，每週池不會再加：${JSON.stringify(r4)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();

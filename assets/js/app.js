@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261105-404';
+  const APP_VERSION = '20261105-407';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3614,8 +3614,13 @@
    *   3. 網站開啟或同步完看到結果：有徵才的加進今天的名單（一天最多 HIRING_MAX 家，職缺多的先），卡片標「104 徵才 N 件」，
    *      今天要打排前面。沒徵才的不動，留在候選池。照使用者的原則：排序不是門檻，清晨那 15 家照舊。
    * 104 的內容只留職缺數，不存、不轉貼。
+   *
+   * 每週的 104 徵才中候選池（版本 405；使用者 11/05：「照建議做」）：Mac 每週一在 Chrome 抓 104「找公司」臺北＋新北的徵才中公司，
+   * 用稅籍登記補統編、地址、資本額，用公開名單補電話，寫進設定 hiring-pool-104（tools/hire104-weekly.py）。每天先加上面那條的，
+   * 再從這裡補最多 HIRING_WEEKLY_MAX 家（Mac 排好的順序：資本額 300～6,000 萬先、職缺多的先），一樣標「104 徵才 N 件」。不另開分頁。
    */
   const HIRING_MAX = 5;
+  const HIRING_WEEKLY_MAX = 3;
   const HIRING_DAY = '__DAY__';   // 候選列裡「下次聯絡日」的占位，套用那天才知道排哪天
   const settingJson = async (key) => { try { const all = (await window.Store.getMeta('settings')) || {}; const e = all[key]; return e && e.v ? JSON.parse(e.v) : null; } catch (e) { return null; } };
   async function hiringCandidates(n) {
@@ -3652,21 +3657,45 @@
     if (hiringBusy || !state.records.length) return { added: 0 };
     const results = await settingJson('hiring-results');
     const pool = await settingJson('hiring-candidates');
-    if (!results || !Array.isArray(results.list) || !pool || !Array.isArray(pool.list) || !pool.head) return { added: 0 };
+    const weekly = await settingJson('hiring-pool-104');
     const applied = (await settingJson('hiring-applied')) || {};
-    const byKey = new Map(pool.list.map((c) => [c.key, c]));
     const existing = new Set(state.records.flatMap((r) => window.Normalize.companyKeys({ company: r.company, taxId: r.taxId })));
-    const todo = results.list
-      .filter((x) => x && Number(x.count) > 0 && byKey.has(x.key) && !applied[x.key])
-      .filter((x) => { const c = byKey.get(x.key); return !window.Normalize.companyKeys({ company: c.name, taxId: /^\d{8}$/.test(c.key) ? c.key : '' }).some((k) => existing.has(k)); })
-      .sort((a, b) => Number(b.count) - Number(a.count))
-      .slice(0, HIRING_MAX);
+    const keysOf = (c) => window.Normalize.companyKeys({ company: c.name, taxId: /^\d{8}$/.test(c.key) ? c.key : '' });
+    const listed = (c) => keysOf(c).some((k) => existing.has(k));
+    // 一、清晨候選池裡 Mac 查到有徵才的（版本 387）
+    const todo = [];
+    let head = '';
+    if (results && Array.isArray(results.list) && pool && Array.isArray(pool.list) && pool.head) {
+      const byKey = new Map(pool.list.map((c) => [c.key, c]));
+      results.list
+        .filter((x) => x && Number(x.count) > 0 && byKey.has(x.key) && !applied[x.key])
+        .filter((x) => !listed(byKey.get(x.key)))
+        .sort((a, b) => Number(b.count) - Number(a.count))
+        .slice(0, HIRING_MAX)
+        .forEach((x) => { const c = byKey.get(x.key); todo.push({ key: x.key, name: c.name, row: c.row, count: Number(x.count), at: Number(x.at) }); });
+      if (todo.length) head = pool.head;
+    }
+    // 二、每週 104 徵才中候選池（版本 405）：表頭要一樣才能接在同一份 CSV；刪過的公司不加
+    if (weekly && Array.isArray(weekly.list) && weekly.head && (!head || head === weekly.head)) {
+      let tombs = {};
+      try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
+      const buried = (c) => keysOf(c).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
+      const taken = new Set(todo.map((x) => x.key));
+      // 一天最多 HIRING_WEEKLY_MAX 家：applyHiring 每次同步都會叫，數今天已經從這份加過幾家。
+      // 從這份加的記成「日期w」（版本 406）：同一家也在清晨候選池、早上被那條加過的（記成日期）不算這份的額度
+      const room = Math.max(0, HIRING_WEEKLY_MAX - Object.values(applied).filter((d) => d === `${todayISO()}w`).length);
+      const more = weekly.list
+        .filter((c) => c && c.key && c.row && Number(c.count) > 0 && !applied[c.key] && !taken.has(c.key) && !listed(c) && !buried(c))
+        .slice(0, room);
+      more.forEach((c) => todo.push({ key: c.key, name: c.name, row: c.row, count: Number(c.count), at: Number(weekly.at), weekly: true }));
+      if (more.length) head = weekly.head;
+    }
     if (!todo.length) return { added: 0 };
     hiringBusy = true;
     try {
       const today = todayISO();
       const day = (window.Holidays && !window.Holidays.isWorkday(today)) ? window.Holidays.nextWorkday(today).iso : today;
-      const csv = `\ufeff${[pool.head, ...todo.map((x) => byKey.get(x.key).row.split(HIRING_DAY).join(day))].join('\n')}\n`;
+      const csv = `\ufeff${[head, ...todo.map((x) => x.row.split(HIRING_DAY).join(day))].join('\n')}\n`;
       const batches = new Set(state.records.map((r) => r.source).filter((x) => String(x || '').startsWith(`每日新名單-${today}-104`)));
       const name = `每日新名單-${today}-104${batches.size ? `-${batches.size + 1}` : ''}.csv`;
       await importFiles([new File([csv], name, { type: 'text/csv' })]);
@@ -3678,10 +3707,11 @@
       try { await publicPhones(name); } catch (e) { console.error('104 加進來的補電話', e); }
       const now = Date.now();
       for (const v of allViews().filter((x) => x.source === name)) {
-        const hit = todo.find((x) => { const c = byKey.get(x.key); return window.Normalize.companyKeys({ company: c.name, taxId: /^\d{8}$/.test(c.key) ? c.key : '' }).some((k) => window.Normalize.companyKeys({ company: v.company, taxId: v.taxId }).includes(k)); });
+        const mine = window.Normalize.companyKeys({ company: v.company, taxId: v.taxId });
+        const hit = todo.find((x) => keysOf(x).some((k) => mine.includes(k)));
         if (hit) { try { await saveState(v.id, { hiring: { count: Number(hit.count), at: Number(hit.at) || now } }); } catch (e) { console.error('存 104 徵才', e); } }
       }
-      todo.forEach((x) => { applied[x.key] = today; });
+      todo.forEach((x) => { applied[x.key] = x.weekly ? `${today}w` : today; });
       await window.Store.setSetting('hiring-applied', JSON.stringify(applied));
       await reload(); render(); scheduleSync();
       const got = state.records.filter((r) => r.source === name).length;
