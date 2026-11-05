@@ -24,6 +24,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import zlib from 'node:zlib';
 import { Readable } from 'node:stream';
+import { spawn } from 'node:child_process';
 import { parseLine, taxFields, halfWidth, inCity, districtOf, ymOf, updateSeen } from './fetch-einv.mjs';
 
 const args = process.argv.slice(2);
@@ -34,6 +35,32 @@ const PHONES = opt('phones', 'leads/trade/phones.csv');
 const RESET = args.includes('--reset-baseline');
 const TAX_SOURCE = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+/*
+ * 公司的 Windows 電腦當備援時（版本 404）：公司網路攔 HTTPS、把憑證換成公司自己的 CA，Node 的 OpenSSL 驗不過（--use-system-ca、
+ * NODE_EXTRA_CA_CERTS 都試過，2026/11/05），Windows 自己的憑證引擎可以。industry-monthly.ps1 設 CHAILEASE_FETCH_VIA=curl，這裡就改用
+ * Windows 內建的 curl.exe（Schannel）下載——跟瀏覽器同一套信任，不是關掉驗證；Mac、Actions 沒設就照舊走 fetch。
+ * 回傳一樣是 Response（.ok／.body／.json()／.text()／.arrayBuffer() 都能用）；curl 失敗（HTTP 4xx、5xx、逾時）在讀內容時丟出來，fetchRetry 照樣重試。
+ */
+const fetch = process.env.CHAILEASE_FETCH_VIA === 'curl' ? curlFetch : globalThis.fetch;
+export function curlFetch(url, { signal } = {}) {
+  const exe = process.platform === 'win32' ? 'curl.exe' : 'curl';
+  const child = spawn(exe, ['-sS', '-L', '--fail', '-A', UA, '--max-time', '1800', '--', String(url)], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  if (signal) signal.addEventListener('abort', () => child.kill(), { once: true });
+  const closed = new Promise((ok) => { child.on('error', (e) => ok(e.message)); child.on('close', (code, sig) => ok(code === 0 ? 0 : `結束代碼 ${code == null ? sig : code}`)); });
+  const chunks = child.stdout[Symbol.asyncIterator]();
+  const body = new ReadableStream({
+    async pull(ctrl) {   // 讀多少拉多少（不會整個檔先吞進記憶體）；等 curl 真的結束了才收尾，HTTP 錯誤不會被當成空檔案
+      const { value, done } = await chunks.next();
+      if (!done) { ctrl.enqueue(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)); return; }
+      const why = await closed;
+      if (why === 0) ctrl.close(); else ctrl.error(new Error(`curl ${why}：${err.trim()}`));
+    },
+    cancel() { child.kill(); },
+  });
+  return Promise.resolve(new Response(body, { status: 200 }));
+}
 /** 要抓的營業項目：data.gov.tw 資料集編號 → 類別名稱 */
 export const KINDS = [
   { id: 36719, kind: '汽車貨運業' },
@@ -291,11 +318,10 @@ async function main() {
   for (const { id, kind } of KINDS) {
     const url = await csvUrlOf(id);
     console.log(`${kind}（${id}）下載 ${url}`);
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10 * 60000), redirect: 'follow' });
-    if (!res.ok || !res.body) throw new Error(`${kind} HTTP ${res.status}`);
-    const rl = readline.createInterface({ input: Readable.fromWeb(res.body) });
+    // 整份讀進來（每份不到 1 MB）再逐行：經濟部偶爾回空回應（2026/11/05 公司電腦 20 次有 2 次），fetchRetry 會重來；以前是串流、沒重試，一次斷整輪白跑
+    const text = await fetchRetry(url, (r) => r.text(), 10 * 60000);
     let head = null; let n = 0; let kept = 0;
-    for await (const line of rl) {
+    for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const cells = parseLine(line.replace(/^﻿/, ''));
       if (!head) { head = cells.map((h) => h.trim()); continue; }

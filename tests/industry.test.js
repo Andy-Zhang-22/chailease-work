@@ -129,3 +129,18 @@ test('環保列管快取（版本 375）：抓成功存留下來的公司的列�
   assert.deepEqual(back.get('23456789').get('E:S001'), { key: 'E:S001', type: 'site', flags: [] });
   assert.equal(t.envCacheToMap(null).size, 0);
 });
+
+test('fetch-industry 用 curl 下載（版本 404）：回傳的 Response 能讀；curl 失敗（找不到檔）在讀內容時丟錯，不是空檔案', async () => {
+  const t = await tool();
+  const fs = require('node:fs'); const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curl-test-'));
+  const file = path.join(dir, 'a.csv');
+  const content = '統一編號,公司名稱\n12345678,甲運通有限公司\n';
+  fs.writeFileSync(file, content);
+  const r = await t.curlFetch(pathToFileURL(file).href, { signal: AbortSignal.timeout(30000) });
+  assert.equal(r.ok, true);
+  assert.equal(await r.text(), content);
+  const r2 = await t.curlFetch(pathToFileURL(path.join(dir, 'missing.csv')).href);
+  await assert.rejects(r2.text(), /curl/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

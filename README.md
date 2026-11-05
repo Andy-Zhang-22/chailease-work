@@ -5365,3 +5365,13 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
   - 不是經濟部擋公司 IP：同一個網址，Windows 內建 `curl.exe`（Schannel）回 200、630 KB，Python＋truststore 也 200，`data.gov.tw`、財政部 `eip.fia.gov.tw` 一樣都通。
   - 是 Node 的 OpenSSL 驗不過公司代理換上的憑證。公司電腦有 **4 張同名** `CN=chailease` 的 CA（不同金鑰、都沒有 AKI；leaf 也沒有 AKI）。把 Windows 認定的那張簽發者、或四張全部，用 `NODE_EXTRA_CA_CERTS` 餵給 Node，加不加 `--use-system-ca` 都一樣 `CERT_SIGNATURE_FAILURE`——OpenSSL 連正確那張都驗不過，Windows 的驗證引擎（Schannel／CryptoAPI）可以。Python 10/27 能解是因為 truststore 把驗證整個交給 Windows；Node 沒有對應的東西，`--use-system-ca` 只是把 Windows 的根憑證匯進 OpenSSL，驗還是 OpenSSL 驗。
   - 排程沒設（試跑沒成功不排）。候選修法等使用者決定：`fetch-industry.mjs` 下載那幾處（data.gov.tw API、各資料集檔案、財政部 CSV）在 Windows 改由 `curl.exe` 下載（Schannel 用 Windows 憑證庫，不是關掉驗證），Mac、Actions 照舊走 fetch。`NODE_TLS_REJECT_UNAUTHORIZED=0` 是關掉驗證，不採用。
+
+## 公司電腦的產業名單備援改用 curl.exe 下載（版本 404）
+
+使用者 11/05 看完版本 403 的試跑結果（Node 的 OpenSSL 驗不過公司代理的憑證、經濟部沒擋公司 IP）：「改成 curl 下載」。
+
+- `tools/fetch-industry.mjs`：設了環境變數 `CHAILEASE_FETCH_VIA=curl` 就把模組裡的 `fetch` 換成 `curlFetch`——用 Windows 內建的 `curl.exe`（Schannel，跟瀏覽器同一套信任，**不是關掉驗證**）下載，回傳一樣的 `Response`（`.ok`／`.body`／`.json()`／`.text()`／`.arrayBuffer()`），四處下載一行都不用改。讀多少拉多少（不會整檔先吞進記憶體）；curl 失敗（HTTP 4xx、5xx、逾時）等 curl 真的結束才在讀內容時丟出來，不會被當成空檔案，`fetchRetry` 照樣重試。Mac、Actions 沒設就照舊走 fetch。
+- 順便：第一段四份車輛業的下載本來是串流、沒重試，經濟部偶爾回空回應（11/05 公司電腦 20 次有 2 次）一次就整輪白跑；每份不到 1 MB，改成走 `fetchRetry` 整份讀進來再逐行，Actions 也受惠。
+- `tools/industry-monthly.ps1`：拿掉 `--use-system-ca` 那段，改成確認有 `curl.exe`、設 `CHAILEASE_FETCH_VIA=curl`；log 的「結束代碼 0」瑕疵修掉（`git checkout` 之前先把 `$LASTEXITCODE` 存起來）。
+- 測試：`tests/industry.test.js` 加一項——`curlFetch` 抓 `file://` 的檔案讀得到內容、檔案不存在讀內容時丟錯（有「curl」字樣）；curl 支援 `file://`，Actions、Mac 不用網路也能跑。公司電腦實測：`data.gov.tw` 的 JSON 讀得到、404 丟「curl (22) … returned error」、逾時 curl 被砍掉（SIGTERM）。公司電腦跑 `npm test` 有 25 項失敗，全是 Windows 環境（測試用絕對路徑 `import()`、`hiring-104` 要 bash），跟這版無關，CI 在 Linux 上照常。
+- 網站沒改，版號 20261105-404 只為了對齊 README。公司電腦 `-Force` 試跑的結果寫在這段下面。
