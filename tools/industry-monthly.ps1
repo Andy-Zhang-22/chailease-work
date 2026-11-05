@@ -1,4 +1,4 @@
-# 產業名單的備援：在公司的 Windows 電腦上跑——GitHub Actions 每月 14 日抓經濟部等的產業名單（monthly-industry.yml），
+﻿# 產業名單的備援：在公司的 Windows 電腦上跑——GitHub Actions 每月 14 日抓經濟部等的產業名單（monthly-industry.yml），
 # 10/23～24 連四次被經濟部的下載網站擋（503），所以公司電腦（台灣 IP、每天開機）當備援：Actions 沒抓成，這台就抓、推上分支。
 # 做法跟 tools/pcc-daily.ps1 一樣（等網路、更新 repo、抓、推），多了「什麼時候才該跑」：
 #   - 每月 15 日起才跑（14 日先讓 Actions 試）；leads/industry/index.json 這個月已經抓過（Actions 成功）就不跑；
@@ -6,7 +6,8 @@
 #   - 每次跑在 %LOCALAPPDATA%\chailease-industry.log 留一行，出事看這裡。
 # 用法（PowerShell）：  powershell -ExecutionPolicy Bypass -File tools\industry-monthly.ps1
 #                      加 -Force 不管日期、不管這個月抓過沒，現在就抓一次（第一次試跑用）
-# 要先裝 Node.js 22 以上（LTS）與 Git；設定步驟在 README「版本 402」。公司網路攔 HTTPS，Node 要加 --use-system-ca 用 Windows 的憑證庫（Node 22.15 起有）。
+# 要先裝 Node.js 22 以上（LTS）與 Git；設定步驟在 README「版本 402」。公司網路攔 HTTPS、Node 的 OpenSSL 驗不過公司的憑證（--use-system-ca 也沒用），
+# 所以下載交給 Windows 內建的 curl.exe（版本 404：設 CHAILEASE_FETCH_VIA=curl 給 fetch-industry.mjs）。
 param([string]$Cities = '新北市,臺北市', [switch]$Force)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -35,14 +36,17 @@ if (-not $online) { Write-Host '網路還沒通，這次先不抓（之後會再
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Note '找不到 Node.js，請先安裝 Node.js 22（LTS）'; throw '找不到 Node.js' }
 $major = [int]((node --version).Trim().TrimStart('v').Split('.')[0])
 if ($major -lt 22) { Note "Node.js 要 22 以上（現在是 $(node --version)）"; throw 'Node.js 版本太舊' }
-# 公司網路把 HTTPS 的憑證換成公司自己的 CA：Node 預設不信，加 --use-system-ca 改用 Windows 的憑證庫（跟瀏覽器同一套信任，不是關掉驗證）
-$nodeOpt = @(); node --use-system-ca -e 0 2>$null; if ($LASTEXITCODE -eq 0) { $nodeOpt = @('--use-system-ca') } else { Write-Host '這版 Node 沒有 --use-system-ca（22.15 起才有）；公司網路攔 HTTPS 的話會抓不到，請更新 Node' }
+# 公司網路把 HTTPS 的憑證換成公司自己的 CA：Node 的 OpenSSL 驗不過（--use-system-ca、NODE_EXTRA_CA_CERTS 都試過，2026/11/05），Windows 自己的憑證引擎可以。
+# 所以叫 fetch-industry.mjs 改用 Windows 內建的 curl.exe（Schannel，跟瀏覽器同一套信任，不是關掉驗證）下載。
+if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) { Note '找不到 curl.exe（Windows 10 1803 起內建）'; throw '找不到 curl.exe' }
+$env:CHAILEASE_FETCH_VIA = 'curl'
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 git pull --rebase --autostash -q origin $branch
 if ($LASTEXITCODE -ne 0) { Note 'git pull 失敗（網路或登入問題）'; throw 'git pull 失敗' }
 Set-Content $stamp $today    # 先記今天跑過：抓十幾分鐘，中途失敗也不要同一天一直重抓（隔天會再試）
-& node @nodeOpt tools/fetch-industry.mjs --cities $Cities
-if ($LASTEXITCODE -ne 0) { git checkout -q -- leads/industry; Note "抓取失敗（結束代碼 $LASTEXITCODE，看上面的訊息；明天登入會再試）"; exit 1 }
+& node tools/fetch-industry.mjs --cities $Cities
+$rc = $LASTEXITCODE   # 先存起來：下一行的 git checkout 會把 $LASTEXITCODE 蓋成 0
+if ($rc -ne 0) { git checkout -q -- leads/industry; Note "抓取失敗（結束代碼 $rc，看上面的訊息；明天登入會再試）"; exit 1 }
 git add -A leads/industry
 git diff --cached --quiet
 if ($LASTEXITCODE -eq 0) { Note '抓完沒有變動，不用推'; exit 0 }

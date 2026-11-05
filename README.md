@@ -5352,3 +5352,27 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 4. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓產業名單" -Confirm:$false`。
 
 - 測試：PowerShell 這裡跑不了，語法照 `pcc-daily.ps1`；真正的驗證是公司電腦 `-Force` 試跑一次（任務卡）。網站沒改，版號 20261102-402 只為了對齊 README。
+
+## 產業名單備援腳本加 UTF-8 BOM，公司電腦才跑得起來（版本 403）
+
+使用者 11/05 在公司電腦照版本 402 的步驟試跑：裝好 Node v22.23.4（Standalone zip 放 `%LOCALAPPDATA%\Programs\node`，`--use-system-ca` 可用），`industry-monthly.ps1 -Force` 一跑就是三個 ParserError（Missing ')'、Unexpected token '}'），一行都沒執行。
+
+- 原因：Windows PowerShell 5.1 讀**沒有 BOM** 的 UTF-8 檔會當成系統 ANSI（Big5）解碼，中文字的位元組把後面的引號、括號吃掉，語法就壞了。`pcc-daily.ps1` 檔頭有 BOM（EF BB BF）所以沒事，`industry-monthly.ps1` 沒有。
+- 修：`tools/industry-monthly.ps1` 檔頭補 UTF-8 BOM，內容一個字都沒改。以後新的 `.ps1` 都要存成「UTF-8 with BOM」。
+- 驗證：`[System.Management.Automation.Language.Parser]::ParseFile` 原檔 3 個錯誤、加 BOM 後 0 個；公司電腦重新 `-Force` 試跑的結果寫在這段下面（回報）。
+- 網站沒改，版號 20261105-403 只為了對齊 README。
+- **11/05 公司電腦重新 `-Force` 試跑的結果：腳本跑起來了，但沒抓成。** Node v22.23.4，`--use-system-ca` 有加；印到「首見表：12,014 個統編；起算月 202610」、第一個檔案開始下載就 `TypeError: fetch failed … CERT_SIGNATURE_FAILURE`，結束代碼 1，沒推。log 最後一行：`抓取失敗（結束代碼 0，看上面的訊息；明天登入會再試）`（這個 0 是 `git checkout` 蓋掉 `$LASTEXITCODE` 後才印的，實際是 node 失敗；小瑕疵，之後順手修）。
+  - 不是經濟部擋公司 IP：同一個網址，Windows 內建 `curl.exe`（Schannel）回 200、630 KB，Python＋truststore 也 200，`data.gov.tw`、財政部 `eip.fia.gov.tw` 一樣都通。
+  - 是 Node 的 OpenSSL 驗不過公司代理換上的憑證。公司電腦有 **4 張同名** `CN=chailease` 的 CA（不同金鑰、都沒有 AKI；leaf 也沒有 AKI）。把 Windows 認定的那張簽發者、或四張全部，用 `NODE_EXTRA_CA_CERTS` 餵給 Node，加不加 `--use-system-ca` 都一樣 `CERT_SIGNATURE_FAILURE`——OpenSSL 連正確那張都驗不過，Windows 的驗證引擎（Schannel／CryptoAPI）可以。Python 10/27 能解是因為 truststore 把驗證整個交給 Windows；Node 沒有對應的東西，`--use-system-ca` 只是把 Windows 的根憑證匯進 OpenSSL，驗還是 OpenSSL 驗。
+  - 排程沒設（試跑沒成功不排）。候選修法等使用者決定：`fetch-industry.mjs` 下載那幾處（data.gov.tw API、各資料集檔案、財政部 CSV）在 Windows 改由 `curl.exe` 下載（Schannel 用 Windows 憑證庫，不是關掉驗證），Mac、Actions 照舊走 fetch。`NODE_TLS_REJECT_UNAUTHORIZED=0` 是關掉驗證，不採用。
+
+## 公司電腦的產業名單備援改用 curl.exe 下載（版本 404）
+
+使用者 11/05 看完版本 403 的試跑結果（Node 的 OpenSSL 驗不過公司代理的憑證、經濟部沒擋公司 IP）：「改成 curl 下載」。
+
+- `tools/fetch-industry.mjs`：設了環境變數 `CHAILEASE_FETCH_VIA=curl` 就把模組裡的 `fetch` 換成 `curlFetch`——用 Windows 內建的 `curl.exe`（Schannel，跟瀏覽器同一套信任，**不是關掉驗證**）下載，回傳一樣的 `Response`（`.ok`／`.body`／`.json()`／`.text()`／`.arrayBuffer()`），四處下載一行都不用改。讀多少拉多少（不會整檔先吞進記憶體）；curl 失敗（HTTP 4xx、5xx、逾時）等 curl 真的結束才在讀內容時丟出來，不會被當成空檔案，`fetchRetry` 照樣重試。Mac、Actions 沒設就照舊走 fetch。
+- 順便：第一段四份車輛業的下載本來是串流、沒重試，經濟部偶爾回空回應（11/05 公司電腦 20 次有 2 次）一次就整輪白跑；每份不到 1 MB，改成走 `fetchRetry` 整份讀進來再逐行，Actions 也受惠。
+- `tools/industry-monthly.ps1`：拿掉 `--use-system-ca` 那段，改成確認有 `curl.exe`、設 `CHAILEASE_FETCH_VIA=curl`；log 的「結束代碼 0」瑕疵修掉（`git checkout` 之前先把 `$LASTEXITCODE` 存起來）。
+- 測試：`tests/industry.test.js` 加一項——`curlFetch` 抓 `file://` 的檔案讀得到內容、檔案不存在讀內容時丟錯（有「curl」字樣）；curl 支援 `file://`，Actions、Mac 不用網路也能跑。公司電腦實測：`data.gov.tw` 的 JSON 讀得到、404 丟「curl (22) … returned error」、逾時 curl 被砍掉（SIGTERM）。公司電腦跑 `npm test` 有 25 項失敗，全是 Windows 環境（測試用絕對路徑 `import()`、`hiring-104` 要 bash），跟這版無關，CI 在 Linux 上照常。
+- 網站沒改，版號 20261105-404 只為了對齊 README。公司電腦 `-Force` 試跑的結果寫在這段下面。
+- **11/05 公司電腦 `-Force` 試跑：成功。** Node v22.23.4，12 分鐘，四份車輛業 4,438／762／1,133／2,266 列、食品 828,416 列、環保列管 455 頁 454,543 列、新北建照 14,343 列、稅籍檔 1,715,525 列（出檔 05-NOV-26）；留 11,939 家（剛出現 18、有電話 4,549），推上分支（`db7d9a6`，等使用者說「合併」）。log 最後一行：`產業名單抓好、推上 claude/telemarketing-website-hf2uwj 了（等使用者說「合併」才進 main）`。排程「電推-抓產業名單」照步驟 3 設好（登入、解鎖兩個觸發，延遲 5 分鐘），State Ready。
