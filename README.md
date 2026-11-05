@@ -5361,3 +5361,7 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 - 修：`tools/industry-monthly.ps1` 檔頭補 UTF-8 BOM，內容一個字都沒改。以後新的 `.ps1` 都要存成「UTF-8 with BOM」。
 - 驗證：`[System.Management.Automation.Language.Parser]::ParseFile` 原檔 3 個錯誤、加 BOM 後 0 個；公司電腦重新 `-Force` 試跑的結果寫在這段下面（回報）。
 - 網站沒改，版號 20261105-403 只為了對齊 README。
+- **11/05 公司電腦重新 `-Force` 試跑的結果：腳本跑起來了，但沒抓成。** Node v22.23.4，`--use-system-ca` 有加；印到「首見表：12,014 個統編；起算月 202610」、第一個檔案開始下載就 `TypeError: fetch failed … CERT_SIGNATURE_FAILURE`，結束代碼 1，沒推。log 最後一行：`抓取失敗（結束代碼 0，看上面的訊息；明天登入會再試）`（這個 0 是 `git checkout` 蓋掉 `$LASTEXITCODE` 後才印的，實際是 node 失敗；小瑕疵，之後順手修）。
+  - 不是經濟部擋公司 IP：同一個網址，Windows 內建 `curl.exe`（Schannel）回 200、630 KB，Python＋truststore 也 200，`data.gov.tw`、財政部 `eip.fia.gov.tw` 一樣都通。
+  - 是 Node 的 OpenSSL 驗不過公司代理換上的憑證。公司電腦有 **4 張同名** `CN=chailease` 的 CA（不同金鑰、都沒有 AKI；leaf 也沒有 AKI）。把 Windows 認定的那張簽發者、或四張全部，用 `NODE_EXTRA_CA_CERTS` 餵給 Node，加不加 `--use-system-ca` 都一樣 `CERT_SIGNATURE_FAILURE`——OpenSSL 連正確那張都驗不過，Windows 的驗證引擎（Schannel／CryptoAPI）可以。Python 10/27 能解是因為 truststore 把驗證整個交給 Windows；Node 沒有對應的東西，`--use-system-ca` 只是把 Windows 的根憑證匯進 OpenSSL，驗還是 OpenSSL 驗。
+  - 排程沒設（試跑沒成功不排）。候選修法等使用者決定：`fetch-industry.mjs` 下載那幾處（data.gov.tw API、各資料集檔案、財政部 CSV）在 Windows 改由 `curl.exe` 下載（Schannel 用 Windows 憑證庫，不是關掉驗證），Mac、Actions 照舊走 fetch。`NODE_TLS_REJECT_UNAUTHORIZED=0` 是關掉驗證，不採用。
