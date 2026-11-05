@@ -5352,3 +5352,12 @@ API 偶爾會對某一天回 500（10/24 那天每個用戶端都一樣），那
 4. 關掉：`Unregister-ScheduledTask -TaskName "電推-抓產業名單" -Confirm:$false`。
 
 - 測試：PowerShell 這裡跑不了，語法照 `pcc-daily.ps1`；真正的驗證是公司電腦 `-Force` 試跑一次（任務卡）。網站沒改，版號 20261102-402 只為了對齊 README。
+
+## 產業名單備援腳本加 UTF-8 BOM，公司電腦才跑得起來（版本 403）
+
+使用者 11/05 在公司電腦照版本 402 的步驟試跑：裝好 Node v22.23.4（Standalone zip 放 `%LOCALAPPDATA%\Programs\node`，`--use-system-ca` 可用），`industry-monthly.ps1 -Force` 一跑就是三個 ParserError（Missing ')'、Unexpected token '}'），一行都沒執行。
+
+- 原因：Windows PowerShell 5.1 讀**沒有 BOM** 的 UTF-8 檔會當成系統 ANSI（Big5）解碼，中文字的位元組把後面的引號、括號吃掉，語法就壞了。`pcc-daily.ps1` 檔頭有 BOM（EF BB BF）所以沒事，`industry-monthly.ps1` 沒有。
+- 修：`tools/industry-monthly.ps1` 檔頭補 UTF-8 BOM，內容一個字都沒改。以後新的 `.ps1` 都要存成「UTF-8 with BOM」。
+- 驗證：`[System.Management.Automation.Language.Parser]::ParseFile` 原檔 3 個錯誤、加 BOM 後 0 個；公司電腦重新 `-Force` 試跑的結果寫在這段下面（回報）。
+- 網站沒改，版號 20261105-403 只為了對齊 README。

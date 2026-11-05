@@ -1,4 +1,4 @@
-# 產業名單的備援：在公司的 Windows 電腦上跑——GitHub Actions 每月 14 日抓經濟部等的產業名單（monthly-industry.yml），
+﻿# 產業名單的備援：在公司的 Windows 電腦上跑——GitHub Actions 每月 14 日抓經濟部等的產業名單（monthly-industry.yml），
 # 10/23～24 連四次被經濟部的下載網站擋（503），所以公司電腦（台灣 IP、每天開機）當備援：Actions 沒抓成，這台就抓、推上分支。
 # 做法跟 tools/pcc-daily.ps1 一樣（等網路、更新 repo、抓、推），多了「什麼時候才該跑」：
 #   - 每月 15 日起才跑（14 日先讓 Actions 試）；leads/industry/index.json 這個月已經抓過（Actions 成功）就不跑；
