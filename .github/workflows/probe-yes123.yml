@@ -1,0 +1,15 @@
+# 探路（一次性，看完就刪）：yes123 從 Actions 連得到嗎、公司搜尋怎麼查。只印結構與筆數。
+name: 探路 yes123
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: node probe_yes123/probe.mjs
