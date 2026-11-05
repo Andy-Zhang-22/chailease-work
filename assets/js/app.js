@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261105-406';
+  const APP_VERSION = '20261105-407';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3681,13 +3681,13 @@
       try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
       const buried = (c) => keysOf(c).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
       const taken = new Set(todo.map((x) => x.key));
-      // 一天最多 HIRING_WEEKLY_MAX 家：applyHiring 每次同步都會叫，數今天已經從這份加過幾家
-      const today = todayISO();
-      const room = Math.max(0, HIRING_WEEKLY_MAX - weekly.list.filter((c) => c && applied[c.key] === today).length);
+      // 一天最多 HIRING_WEEKLY_MAX 家：applyHiring 每次同步都會叫，數今天已經從這份加過幾家。
+      // 從這份加的記成「日期w」（版本 406）：同一家也在清晨候選池、早上被那條加過的（記成日期）不算這份的額度
+      const room = Math.max(0, HIRING_WEEKLY_MAX - Object.values(applied).filter((d) => d === `${todayISO()}w`).length);
       const more = weekly.list
         .filter((c) => c && c.key && c.row && Number(c.count) > 0 && !applied[c.key] && !taken.has(c.key) && !listed(c) && !buried(c))
         .slice(0, room);
-      more.forEach((c) => todo.push({ key: c.key, name: c.name, row: c.row, count: Number(c.count), at: Number(weekly.at) }));
+      more.forEach((c) => todo.push({ key: c.key, name: c.name, row: c.row, count: Number(c.count), at: Number(weekly.at), weekly: true }));
       if (more.length) head = weekly.head;
     }
     if (!todo.length) return { added: 0 };
@@ -3711,7 +3711,7 @@
         const hit = todo.find((x) => keysOf(x).some((k) => mine.includes(k)));
         if (hit) { try { await saveState(v.id, { hiring: { count: Number(hit.count), at: Number(hit.at) || now } }); } catch (e) { console.error('存 104 徵才', e); } }
       }
-      todo.forEach((x) => { applied[x.key] = today; });
+      todo.forEach((x) => { applied[x.key] = x.weekly ? `${today}w` : today; });
       await window.Store.setSetting('hiring-applied', JSON.stringify(applied));
       await reload(); render(); scheduleSync();
       const got = state.records.filter((r) => r.source === name).length;
