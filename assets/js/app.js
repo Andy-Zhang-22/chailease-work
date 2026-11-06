@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261105-407';
+  const APP_VERSION = '20261106-408';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3374,7 +3374,8 @@
   /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
   // 沒設的預設（版本 355 使用者：「商行企業社的比例拉高可以」）：商行 2、其他 1（15 家裡商行約 3 家，以前平分約 2 家）
-  const DEFAULT_SHARES = [1, 1, 2, 1, 1, 1, 1, 1];
+  // 版本 408（10 月成效覆盤，使用者：「照你說的做」）：出進口廠商接通 83% 最高拉到 2；產業名單 38% 最低降到 0（每頁保底一家照舊）
+  const DEFAULT_SHARES = [1, 1, 2, 2, 1, 1, 1, 0];
   function feedShares() {
     const raw = registryPref('feed-shares');
     if (!raw) return DEFAULT_SHARES.slice();
@@ -3424,7 +3425,8 @@
    * → 行業有設備廠房的先、貿易顧問類的後
    * → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近 → 弱訊號 → 原本在各頁的名次。
    */
-  const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票)$/;
+  // 版本 408：營造業、本期擴張（各 6 家打過 0 接通、一半禁止推廣）、跟同業借（接通 44%、禁止推廣 19%）不算明確訊號，排後面；訊號照樣記、照樣寫進備註
+  const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票|營造業|本期擴張|跟同業借)/;
   const strongSignals = (c) => [...c.signals].filter((x) => !WEAK_SIGNAL_RE.test(x)).length;
   // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
   const BUY_MIN = 3000000;
@@ -4128,14 +4130,14 @@
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
         const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
-        const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 2、其他 1，版本 355）
+        const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 2、出進口 2、產業名單 0、其他 1；版本 355、408）
         const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
         const hint = el('span', { className: 'muted share-hint' });
         const refresh = () => {
           const vals = inputs.map((x) => Math.max(0, Math.round(Number(x.value) || 0)));
           const any = inputs.some((x) => x.value !== '') && vals.some((v) => v > 0);
           const preview = splitByShares(Array(names.length).fill(999), quota, any ? vals : DEFAULT_SHARES);
-          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝預設商行 2、其他 1（${preview.join('、')}）`;
+          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝預設商行 2、出進口 2、產業名單 0、其他 1（${preview.join('、')}）`;
         };
         inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
         refresh();
@@ -4151,7 +4153,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -4619,8 +4621,7 @@
       chanceCounts.set(k, (chanceCounts.get(k) || 0) + 1);
     });
     chips($('#fltChance'), 'chance', CHANCE_ORDER.map((k) => [k, chanceCounts.get(k)]), state.filters.chance, (v) => CHANCE_LABEL[v]);
-    // 上方那排只放「有機會」：無機會、未判斷留在面板裡
-    if ($('#quickChance')) chips($('#quickChance'), 'chance', [['yes', chanceCounts.get('yes') || 0]], state.filters.chance, (v) => CHANCE_LABEL[v]);
+    // 名單上方的「有機會」籤拿掉了（版本 408：累計只標過 1 家，10 月約到 23 家拜訪都看行事曆）；三顆都留在面板裡
     // 冷名單：固定兩顆，含 0 筆
     const coldCounts = [['cold', 0], ['ok', 0]];
     all.forEach((r) => { coldCounts[r.cold ? 0 : 1][1] += 1; });
@@ -5806,7 +5807,7 @@
       if (members.length) {
         const ul = el('ul', { className: 'group-members' });
         members.forEach((m) => {
-          const a = el('a', { href: '#', textContent: m.company });
+          const a = el('a', { href: '#', className: 'link-btn', textContent: m.company });   // link-btn：使用次數不記公司名（版本 408）
           a.onclick = (e) => { e.preventDefault(); openDetail(m.id); };
           const bits = [m.nextDate && `下次 ${dateLabel(m.nextDate)}`, window.Normalize.outcomeLabel(m.outcome)].filter(Boolean).join('　');
           ul.append(el('li', {}, [a, el('small', { className: 'muted', textContent: bits ? `　${bits}` : '' })]));
@@ -8522,7 +8523,7 @@ export default {
   const USAGE_KEY = 'usage-counts';
   const DEVICE_KEY = 'device-id';
   const usageLoad = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}') || {}; } catch (e) { return {}; } };
-  const NAMEISH_RE = /有限公司|股份|企業|商行|工作室|實業|工業|科技|國際|貿易|裝修|工程行|工坊|藥局|咖啡|製造廠|工廠|建設|商號|診所|車行|餐飲|食品|[路街巷弄號段]|@|\d{3,}/;   // 版本 364 再補：摘要檔裡出現過工坊、藥局、咖啡、製造廠、建設   // 版本 324：摘要檔裡出現過「…企業」結尾的公司名，補上
+  const NAMEISH_RE = /有限公司|股份|企業|商行|工作室|實業|工業|科技|國際|貿易|裝修|工程行|工坊|藥局|咖啡|製造廠|工廠|建設|商號|診所|車行|餐飲|食品|建材|材料|五金|水電|電器|機械|金屬|印刷|塑膠|[路街巷弄號段]|@|\d{3,}/;   // 版本 408 再補：10 月摘要檔出現過「…建材行」   // 版本 364 再補：摘要檔裡出現過工坊、藥局、咖啡、製造廠、建設   // 版本 324：摘要檔裡出現過「…企業」結尾的公司名，補上
   function usageArea(b) {
     if (b.closest('#menu')) return '選單';
     if (b.closest('#drawer')) return '詳細頁';

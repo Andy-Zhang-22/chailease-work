@@ -34,6 +34,8 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(await pg.evaluate(()=>window.usageKeyOk('視窗:🔍 查負責人「王大明」名下的公')===false && window.usageKeyOk('詳細頁:刪除這筆')===true), '以前記到名字的鍵，寫摘要時濾掉');
  // 版本 324：摘要檔裡出現過「…企業」「…裝修」結尾的公司名（不是企業社、沒有「有限公司」），也不記；「連結其他公司」這種按鈕照記
  chk(await pg.evaluate(()=>window.usageKey(Object.assign(document.createElement('button'),{textContent:'丁範例室內裝修規劃企業'}))==='' && window.usageKeyOk('詳細頁:戊範例企業')===false && window.usageKeyOk('詳細頁:連結其他公司')===true), '「…企業」結尾的公司名不記');
+ // 版本 408：10 月摘要檔出現過「…建材行」（關係企業列表的連結，不在 NAMEISH 裡）；連結加 link-btn 不記，名字樣式也補進 NAMEISH
+ chk(await pg.evaluate(()=>{ const a=document.createElement('a'); a.href='#'; a.className='link-btn'; a.textContent='己範例建材行'; const b=document.createElement('button'); b.textContent='庚範例建材行'; return window.usageKey(a)===''&&window.usageKey(b)===''&&window.usageKeyOk('詳細頁:辛範例五金行')===false; }), '關係企業連結與「…建材行」這類名字不記');
 
  // 同步成功 → 寫摘要檔（假的雲端硬碟）
  await pg.evaluate(()=>{ const D=window.DriveSync; D.isConfigured=()=>true; D.sync=async()=>({gained:{records:0,logs:0}}); D.writeSummary=async(name,obj)=>{ window.__summaries.push({name,obj}); return 'id'; }; });
