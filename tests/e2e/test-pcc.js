@@ -12,6 +12,9 @@ const ROWS=[
  ['24908600','宇駿工程有限公司','公司登記','新北市板橋區文化路1號','','2026-08-20','道路養護工程','新北市政府工務局','3000000','1','2026-08-20','1150820-2','104/08/14','3000000'],
  ['02198779','蓮莊水電行','商業登記','新北市新莊區新樹路497巷11號','','2026-05-12','水電修繕','某公所','800000','1','2026-05-12','1150512-3','105/01/12',''],
  ['11111111','老客戶股份有限公司','公司登記','新北市新莊區中正路9號','02-1111-1111','2026-09-30','機房設備採購','某署','50000000','1','2026-09-30','1150930-1','100/01/01','50000000'],
+ // 版本 409：聯絡過（9/29）之後又得標（10/01）→ 📈 有新變化；名單裡沒電話的，打開詳細頁從標案資料貼上手機。兩家放板橋，預設篩選（我的分公司）不會列
+ ['22222222','舊客戶股份有限公司','公司登記','新北市板橋區文化路2號','02-2222-3333','2026-10-01','辦公設備採購','某局','8000000','1','2026-10-01','1151001-1','100/01/01','5000000'],
+ ['33333333','補電話股份有限公司','公司登記','新北市板橋區文化路3號','0922-333-444','2026-09-15','清潔服務','某所','1200000','1','2026-09-15','1150915-1','100/01/01','5000000'],
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const INDEX={generatedAt:'2026-10-02T20:00:00.000Z',cities:['新北市'],days:180,total:4,withPhone:2,latestDate:'2026-09-30',files:[{path:'pcc.csv',rows:4}]};
@@ -28,7 +31,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await ctx.route('**/leads/pcc/pcc.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:CSV}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9598/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
- await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111')]);
+ await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); await window.Store.addLog({recordId:'2',date:'2026-09-29',text:'老闆說年底再談',outcome:'contacted',createdAt:Date.now()-1e6}); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); localStorage.setItem('leads-hunt','0'); },[mk('1','老客戶股份有限公司','11111111'), {...mk('2','舊客戶股份有限公司','22222222'),outcome:'contacted',lastDate:'2026-09-29',nextDate:'2026-11-20',address:'新北市板橋區文化路2號',district:'板橋區'}, {...mk('3','補電話股份有限公司','33333333'),phoneRaw:'',phones:[],address:'新北市板橋區文化路3號',district:'板橋區'}]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
  chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('政府標案'))===false, '找名單底下沒有「政府標案得標」按鈕（跟其他來源一樣收進合併頁）');
  await pg.evaluate(()=>window.switchTab('pcc')); await pg.waitForSelector('#pcc-cards .card'); await pg.waitForTimeout(300);
@@ -48,7 +51,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.fill('#pcc-capMin',''); await pg.fill('#pcc-capMax',''); await pg.waitForTimeout(200);
  await pg.locator('#pcc-fOrg .chip:has-text("公司登記")').click(); await pg.locator('#pcc-fBranch .chip:has-text("新莊分公司")').click(); await pg.waitForTimeout(300);
  names=await pg.$$eval('#pcc-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(names.length===4, `全部 4 家：${names.join(' | ')}`);
+ chk(names.length===6, `全部 6 家：${names.join(' | ')}`);
  chk((await pg.locator('#pcc-cards .card:has-text("宇駿") .phone-search').count())===1, '沒電話的有 Google／地圖／104／1111 那排');
  chk(/決標（2 個月前）/.test(await pg.locator('#pcc-cards .card:has-text("宇駿")').textContent()), '2 個月前');
  chk(/蓮莊水電行/.test(names.join('|')), '商業登記的水電行也在（組織型態看公告）');
@@ -66,7 +69,20 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  // 名單上已經有的客戶剛得標：卡片標 🏆（不用打開那一頁）
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(400);
  const fb=await pg.locator('#cards .card:has-text("老客戶") .badge:has-text("剛得標")').textContent().catch(()=>'');
- chk(/🏆 剛得標 2026\/09/.test(fb), `名單卡片標剛得標：${fb}`);
+ chk(/🏆 剛得標 2026\/09\/30（5,000 萬）/.test(fb), `名單卡片標剛得標、帶日期與金額（版本 409）：${fb}`);
+ // 版本 409：聯絡過之後又得標 → 📈 得標；詳細頁一行得標資料
+ const ob=await pg.locator('#cards .card:has-text("舊客戶") .badge-opp:has-text("📈")').textContent().catch(()=>'');
+ chk(/📈 得標 800 萬/.test(ob), `聯絡過（9/29）之後得標（10/01）→ 有新變化：${ob}`);
+ chk((await pg.locator('#cards .card:has-text("老客戶") .badge-opp:has-text("📈")').count())===0, '沒聯絡過的（new）不標有新變化，本來就在待打清單');
+ await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.textContent.includes('舊客戶')); c.querySelector('.card-name').click(); }); await pg.waitForTimeout(500);
+ const al=(await pg.locator('#drawerBody .award-line').textContent().catch(()=>'')).replace(/\s+/g,' ');
+ chk(/🏆 政府標案得標 2026\/10\/01：某局「辦公設備採購」，決標 800 萬/.test(al), `詳細頁一行得標：${al}`);
+ await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
+ // 版本 409：沒電話的打開詳細頁，從公開資料（標案）貼上手機
+ await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.textContent.includes('補電話')); c.querySelector('.card-name').click(); }); await pg.waitForTimeout(1500);
+ const filled=await pg.evaluate(async()=>{ const all=await window.Store.allRecords(); const r=all.find(x=>x.company==='補電話股份有限公司'); const st=await window.Store.allStates(); const s=Object.values(st||{}).find(x=>x.recordId===r.id)||{}; return {edit:s.edits&&s.edits.phoneRaw, from:s.phoneSource&&s.phoneSource.name, shown:(document.querySelector('#drawerBody')||{textContent:''}).textContent.includes('0922-333-444')}; });
+ chk(filled.edit==='0922-333-444' && filled.from==='政府標案得標' && filled.shown, `打開詳細頁自動從標案資料貼上手機、畫面也更新：${JSON.stringify(filled)}`);
+ await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
