@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261106-408';
+  const APP_VERSION = '20261106-409';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2793,6 +2793,10 @@
    */
   const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
   const OPP_ORDER = ['renew', 'fresh'];
+  /** 標案的決標日（Pcc.lookup 的 ym：y／m／d）→ 'YYYY-MM-DD'、'2026/10/27'；元 → '4,932 萬' */
+  const awardIso = (a) => (a && a.ym && a.ym.d ? `${a.ym.y}-${String(a.ym.m).padStart(2, '0')}-${String(a.ym.d).padStart(2, '0')}` : '');
+  const awardDateLabel = (a) => (a && a.ym ? `${a.ym.y}/${String(a.ym.m).padStart(2, '0')}${a.ym.d ? `/${String(a.ym.d).padStart(2, '0')}` : ''}` : '');
+  const wanLabel = (n) => `${Math.round(Number(n) / 10000).toLocaleString()} 萬`;
   const OPP_REG_KINDS = ['capitalUp', 'address', 'owner', 'other'];
   function oppOf(r) {
     if (r.blocked) return [];
@@ -2811,12 +2815,18 @@
         && (c.kinds || []).some((k) => OPP_REG_KINDS.includes(k)));
       if (ch) { out.push('fresh'); r.oppFresh = ch; }
     }
+    // 聯絡過之後又得標（版本 409）：決標日在最近一次聯絡當天或之後（公告隔天才進資料，所以當天也算）就提醒再聯絡——要付履約保證金、墊款
+    if (!out.includes('fresh') && r.outcome !== 'new' && r.newAward && r.newAward.ym && r.newAward.ym.d) {
+      const d = awardIso(r.newAward);
+      if (d && (!r.lastDate || d >= r.lastDate) && -dayDiff(d) <= 120) { out.push('fresh'); r.oppFresh = { date: d, award: r.newAward }; }
+    }
     return out;
   }
   /** 卡片、提醒列上的一句話：「新鑫 2026/12 到期」「增資 9/16」 */
   function oppText(r, kind) {
     if (kind === 'renew' && r.oppRenew) return `${window.Chattel.lenderShort(r.oppRenew.lender.name)} ${String(r.oppRenew.end || '').slice(0, 7)} 到期`;
     if (kind === 'fresh' && r.oppFresh) {
+      if (r.oppFresh.award) return `得標${r.oppFresh.award.amount ? ` ${wanLabel(r.oppFresh.award.amount)}` : ''} ${regKindDateLabel(r.oppFresh.date)}`;
       const k = (r.oppFresh.kinds || []).filter((x) => OPP_REG_KINDS.includes(x)).map((x) => REG_KIND_LABEL[x]).join('、');
       return `${k} ${regKindDateLabel(r.oppFresh.date)}`;
     }
@@ -4839,7 +4849,7 @@
         ? el('span', { className: 'badge badge-regchange', textContent: regBadgeText(r), title: regChangeBrief(r) }) : '',
       r.chattelNext ? el('span', { className: `badge badge-chattel${r.chattelNext.days <= 92 ? ' is-soon' : ''}`, textContent: `動保 ${window.Chattel.lenderShort(r.chattelNext.lender.name)} ${r.chattelNext.end.replace(/^\d{4}\/0?(\d+)\/0?(\d+)$/, '$1/$2')} 到期`, title: chattelBrief(r) }) : '',
       r.newFactory ? el('span', { className: 'badge badge-opp', textContent: `🏭 新登記工廠 ${r.newFactory.ym.y}/${String(r.newFactory.ym.m).padStart(2, '0')}`, title: `經濟部生產中工廠清冊：${r.newFactory.name}${r.newFactory.products ? `，主要產品 ${r.newFactory.products}` : ''}` }) : '',
-      r.newAward ? el('span', { className: 'badge badge-opp', textContent: `🏆 剛得標 ${r.newAward.ym.y}/${String(r.newAward.ym.m).padStart(2, '0')}`, title: `政府電子採購網決標公告：${r.newAward.tender || ''}${r.newAward.agency ? `（${r.newAward.agency}）` : ''}` }) : '',
+      r.newAward ? el('span', { className: 'badge badge-opp', textContent: `🏆 剛得標 ${awardDateLabel(r.newAward)}${r.newAward.amount ? `（${wanLabel(r.newAward.amount)}）` : ''}`, title: `政府電子採購網決標公告：${r.newAward.tender || ''}${r.newAward.agency ? `（${r.newAward.agency}）` : ''}` }) : '',
       (r.opp || []).includes('renew') ? el('span', { className: 'badge badge-opp', textContent: '🔁 換約時機', title: `跟同業的動保 ${oppText(r, 'renew')}，30 天內沒聯絡過` }) : '',
       (r.opp || []).includes('fresh') ? el('span', { className: 'badge badge-opp', textContent: `📈 ${oppText(r, 'fresh')}`, title: r.chance === 'no' ? '標了無機會之後，商工登記又有變更' : '很久沒聯絡，這段時間商工登記有變更' }) : '',
       r.foreignCorps.length ? el('span', { className: 'badge badge-foreign', textContent: r.havenCorps.length ? '🌏 境外控股' : '🌏 外國法人股東', title: `董監事裡的法人：${r.foreignCorps.join('、')}（商工登記）` }) : '',
@@ -5643,6 +5653,10 @@
     }
     const body = $('#drawerBody');
     body.textContent = '';
+    // 沒電話、有統編：打開詳細頁就從公開資料補（版本 409；補到會重畫，publicPhones 自己 reload＋render）
+    if (!r.phones.length && !r.blocked && taxOnly(r.taxId).length === 8 && !(opts && opts.noPhoneFill)) {
+      publicPhones(r.source).then((got) => { if ((got.found || got.mobiles) && !$('#drawer').hidden) openDetail(id, { ...(opts || {}), noPhoneFill: true }); }).catch(() => {});
+    }
 
     // 版本 316 拿掉拜訪準備、🤖 問 Claude、承作檢核（使用次數 0；有機會／無機會使用者要留）；「⋯」沒東西可收就一起拿掉
     const editBtn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '編輯資料' });
@@ -5767,6 +5781,11 @@
     // 電話是從 Google 地圖找來的：講明是哪個店家、哪個地址，打過去講錯公司名才有得對
     // 登記現況不是營業中（版本 323）：講白，禁不禁止推廣使用者決定
     if (regClosed(r)) body.append(el('p', { className: 'warn-line closed-line', textContent: `⚠ 商工登記的登記現況：${r.regStatus}。要不要標禁止推廣由你決定。` }));
+    // 剛得標（版本 409；使用者：「新得標案的資訊怎麼都沒有跟名單連動?」）：標案頁那一行照樣寫在這裡，最近 6 個月的才列
+    if (r.newAward) {
+      const a = r.newAward;
+      body.append(el('p', { className: 'muted award-line', textContent: `🏆 政府標案得標 ${awardDateLabel(a)}：${[a.agency, a.tender ? `「${a.tender}」` : ''].filter(Boolean).join('')}${a.amount ? `，決標 ${wanLabel(a.amount)}` : ''}${a.awards > 1 ? `（共 ${a.awards} 件）` : ''}` }));
+    }
     // 後台挑名單時用網路查到的擴張訊號（版本 322）：那一句＋來源網址
     if (r.intel) {
       body.append(el('p', { className: 'muted intel-line' }, [
@@ -8899,8 +8918,10 @@ export default {
     window.importLeadsFile = async (file) => {
       $('#importer').hidden = false;
       await importFiles([file]);
-      // 清冊、動保、商行加進來的沒電話：用統編對貿易署的出進口廠商電話表（背景跑）
-      if (FRESH_SOURCE_RE.test(file.name)) tradePhones(file.name).catch((e) => console.error('出進口廠商補電話失敗', e));
+      // 加進來的沒電話：用統編對公開資料（出進口廠商電話表、標案、健保、工廠、產業、電子發票）補（背景跑）
+      // 版本 409：以前只有清冊、動保、商行那幾頁的檔名才補，新設工廠、產業名單、標案、上市櫃那幾頁加的就漏了
+      // （使用者 11/06 截圖：標案頁有這家的手機，名單裡那筆卻空的：「他的手機怎麼沒有自動貼上」）。改成每一份匯入都補。
+      tradePhones(file.name).catch((e) => console.error('公開資料補電話失敗', e));
     };
     /*
      * 動產擔保名單分頁（chattel.js）要知道哪些公司已經在名單上、以及點一下打開那一筆。
