@@ -1,6 +1,7 @@
 // 104 徵才（版本 387）：Mac 在使用者的 Chrome 查好的職缺數寫在同步檔設定 hiring-results，網站套用：有徵才的從候選池加進今天的名單、
 // 卡片標「104 徵才 N 件」、今天要打排前面；沒徵才的不加；同一家不重複加；一天最多 5 家
 // 版本 405：每週 104 徵才中候選池（hiring-pool-104）每天再補最多 3 家
+// 版本 419：104 徵才中是每日揉合的必要條件
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -19,8 +20,8 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } } Date=D; }`);
  await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  // 版本 394：丙三的候選列沒電話（候選列來自排第一的名單），標案那份有它的手機，加進來要一起補上
- const PCC='\ufeff統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額\n20000013,丙三工程有限公司,公司登記,新北市新莊區中正路1號,(0912)333444,2026-10-14,某工程,某機關,3890000,1,2026-10-14,1,108/09/03,12000000\n';
- await ctx.route('**/leads/pcc/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({generatedAt:'2026-10-26T20:00:00.000Z',cities:['新北市'],days:180,total:1,withPhone:1,latestDate:'2026-10-14',files:[{path:'pcc.csv',rows:1}]})}));
+ const PCC='\ufeff統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額\n20000013,丙三工程有限公司,公司登記,新北市新莊區中正路1號,(0912)333444,2026-10-14,某工程,某機關,3890000,1,2026-10-14,1,108/09/03,12000000\n20000014,丁四營造有限公司,公司登記,新北市三重區重新路2號,(0933)555666,2026-10-15,某修繕工程,某機關,2500000,1,2026-10-15,2,109/03/03,15000000\n';
+ await ctx.route('**/leads/pcc/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({generatedAt:'2026-10-26T20:00:00.000Z',cities:['新北市'],days:180,total:2,withPhone:2,latestDate:'2026-10-15',files:[{path:'pcc.csv',rows:2}]})}));
  await ctx.route('**/leads/pcc/pcc.csv*',r=>r.fulfill({status:200,contentType:'text/csv',body:PCC}));
  const pg=await ctx.newPage({viewport:{width:1300,height:1100}}); const errs=[]; pg.on('pageerror',e=>errs.push(e.message)); pg.on('dialog',d=>d.accept());
  await pg.goto('http://localhost:9616/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
@@ -91,6 +92,11 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
  const mb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='卯四科技有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
  chk(mb && mb.includes('104 徵才 2 件・財務主管'), `名單卡片標 104 徵才 2 件・財務主管：${JSON.stringify(mb)}`);
+ // 版本 419：104 徵才中是必要條件——每日揉合只從池子裡挑；丁四在標案有電話、有訊號（剛得標），但不在 104 池子、也不在名單，不挑；商行那份不受限（這裡沒商行）
+ const df=await pg.evaluate(()=>window.dailyFeed({more:true,awaitPhones:false})); await pg.waitForTimeout(1200);
+ chk(df && df.picked>=1 && df.notHiring>=1 && Object.keys(df.bySrc||{}).every(k=>k==='104 徵才中'), `每日新名單只從 104 徵才中挑、不在 104 的（丁四）被濾掉：${JSON.stringify({picked:df&&df.picked,notHiring:df&&df.notHiring,bySrc:df&&df.bySrc})}`);
+ const names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
+ chk(!names.includes('丁四營造有限公司') && names.includes('寅三實業有限公司'), `丁四沒進名單、寅三（池子裡）進了：${names.join('|')}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();

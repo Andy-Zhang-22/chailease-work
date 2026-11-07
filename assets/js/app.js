@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-418';
+  const APP_VERSION = '20261107-419';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3939,6 +3939,15 @@
         }
         merged = okMerged; bz = okBz;
       }
+      /*
+       * 104 徵才中是必要條件（版本 419；使用者 11/07：「有在徵才才是最低標的門檻」→「改成必要條件」）：
+       * 揉合那份只從有「104 徵才中」訊號的裡面挑，其他來源不再各保底一家（版本 415 之前是排序）。
+       * 商行照自己的規則：池子只收公司，商行本來就不會在 104 池子裡，限了就一家都沒有。
+       * 池子還沒抓過（沒資料）才退回原本的排序，不然每天會一家都挑不到。
+       */
+      const poolReady = !!(window.Hire104 && window.Hire104.poolInfo && window.Hire104.poolInfo().n > 0);
+      let notHiring = 0;
+      if (poolReady) { const only = merged.filter((c) => [...c.signals].some((x) => /^104 徵才中/.test(x))); notHiring = merged.length - only.length; merged = only; }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
       const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in'), per('hi')], need, feedShares());
@@ -4012,7 +4021,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
+      const summary = { picked, got, lost, skippedNoPhone, notHiring, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;
