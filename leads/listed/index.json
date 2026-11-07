@@ -1,9 +1,9 @@
 {
- "dailyAt": "2026-11-06T02:27:29.307Z",
- "newsAt": "2026-11-05",
- "newsCount": 4497,
+ "dailyAt": "2026-11-07T01:56:03.932Z",
+ "newsAt": "2026-11-06",
+ "newsCount": 5110,
  "revenueYm": "2026-09",
- "generatedAt": "2026-11-06T02:26:01.773Z",
+ "generatedAt": "2026-11-07T01:55:45.843Z",
  "total": 2363,
  "markets": {
   "上市": 1099,
@@ -24,11 +24,11 @@
   },
   {
    "path": "changes.json",
-   "rows": 232
+   "rows": 240
   },
   {
    "path": "news.json",
-   "rows": 4497
+   "rows": 5110
   },
   {
    "path": "revenue.json",
