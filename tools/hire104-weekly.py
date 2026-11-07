@@ -75,8 +75,8 @@ JS = r"""(() => {
   const FIN_KW = ['財務長', 'CFO', '財務總監', '財務副總', '財務主管', '財會主管', '財務經理', '財務副理', '財務協理'];
   const FIN_RE = /財務長|財務總監|財務副總|CFO|Chief Financial|Finance Director|Head of Finance|Finance Manager|財(務|會)[^專助員師]{0,6}(主管|經理|副理|襄理|主任|處長|協理)/;
   const fin = new Map();
-  const st = window.__hire104 = { started: 0, areas: 0, areaDone: 0, pages: 0, overflow: 0, finPages: 0, stopped: '', finished: false, sent: false, sendError: '', resendAt: null };
-  st.poll = () => JSON.stringify({ started: !!st.started, areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, fin: fin.size, finPages: st.finPages, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError, resendAt: st.resendAt });
+  const st = window.__hire104 = { started: 0, areas: 0, areaDone: 0, pages: 0, overflow: 0, finPages: 0, retries: 0, stopped: '', finished: false, sent: false, sendError: '', resendAt: null };
+  st.poll = () => JSON.stringify({ started: !!st.started, areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, fin: fin.size, finPages: st.finPages, retries: st.retries, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError, resendAt: st.resendAt });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let win = null;
   const fromRecv = (pred, ms) => new Promise((res) => {
@@ -94,12 +94,17 @@ JS = r"""(() => {
     const r = b.getBoundingClientRect();
     return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
   };
+  // 連線錯誤、5xx 重試（版本 418）：一次斷線就整批停太脆（11/05、11/07 各停過一次），等 5、10 秒再試，共 3 次；403／429／驗證碼照樣直接停
   const get = async (url) => {
-    let res;
-    try { res = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } }); } catch (e) { throw new Error('連線錯誤'); }
-    if (res.status === 403 || res.status === 429) throw new Error(`HTTP ${res.status}`);
-    const t = await res.text();
-    try { return JSON.parse(t); } catch (e) { throw new Error(/captcha|驗證/i.test(t) ? '驗證碼' : `不是 JSON（HTTP ${res.status}）`); }
+    for (let i = 1; ; i++) {
+      let res;
+      try { res = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json, text/plain, */*' } }); }
+      catch (e) { if (i < 3) { st.retries += 1; await sleep(5000 * i); continue; } throw new Error('連線錯誤（重試 2 次仍失敗）'); }
+      if (res.status === 403 || res.status === 429) throw new Error(`HTTP ${res.status}`);
+      if (res.status >= 500 && i < 3) { st.retries += 1; await sleep(5000 * i); continue; }
+      const t = await res.text();
+      try { return JSON.parse(t); } catch (e) { throw new Error(/captcha|驗證/i.test(t) ? '驗證碼' : `不是 JSON（HTTP ${res.status}）`); }
+    }
   };
   const send = async () => {
     const body = JSON.stringify({ at: Date.now(), areas: st.areas, areaDone: st.areaDone, pages: st.pages, overflow: st.overflow, stopped: st.stopped, list: [...seen.values()], fin: [...fin.values()] });
@@ -141,7 +146,9 @@ JS = r"""(() => {
         }
         st.areaDone += 1;
       }
-      // 徵財務主管：每個關鍵字最多 30 頁，連續 2 頁沒命中就換下一個；一頁一次、間隔照舊
+    } catch (e) { st.stopped = `找公司：${(e && e.message) || e}`; }
+    // 徵財務主管：每個關鍵字最多 30 頁，連續 2 頁沒命中就換下一個；一頁一次、間隔照舊。找公司那段停了這段照跑（版本 418）
+    try {
       for (const kw of FIN_KW) {
         let miss = 0;
         for (let p = 1; p <= 30; p++) {
@@ -161,7 +168,7 @@ JS = r"""(() => {
           if (miss >= 2) break;
         }
       }
-    } catch (e) { st.stopped = (e && e.message) || String(e); }
+    } catch (e) { st.stopped = `${st.stopped ? st.stopped + '；' : ''}職缺搜尋：${(e && e.message) || e}`; }
     await send();
     st.finished = true;
   };
