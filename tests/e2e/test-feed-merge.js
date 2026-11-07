@@ -130,6 +130,13 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(buy && many && buy.buy<=1 && buy.strong>=2 && many.buy>1 && many.strong>buy.strong, `資料如預期：買設備（buy ${buy&&buy.buy}、訊號 ${buy&&buy.strong}）、多訊號（buy ${many&&many.buy}、訊號 ${many&&many.strong}）`);
  chk(ix('買設備兩訊號有限公司')<ix('多訊號無設備有限公司'), `買設備＋兩訊號排在訊號更多但沒買設備的前面：${ix('買設備兩訊號有限公司')} < ${ix('多訊號無設備有限公司')}`);
  chk(ix('乙二機械股份有限公司')===0 && ix('買設備兩訊號有限公司')===1, `四個都滿足的全部在最前面：乙二 ${ix('乙二機械股份有限公司')}、買設備 ${ix('買設備兩訊號有限公司')}`);
+ // 版本 413：104 徵才中的排第二層——只有一個訊號、沒手機的「徵才中」排在四項都符合的後面、其他（含訊號更多的多訊號無設備）前面
+ await pg.evaluate(async()=>{ const head='公司名稱,統編,分級,成立,資本額,電話,負責人,KEYMAN,產業別,下次聯絡日,最近聯絡日,訪談內容,地址,名單新增日期,國家';
+   const row='徵才中有限公司,24908677,,2019,"20,000",02-2222-3333,,,機械製造業,__DAY__,,"104 徵才中：6 件（11/7 查）",新北市新莊區中正路107號,2026-11-07,';
+   await window.Store.setSetting('hiring-pool-104', JSON.stringify({at:Date.now(),head,list:[{key:'24908677',name:'徵才中有限公司',count:6,row}]})); });
+ const pv2=await pg.evaluate(()=>window.mergedFeedPreview()); const ix2=(n)=>pv2.findIndex(x=>x.name===n);
+ chk(ix2('徵才中有限公司')===2 && ix2('乙二機械股份有限公司')===0 && ix2('買設備兩訊號有限公司')===1 && ix2('徵才中有限公司')<ix2('多訊號無設備有限公司'), `104 徵才中排第二層：徵才中 ${ix2('徵才中有限公司')}、多訊號 ${ix2('多訊號無設備有限公司')}`);
+ await pg.evaluate(async()=>{ await window.Store.setSetting('hiring-pool-104',''); });
  await pg.click('#feedMore'); await pg.waitForTimeout(3000);
  const fed=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,notes:(r.notesRaw.match(/每日新名單，[^\n]*/)||[''])[0],head:r.notesRaw.split('\n')[0]})));
  const yi=fed.find(f=>f.company==='乙二機械股份有限公司');
