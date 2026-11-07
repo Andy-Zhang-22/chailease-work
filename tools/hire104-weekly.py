@@ -14,7 +14,8 @@
   直接 POST 仍留著當備援（哪天 Chrome 允許了就通）。
 
 同步檔：跟 tools/hiring-104.py 同一份（~/Library/CloudStorage/GoogleDrive-<帳號>/我的雲端硬碟/電話推廣名單-同步資料.json）。
-  寫 settings['hiring-pool-104'] = { v: JSON.stringify({ week, at, head, list: [{ key, name, src, count, row }], stats }), at }
+  寫 settings['hiring-pool-104'] = { v: JSON.stringify({ week, day, at, head, list: [{ key, name, src, count, week, row }], stats }), at }
+    池子跨週累積、不設上限（版本 411，使用者：「104 的名單不要有上限」「不能有重複，下週抓到同一筆就跳過」）：舊的照留，每週只加池子裡沒有的統編。
     key＝8 碼統編；row＝標準 15 欄的一列（下次聯絡日放 __DAY__，網站套用那天再換）；count＝104 上目前的職缺數。
     at 一定比舊的大。其他設定、records、logs、states、tombstones 不動；改檔前備份到 /tmp/hire104/。
   104 的內容只留職缺數；公司名稱、地址、資本額、設立年都用政府的稅籍登記，電話用 repo leads/ 的公開名單。不存 104 的電話、介紹。
@@ -55,7 +56,7 @@ POOL_KEY = 'hiring-pool-104'
 ORIGIN = 'https://www.104.com.tw'
 PORT = int(os.environ.get('HIRE104_PORT', '8765'))
 GAP_MS = 2000
-POOL_MAX = 600                         # 候選池最多幾家（版本 410 從 400 提到 600：Mac 只有假日開，池子要撐過兩週；太大同步檔會變肥）
+POOL_MAX = 0                           # 候選池上限；0＝不設（版本 411，使用者：「104 的名單不要有上限」）。400→600→不設
 CAP_FLOOR = 2000                       # 仟元；跟網站每日新名單的資本額門檻一樣（版本 362：200 萬），0＝不知道，不擋
 CAP_LO, CAP_HI = 3000, 60000           # 仟元；預設篩選 300～6,000 萬，排前面
 CITIES = ('臺北市', '新北市')
@@ -198,9 +199,10 @@ def pick(cands, city):
     return next(iter(uniq.values())) if len(uniq) == 1 else None
 
 
-def build_pool(crawl, fia_rows, phones, existing, buried, today):
-    """104 抓到的公司 → 候選池（list 已排好）＋統計。crawl：[{name, area, count}]；fia_rows：正規化名 → [稅籍列]。"""
-    stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0}
+def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozenset()):
+    """104 抓到的公司 → 這次新進候選池的（list 已排好）＋統計。crawl：[{name, area, count}]；fia_rows：正規化名 → [稅籍列]；
+    in_pool：池子裡已經有的統編（版本 411：池子跨週累積，同一家再抓到就跳過，舊的那筆照留）。"""
+    stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0, 'dup': 0}
     out, seen = [], set()
     for c in crawl:
         if int(c.get('count') or 0) <= 0: continue
@@ -213,6 +215,7 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today):
         if hit['tax'] in seen: continue
         seen.add(hit['tax'])
         stats['matched'] += 1
+        if hit['tax'] in in_pool: stats['dup'] += 1; continue
         bare = re.sub(r'\s', '', hit['name'])   # Python 3.9：f-string 裡不能有反斜線
         keys = {f"tax:{hit['tax']}", f'name:{bare}'}
         if keys & existing or keys & buried: stats['already'] += 1; continue
@@ -222,14 +225,14 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today):
         if not tel: stats['noPhone'] += 1; continue   # 每日新名單只進有電話的（版本 318）
         out.append({'hit': hit, 'count': int(c['count']), 'tel': tel, 'target': CAP_LO <= cap <= CAP_HI})
     out.sort(key=lambda x: (not x['target'], -x['count'], x['hit']['name']))
-    out = out[:POOL_MAX]
+    if POOL_MAX: out = out[:POOL_MAX]
     md = f'{today.month}/{today.day}'
     lst = []
     for x in out:
         h = x['hit']
         note = f"104 徵才中：{x['count']} 件（{md} 查）\n每日新名單，符合：104 徵才中"
         row = csv_row([h['name'], h['tax'], '', year_of(h['setup']), f"{h['cap']:,}" if h['cap'] else '', x['tel'], '', '', h['ind'], DAY, '', note, h['addr'], today.isoformat(), ''])
-        lst.append({'key': h['tax'], 'name': h['name'], 'src': '104 徵才中', 'count': x['count'], 'row': row})
+        lst.append({'key': h['tax'], 'name': h['name'], 'src': '104 徵才中', 'count': x['count'], 'week': week_of(today), 'row': row})
     stats['pool'] = len(lst)
     stats['target'] = sum(1 for x in out if x['target'])
     return lst, stats
@@ -436,15 +439,20 @@ def cmd_write(a):
         if nm: existing.add(f'name:{nm}')
     tombs = ((data.get('tombstones') or {}).get('companies') or {}) if isinstance(data.get('tombstones'), dict) else {}
     buried = {k for k, v in tombs.items() if not (isinstance(v, dict) and v.get('lifted'))}
-    lst, stats = build_pool(crawl, fia, phones, existing, buried, today)
+    # 池子跨週累積（版本 411）：舊的照留，這次只加池子裡沒有的；表頭不同（以後改欄位）才整個重來
+    old = h104.setting_json(data, POOL_KEY) or {}
+    old_list = [x for x in (old.get('list') or []) if isinstance(x, dict) and x.get('key') and x.get('row')] if old.get('head') == ','.join(HEAD) else []
+    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list))
     stats.update({'areas': res.get('areas'), 'pages': res.get('pages'), 'overflow': res.get('overflow'), 'stopped': res.get('stopped') or ''})
     if not lst:
-        print(f"抓了 {stats['crawled']} 家，可以進候選池的 0 家；同步檔不動。"); return 1
-    backup = save_setting(spath, data, POOL_KEY, {'week': week_of(today), 'day': today.isoformat(), 'head': ','.join(HEAD), 'list': lst, 'stats': stats})
+        print(f"抓了 {stats['crawled']} 家，可以新進候選池的 0 家（池子裡已有 {stats['dup']} 家）；同步檔不動。"); return 1
+    merged = old_list + lst
+    stats['total'] = len(merged)
+    backup = save_setting(spath, data, POOL_KEY, {'week': week_of(today), 'day': today.isoformat(), 'head': ','.join(HEAD), 'list': merged, 'stats': stats})
     stop = f"；中途停了：{stats['stopped']}" if stats['stopped'] else ''
     print(f"抓了 {stats['crawled']} 家（{stats['pages']} 頁，徵才中 {stats['hiring']}），對上統編 {stats['matched']}（同名不確定 {stats['ambiguous']}、查無 {stats['noTax']}）；"
-          f"已在名單或刪過 {stats['already']}、資本額未滿 200 萬 {stats['lowCap']}、沒電話 {stats['noPhone']}；進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}）{stop}。"
-          f"已寫回同步檔（備份在 {backup}）")
+          f"池子裡已有 {stats['dup']}、已在名單或刪過 {stats['already']}、資本額未滿 200 萬 {stats['lowCap']}、沒電話 {stats['noPhone']}；"
+          f"新進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}），池子共 {stats['total']} 家{stop}。已寫回同步檔（備份在 {backup}）")
     return 0
 
 
@@ -454,7 +462,9 @@ def cmd_status(a):
     if not pool:
         print('候選池：還沒有'); return 0
     s = pool.get('stats') or {}
-    print(f"候選池：{len(pool.get('list') or [])} 家（{pool.get('week')}，{pool.get('day')} 寫的；抓了 {s.get('crawled')} 家）")
+    import collections
+    wk = collections.Counter(x.get('week') or '（11/05 首批）' for x in (pool.get('list') or []))
+    print(f"候選池：{len(pool.get('list') or [])} 家（最近 {pool.get('week')}，{pool.get('day')} 寫的，那次抓了 {s.get('crawled')} 家、新進 {s.get('pool')} 家）；各週：{dict(sorted(wk.items()))}")
     return 0
 
 
