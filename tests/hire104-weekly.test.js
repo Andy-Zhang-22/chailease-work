@@ -72,7 +72,7 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   const r = await run(['--sync', path.join(fx.dir, 'sync.json'), 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
   assert.strictEqual(r.code, 0, r.out);
   assert.match(r.out, /抓了 10 家/);
-  assert.match(r.out, /進候選池 4 家（300～6,000 萬 3）/);
+  assert.match(r.out, /新進候選池 4 家（300～6,000 萬 3），池子共 4 家/);
   assert.doesNotMatch(r.out, /甲一|乙二|丙三/, '終端機不印公司名');
   const data = JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8'));
   assert.strictEqual(data.settings['feed-shares'].v, '1,1,2,1,1,1,1,1', '其他設定不動');
@@ -83,7 +83,8 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   assert.deepStrictEqual(pool.list.map((x) => x.key), ['88888888', '33333333', '11111111', '22222222'],
     '目標資本額先、職缺多的先；乙二（9 億）排最後；丙三用縣市挑到新北那家；辛八是外商分公司');
   const s = pool.stats;
-  assert.deepStrictEqual([s.hiring, s.noTax, s.ambiguous, s.already, s.lowCap, s.noPhone], [9, 1, 1, 1, 1, 1]);
+  assert.deepStrictEqual([s.hiring, s.noTax, s.ambiguous, s.already, s.lowCap, s.noPhone, s.dup], [9, 1, 1, 1, 1, 1, 0]);
+  assert.ok(pool.list.every((x) => /^\d{4}-W\d{2}$/.test(x.week)), '每筆記哪一週進來的');
   const head = pool.head.split(',');
   assert.strictEqual(head.length, 15);
   assert.strictEqual(head[0], '公司名稱');
@@ -94,6 +95,38 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   assert.match(jia[11], /^104 徵才中：2 件/);
   const xin = cells(pool.list.find((x) => x.key === '88888888').row);
   assert.strictEqual(xin[0], '英屬開曼群島商辛八有限公司臺灣分公司', '公司名稱用稅籍的登記名');
+});
+
+test('write 第二次：池子跨週累積、同一家跳過、不設上限（版本 411）', async () => {
+  const fx = fixture();
+  const syncP = path.join(fx.dir, 'sync.json');
+  const r1 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  assert.strictEqual(r1.code, 0, r1.out);
+  // 第二週：甲一、丙三又出現（職缺數變了）、乙二沒了、多一家新的（庚七的墓碑這週收回了就會進來）
+  const data1 = JSON.parse(fs.readFileSync(syncP, 'utf8'));
+  data1.tombstones.companies['tax:77777777'].lifted = true;
+  fs.writeFileSync(syncP, JSON.stringify(data1));
+  fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify({ at: Date.now(), areas: 41, areaDone: 41, pages: 2, overflow: 0, stopped: '', list: [
+    { name: '甲一精密有限公司', area: '新北市新莊區', count: 9 },
+    { name: '丙三工程有限公司', area: '新北市板橋區', count: 1 },
+    { name: '庚七有限公司', area: '新北市汐止區', count: 4 },
+  ] }));
+  const r2 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  assert.strictEqual(r2.code, 0, r2.out);
+  assert.match(r2.out, /池子裡已有 2/);
+  assert.match(r2.out, /新進候選池 1 家（300～6,000 萬 1），池子共 5 家/);
+  const pool = JSON.parse(JSON.parse(fs.readFileSync(syncP, 'utf8')).settings['hiring-pool-104'].v);
+  assert.deepStrictEqual(pool.list.map((x) => x.key), ['88888888', '33333333', '11111111', '22222222', '77777777'], '舊的照原順序留著，新的接在後面');
+  assert.strictEqual(pool.list.filter((x) => x.key === '11111111').length, 1, '同一家不重複');
+  assert.strictEqual(pool.list.find((x) => x.key === '11111111').count, 2, '舊的那筆照留（職缺數不更新）');
+  assert.strictEqual(pool.stats.dup, 2);
+  // 三家都已在池子裡 → 同步檔不動
+  fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify({ at: Date.now(), list: [{ name: '甲一精密有限公司', area: '新北市新莊區', count: 9 }] }));
+  const before = fs.readFileSync(syncP, 'utf8');
+  const r3 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  assert.strictEqual(r3.code, 1);
+  assert.match(r3.out, /可以新進候選池的 0 家（池子裡已有 1 家）/);
+  assert.strictEqual(fs.readFileSync(syncP, 'utf8'), before);
 });
 
 test('prepare：這週抓過就不抓；--force 照樣開接收器', async () => {
