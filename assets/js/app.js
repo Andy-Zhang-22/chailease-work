@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-412';
+  const APP_VERSION = '20261107-415';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1668,9 +1668,10 @@
    */
   const isMobileTel = (t) => /^09\d{8}$/.test(taxOnly(t));
   const dialOf = (p) => String((p && (p.dial || p.digits)) || '').split(',')[0];   // 拆出來的電話：dial 是數字（有分機接在逗號後）
-  async function publicPhonesOf(tax) {
+  async function publicPhonesOf(tax, { noLoad = false } = {}) {
     const out = [];
-    if (window.Trade && window.Trade.phoneOf) {
+    // noLoad（版本 414）：只對已經載在記憶體裡的名單，不去下載（詳細頁打開時用；貿易署電話表要另外載，跳過）
+    if (!noLoad && window.Trade && window.Trade.phoneOf) {
       const p = await window.Trade.phoneOf(tax).catch(() => null);
       if (p && p.tel) out.push({ tel: p.tel, kind: 'trade', name: '出進口廠商登記', issued: p.issued || '' });
     }
@@ -1683,12 +1684,12 @@
   }
   async function publicPhones(sourceName, opts = {}) {
     if (!window.Trade || !window.Trade.phoneOf) return { tried: 0, found: 0, mobiles: 0 };
-    await loadPhoneSources();
+    if (!opts.noLoad) await loadPhoneSources();
     const views = allViews().filter((v) => (!sourceName || v.source === sourceName) && !v.blocked && taxOnly(v.taxId).length === 8);
     let tried = 0; let found = 0; let mobiles = 0;
     for (const v of views) {
       if (v.phones.length && v.phones.some((p) => isMobileTel(dialOf(p)))) continue;
-      const got = await publicPhonesOf(v.taxId);
+      const got = await publicPhonesOf(v.taxId, { noLoad: !!opts.noLoad });
       const st = state.userStates.get(v.id) || {};
       if (!v.phones.length) {
         tried += 1;
@@ -3488,7 +3489,10 @@
     // 四個同時滿足的最前面（版本 377；使用者：「有手機、訊號多的且有買設備、規模符合的都先給我」）：
     // 規模符合＋有手機＋一年內有買設備（擔保 300 萬以上；半年到一年的要同業金主，跟 buyRank 同一條）＋明確訊號兩個以上（買設備那個也算一個）
     const top = (c) => Number(!!(c.capOk && c.mobile && buyRank(c) <= 1 && strongSignals(c) >= 2));
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    // 104 徵才中排第一層（版本 415；使用者 11/07：「有在徵才才是最低標的門檻」——還在請人才確定公司還在做生意）：
+    // 版本 413 原本排在四項都符合的後面。排序不是門檻（使用者定的），每頁保底一家、商行那份照舊，所以其他來源沒在 104 的還是會各有一家
+    const hire = (c) => Number([...c.signals].some((x) => /^104 徵才中/.test(x)));
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || hire(b) - hire(a) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -4158,7 +4162,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面，版本 415），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -5652,8 +5656,10 @@
     const body = $('#drawerBody');
     body.textContent = '';
     // 沒電話、有統編：打開詳細頁就從公開資料補（版本 409；補到會重畫，publicPhones 自己 reload＋render）
+    // 版本 414：只對已載好的名單（標案一開網站就載；其他頁打開過才有），不在這裡下載幾十 MB 的清冊——
+    // 手機上會卡，CI 的 test-registry-newrec 也因為主執行緒忙著解析清冊而晚套用商工登記。沒載到的隔天後台那一輪會補。
     if (!r.phones.length && !r.blocked && taxOnly(r.taxId).length === 8 && !(opts && opts.noPhoneFill)) {
-      publicPhones(r.source).then((got) => { if ((got.found || got.mobiles) && !$('#drawer').hidden) openDetail(id, { ...(opts || {}), noPhoneFill: true }); }).catch(() => {});
+      publicPhones(r.source, { noLoad: true }).then((got) => { if ((got.found || got.mobiles) && !$('#drawer').hidden) openDetail(id, { ...(opts || {}), noPhoneFill: true }); }).catch(() => {});
     }
 
     // 版本 316 拿掉拜訪準備、🤖 問 Claude、承作檢核（使用次數 0；有機會／無機會使用者要留）；「⋯」沒東西可收就一起拿掉
