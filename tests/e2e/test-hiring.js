@@ -1,6 +1,7 @@
 // 104 徵才（版本 387）：Mac 在使用者的 Chrome 查好的職缺數寫在同步檔設定 hiring-results，網站套用：有徵才的從候選池加進今天的名單、
 // 卡片標「104 徵才 N 件」、今天要打排前面；沒徵才的不加；同一家不重複加；一天最多 5 家
 // 版本 405：每週 104 徵才中候選池（hiring-pool-104）每天再補最多 3 家
+// 版本 419：104 徵才中是每日揉合的必要條件
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -91,6 +92,11 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
  const mb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='卯四科技有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
  chk(mb && mb.includes('104 徵才 2 件・財務主管'), `名單卡片標 104 徵才 2 件・財務主管：${JSON.stringify(mb)}`);
+ // 版本 419：104 徵才中是必要條件——每日揉合只從池子裡挑；丙三在標案有電話、有訊號，但不在 104 池子，不挑；商行那份不受限（這裡沒商行）
+ const df=await pg.evaluate(()=>window.dailyFeed({more:true,awaitPhones:false})); await pg.waitForTimeout(1200);
+ chk(df && df.picked>=1 && df.notHiring>=1 && Object.keys(df.bySrc||{}).every(k=>k==='104 徵才中'), `每日新名單只從 104 徵才中挑、不在 104 的（丙三）被濾掉：${JSON.stringify({picked:df&&df.picked,notHiring:df&&df.notHiring,bySrc:df&&df.bySrc})}`);
+ const names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
+ chk(!names.includes('丙三工程有限公司') && names.includes('寅三實業有限公司'), `丙三沒進名單、寅三（池子裡）進了：${names.join('|')}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();
