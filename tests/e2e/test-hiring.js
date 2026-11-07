@@ -45,7 +45,7 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  chk(bing.edit==='(0912)333444' && bing.from==='政府標案得標', `候選列沒電話的，從公開資料（標案）補上手機：${JSON.stringify(bing)}`);
  const r2=await pg.evaluate(()=>window.applyHiring());
  chk(r2.added===0, `再套一次不會重複加：${JSON.stringify(r2)}`);
- // 版本 405：每週 104 徵才中候選池（hiring-pool-104）：每天補最多 3 家、照池子的順序；已加過、0 件、刪過的不加；同一天再套不會再加
+ // 版本 410：每週 104 徵才中候選池（hiring-pool-104）改當第九個來源：合併頁列得到、每日揉合算進去；applyHiring 不再每天補 3 家（版本 405～409）
  await pg.evaluate(async({head,rows})=>{
    await window.Store.addTombstone('companies','tax:30000005',{company:'戊五被刪有限公司',taxId:'30000005'});
    await window.Store.setSetting('hiring-pool-104', JSON.stringify({week:'2026-W44',day:'2026-10-26',at:Date.now(),head,list:[
@@ -58,14 +58,28 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
      {key:'30000006',name:'辰六精機有限公司',src:'104 徵才中',count:2,row:rows[6]}]}));
  },{head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('子一電子有限公司','30000001','02-2666-7777'),row('丑二工業有限公司','30000002','02-2888-9999'),
    row('戊五被刪有限公司','30000005','02-2555-0000'),row('寅三實業有限公司','30000003','02-2444-5555'),row('卯四科技有限公司','30000004','02-2777-8888'),row('辰六精機有限公司','30000006','02-2111-2222')]});
- const r3=await pg.evaluate(()=>window.applyHiring()); await pg.waitForTimeout(800);
- chk(r3.added===3 && /^每日新名單-2026-10-27-104-2\.csv$/.test(r3.name), `每週池補 3 家、另一批來源名：${JSON.stringify(r3)}`);
- const wk=await pg.evaluate(()=>[...document.querySelectorAll('#cards .card')].map(c=>({name:c.querySelector('.card-name').textContent.trim(),badges:[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim())})));
- const has=(n)=>wk.find(r=>r.name===n);
- chk(has('子一電子有限公司') && has('子一電子有限公司').badges.includes('104 徵才 7 件') && has('寅三實業有限公司') && has('卯四科技有限公司'), `照池子順序加子一、寅三、卯四，標 104 徵才 N 件：${JSON.stringify(wk.filter(r=>/子一|寅三|卯四/.test(r.name)))}`);
- chk(!has('丑二工業有限公司') && !has('戊五被刪有限公司') && !has('辰六精機有限公司') && wk.filter(r=>r.name==='甲一精密有限公司').length===1, `0 件、刪過、超過 3 家的不加，甲一不重複：${JSON.stringify(wk.map(r=>r.name))}`);
- const r4=await pg.evaluate(()=>window.applyHiring());
- chk(r4.added===0, `同一天再套，每週池不會再加：${JSON.stringify(r4)}`);
+ await pg.evaluate(()=>localStorage.setItem('leads-filters-open','1'));   // 合併頁的篩選攤開，籤才看得到
+ await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1500);   // 刪過的公司（墓碑）是開網站時讀的
+ const r3=await pg.evaluate(()=>window.applyHiring());
+ chk(r3.added===0, `applyHiring 不再從每週池加：${JSON.stringify(r3)}`);
+ const pv=await pg.evaluate(()=>window.mergedFeedPreview());
+ const pn=(n)=>pv.find(x=>x.name===n);
+ chk(pn('子一電子有限公司') && pn('子一電子有限公司').signals.includes('104 徵才中（7 件）') && pn('寅三實業有限公司') && pn('卯四科技有限公司') && pn('辰六精機有限公司'), `每週池的公司進每日揉合、帶訊號 104 徵才中（N 件）：${pv.map(x=>x.name+'('+x.signals.join('/')+')').join('、')}`);
+ chk(!pn('丑二工業有限公司') && !pn('戊五被刪有限公司') && !pn('甲一精密有限公司'), `0 件、刪過、已在名單的不列：${pv.map(x=>x.name).join('|')}`);
+ // 合併頁：來源籤「104 徵才中」、只看它、卡片那句
+ await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForSelector('#mix-fSrc .chip'); await pg.waitForTimeout(1000);
+ const chip=(await pg.locator('#mix-fSrc .chip:has-text("104 徵才中")').textContent().catch(()=>'')).replace(/\s+/g,' ');
+ chk(/104 徵才中\s*5/.test(chip), `合併頁來源籤「104 徵才中」5 家（連已在名單的甲一也列、標已在名單）：${chip}`);
+ await pg.locator('#mix-fSrc .chip:has-text("104 徵才中")').click(); await pg.waitForTimeout(500);
+ const mixCards=await pg.$$eval('#paneMix .card', a=>a.map(x=>x.textContent.replace(/\s+/g,' ')));
+ chk(mixCards.length===5 && mixCards.some(t=>/子一電子有限公司/.test(t) && /104 徵才中 7 件/.test(t)) && mixCards.some(t=>/甲一精密有限公司/.test(t) && /已在名單/.test(t)), `只看 104 徵才中 5 家、卡片寫職缺數、甲一標已在名單：${mixCards.length}`);
+ // 從合併頁加入：備註帶 104 徵才中、卡片標 104 徵才 N 件
+ await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#paneMix .card')].find(x=>x.textContent.includes('子一電子有限公司')); const b=c.querySelector('button.mix-add, .btn-primary'); if (b) b.click(); }); await pg.waitForTimeout(1500);
+ const zi=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='子一電子有限公司'); return r?{notes:r.notesRaw,source:r.source,phone:r.phoneRaw}:null; });
+ chk(zi && /^104 徵才中：7 件/.test(zi.notes) && /^104徵才中-/.test(zi.source) && zi.phone==='02-2666-7777', `合併頁加入：備註、來源、電話：${JSON.stringify(zi)}`);
+ await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
+ const zb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='子一電子有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
+ chk(zb && zb.includes('104 徵才 7 件'), `名單卡片從備註標 104 徵才 7 件：${JSON.stringify(zb)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();

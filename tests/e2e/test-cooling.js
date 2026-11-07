@@ -49,12 +49,12 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk(JSON.stringify(sp)==='[[10,5,5,0,2,3],[2,7,7,0,4,5],[5,4,4,4,4,4],[1,1,1,1,1,1]]', `照比例分、不夠的讓給有比例的、比例 0 最後補位：${JSON.stringify(sp)}`);
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .share-input'); await pg.waitForTimeout(200);
  const shares=pg.locator('#editorBody .share-input');
- chk((await shares.count())===8 && /空白＝預設商行 2、出進口 2、產業名單 0、其他 1（3、3、5、5、3、3、3、0）/.test(await pg.textContent('#editorBody .share-hint')), `八格比例、空白＝預設商行 2 其他 1（版本 355）：${await pg.textContent('#editorBody .share-hint')}`);
- for (const [i,val] of [[0,'10'],[1,'5'],[2,'5'],[3,'0'],[4,'2'],[5,'3'],[6,'0'],[7,'0']]) { await shares.nth(i).fill(val); await shares.nth(i).dispatchEvent('change'); }
+ chk((await shares.count())===9 && /空白＝預設商行 2、出進口 2、產業名單 0、其他 1（3、3、5、5、3、2、2、0、2）/.test(await pg.textContent('#editorBody .share-hint')), `九格比例（版本 410 加 104 徵才中）、空白＝預設商行 2 其他 1（版本 355）：${await pg.textContent('#editorBody .share-hint')}`);
+ for (const [i,val] of [[0,'10'],[1,'5'],[2,'5'],[3,'0'],[4,'2'],[5,'3'],[6,'0'],[7,'0'],[8,'0']]) { await shares.nth(i).fill(val); await shares.nth(i).dispatchEvent('change'); }
  await pg.waitForTimeout(200);
- chk(/加起來 25，25 家照比例分：10、5、5、0、2、3、0、0/.test(await pg.textContent('#editorBody .share-hint')) && (await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='10,5,5,0,2,3,0,0', `填了比例會存、提示算給你看：${await pg.textContent('#editorBody .share-hint')}`);
+ chk(/加起來 25，25 家照比例分：10、5、5、0、2、3、0、0、0/.test(await pg.textContent('#editorBody .share-hint')) && (await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='10,5,5,0,2,3,0,0,0', `填了比例會存、提示算給你看：${await pg.textContent('#editorBody .share-hint')}`);
  await shares.nth(0).fill(''); await shares.nth(0).dispatchEvent('change'); await pg.waitForTimeout(100);
- chk((await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='0,5,5,0,2,3,0,0', '一格空白當 0');
+ chk((await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='0,5,5,0,2,3,0,0,0', '一格空白當 0');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
