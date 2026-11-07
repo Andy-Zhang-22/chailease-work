@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261106-409';
+  const APP_VERSION = '20261107-410';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1066,7 +1066,7 @@
       chance: (mine && mine.chance) || '',
       chanceAt: (mine && mine.chanceAt) || 0,
       intel: (mine && mine.intel) || null,   // 後台用網路查到的擴張訊號（版本 322）
-      hiring: (mine && mine.hiring) || null,   // 104 徵才（版本 387：Mac 在使用者的 Chrome 查的，{ count, at }）
+      hiring: (mine && mine.hiring) || hiringFromNotes(record),   // 104 徵才（版本 387：Mac 查的 { count, at }；版本 410：每週池揉進來的從備註讀）
       regStatus: (mine && mine.regStatus) || '',   // 商工登記的登記現況（版本 323）
       edited: !!edits,
       group: groupMap().get(record.id) || '',
@@ -2792,6 +2792,8 @@
    * 禁止推廣的不算；7 天內本來就排了下次聯絡日的也不算（已經在行程上了）。
    */
   const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
+  /** 備註裡的「104 徵才中：N 件」「104 徵才中（N 件）」→ { count }（版本 410：每週池經每日新名單或合併頁加進來的，沒有 Mac 寫的狀態） */
+  const hiringFromNotes = (rec) => { const m = /104 徵才中[：（]\s*(\d+) 件/.exec(String((rec && rec.notesRaw) || '')); return m ? { count: Number(m[1]), at: 0, fromNotes: true } : null; };
   const OPP_ORDER = ['renew', 'fresh'];
   /** 標案的決標日（Pcc.lookup 的 ym：y／m／d）→ 'YYYY-MM-DD'、'2026/10/27'；元 → '4,932 萬' */
   const awardIso = (a) => (a && a.ym && a.ym.d ? `${a.ym.y}-${String(a.ym.m).padStart(2, '0')}-${String(a.ym.d).padStart(2, '0')}` : '');
@@ -3381,18 +3383,19 @@
   const capitalOk = (capital) => !capital || Number(capital) >= CAP_FLOOR;
   const HUNT_LOOKUPS = 20;   // 第四關 Claude 找電話一天最多幾家（版本 352；一家約 US$0.09）
   /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
-  /** 八個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
+  /** 九個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
   // 沒設的預設（版本 355 使用者：「商行企業社的比例拉高可以」）：商行 2、其他 1（15 家裡商行約 3 家，以前平分約 2 家）
   // 版本 408（10 月成效覆盤，使用者：「照你說的做」）：出進口廠商接通 83% 最高拉到 2；產業名單 38% 最低降到 0（每頁保底一家照舊）
-  const DEFAULT_SHARES = [1, 1, 2, 2, 1, 1, 1, 0];
+  const DEFAULT_SHARES = [1, 1, 2, 2, 1, 1, 1, 0, 1];   // 第九個：104 徵才中（版本 410）
   function feedShares() {
     const raw = registryPref('feed-shares');
     if (!raw) return DEFAULT_SHARES.slice();
     const a = String(raw).split(',').map((x) => Math.max(0, Math.round(Number(x) || 0)));
     if (a.length === 6) a.push(a[4]);
     if (a.length === 7) a.push(a[6]);
-    return a.length === 8 && a.some((x) => x > 0) ? a : null;
+    if (a.length === 8) a.push(1);   // 版本 410 加了 104 徵才中：之前存的八個照用，第九個先算 1
+    return a.length === 9 && a.some((x) => x > 0) ? a : null;
   }
   /**
    * 照比例分：先依比例算每頁該拿幾家（最大餘數法），哪一頁不夠的，缺的讓有比例的其他頁輪流補；比例 0 的頁最後才補位。
@@ -3520,6 +3523,8 @@
     { key: 'pc', tab: 'pcc', label: '政府標案得標', mod: () => window.Pcc },
     // 產業名單（使用者：「這些資料都做，同個統編的公司依資料都合在一起」）：車輛相關業者、食品工廠、環保列管工廠、營造業
     { key: 'in', tab: 'industry', label: '產業名單', mod: () => window.Industry },
+    // 104 徵才中（版本 410）：Mac 每週抓的候選池（同步檔設定 hiring-pool-104），沒有自己的分頁
+    { key: 'hi', tab: '', label: '104 徵才中', mod: () => window.Hire104 },
     // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
     { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
   ];
@@ -3555,7 +3560,7 @@
   /** 六份名單的更新頻率與資料到哪（合併頁底下那一行） */
   window.mixSourceStatus = async () => {
     const want = { leads: '登記清冊', chattel: '動產擔保', biz: '商行／企業社', trade: '出進口廠商', nhi: '剛開始請人', einv: '剛開電子發票', factory: '新設工廠', industry: '產業名單', pcc: '政府標案得標' };
-    return Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
+    const rows = await Promise.all(DATA_SOURCES.filter((s) => want[s.key]).map(async (src) => {
       try {
         const res = await fetch(`${src.url}?t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -3563,6 +3568,9 @@
         return { key: src.key, label: want[src.key], every: src.every, at: String(src.at(j) || '').slice(0, 10), extra: src.extra(j) };
       } catch (err) { return { key: src.key, label: want[src.key], every: src.every, at: '', extra: '', err: err.message }; }
     }));
+    // 104 徵才中（版本 410）：不在 repo，看同步檔裡池子的日期與家數
+    if (window.Hire104) { try { await window.Hire104.ensureData(); const p = window.Hire104.poolInfo(); rows.push({ key: 'hi', label: '104 徵才中', every: '每週（Mac 假日抓）', at: p.at ? isoOfMs(p.at) : '', extra: p.at ? `${p.n} 家` : '', err: p.at ? '' : '還沒抓' }); } catch (e) { /* 沒有池子 */ } }
+    return rows;
   };
   /*
    * 分頁之間互通（使用者：「分頁各自的資訊都能互通」）：
@@ -3629,10 +3637,9 @@
    *
    * 每週的 104 徵才中候選池（版本 405；使用者 11/05：「照建議做」）：Mac 每週一在 Chrome 抓 104「找公司」臺北＋新北的徵才中公司，
    * 用稅籍登記補統編、地址、資本額，用公開名單補電話，寫進設定 hiring-pool-104（tools/hire104-weekly.py）。每天先加上面那條的，
-   * 再從這裡補最多 HIRING_WEEKLY_MAX 家（Mac 排好的順序：資本額 300～6,000 萬先、職缺多的先），一樣標「104 徵才 N 件」。不另開分頁。
+   * 版本 405～409 在這裡每天補最多 3 家；版本 410 起改當第九個來源（assets/js/hire104.js）跟其他八份一起揉進每日新名單、合併頁也列，這裡不再加。
    */
   const HIRING_MAX = 5;
-  const HIRING_WEEKLY_MAX = 3;
   const HIRING_DAY = '__DAY__';   // 候選列裡「下次聯絡日」的占位，套用那天才知道排哪天
   const settingJson = async (key) => { try { const all = (await window.Store.getMeta('settings')) || {}; const e = all[key]; return e && e.v ? JSON.parse(e.v) : null; } catch (e) { return null; } };
   async function hiringCandidates(n) {
@@ -3669,7 +3676,6 @@
     if (hiringBusy || !state.records.length) return { added: 0 };
     const results = await settingJson('hiring-results');
     const pool = await settingJson('hiring-candidates');
-    const weekly = await settingJson('hiring-pool-104');
     const applied = (await settingJson('hiring-applied')) || {};
     const existing = new Set(state.records.flatMap((r) => window.Normalize.companyKeys({ company: r.company, taxId: r.taxId })));
     const keysOf = (c) => window.Normalize.companyKeys({ company: c.name, taxId: /^\d{8}$/.test(c.key) ? c.key : '' });
@@ -3687,21 +3693,7 @@
         .forEach((x) => { const c = byKey.get(x.key); todo.push({ key: x.key, name: c.name, row: c.row, count: Number(x.count), at: Number(x.at) }); });
       if (todo.length) head = pool.head;
     }
-    // 二、每週 104 徵才中候選池（版本 405）：表頭要一樣才能接在同一份 CSV；刪過的公司不加
-    if (weekly && Array.isArray(weekly.list) && weekly.head && (!head || head === weekly.head)) {
-      let tombs = {};
-      try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
-      const buried = (c) => keysOf(c).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
-      const taken = new Set(todo.map((x) => x.key));
-      // 一天最多 HIRING_WEEKLY_MAX 家：applyHiring 每次同步都會叫，數今天已經從這份加過幾家。
-      // 從這份加的記成「日期w」（版本 406）：同一家也在清晨候選池、早上被那條加過的（記成日期）不算這份的額度
-      const room = Math.max(0, HIRING_WEEKLY_MAX - Object.values(applied).filter((d) => d === `${todayISO()}w`).length);
-      const more = weekly.list
-        .filter((c) => c && c.key && c.row && Number(c.count) > 0 && !applied[c.key] && !taken.has(c.key) && !listed(c) && !buried(c))
-        .slice(0, room);
-      more.forEach((c) => todo.push({ key: c.key, name: c.name, row: c.row, count: Number(c.count), at: Number(weekly.at), weekly: true }));
-      if (more.length) head = weekly.head;
-    }
+    // 每週 104 徵才中候選池（版本 405～407 在這裡每天補 3 家）：版本 410 起改當第九個來源，跟其他八份一起揉進每日新名單、合併頁也列，這裡不再加
     if (!todo.length) return { added: 0 };
     hiringBusy = true;
     try {
@@ -3723,7 +3715,7 @@
         const hit = todo.find((x) => keysOf(x).some((k) => mine.includes(k)));
         if (hit) { try { await saveState(v.id, { hiring: { count: Number(hit.count), at: Number(hit.at) || now } }); } catch (e) { console.error('存 104 徵才', e); } }
       }
-      todo.forEach((x) => { applied[x.key] = x.weekly ? `${today}w` : today; });
+      todo.forEach((x) => { applied[x.key] = today; });
       await window.Store.setSetting('hiring-applied', JSON.stringify(applied));
       await reload(); render(); scheduleSync();
       const got = state.records.filter((r) => r.source === name).length;
@@ -3734,9 +3726,9 @@
   window.applyHiring = applyHiring;
 
   window.mergedFeedPreview = async () => {   // 測試用：揉合後的排名
-    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry, window.Pcc];
+    const mods = [window.Chattel, window.Leads, window.Trade, window.Nhi, window.Einv, window.Factory, window.Industry, window.Pcc, window.Hire104];
     const lists = await Promise.all(mods.map((m) => m.dailyCandidates().catch(() => [])));
-    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in', 'pc'];
+    const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in', 'pc', 'hi'];
     await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
       .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4, buy: buyRank(c), strong: strongSignals(c) }));
@@ -3784,7 +3776,7 @@
       const have = allViews().filter((v) => isFreshLead(v) && v.nextDate === today).length;
       const need = more ? Math.max(1, newQuota()) : newQuota() - have;
       if (need <= 0) { registryPref('daily-feed-on', today); if (force) toast(`今天的 ${newQuota()} 家新名單已經排滿`); return { picked: 0, full: true, have, quota: newQuota(), day }; }
-      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll, pcAll] = await Promise.all([
+      const [chAll, leAll, bzAll, trAll, nhAll, eiAll, faAll, inAll, pcAll, hiAll] = await Promise.all([
         window.Chattel.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Leads.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Biz.dailyCandidates().catch((e) => { console.error(e); return []; }),
@@ -3794,6 +3786,7 @@
         window.Factory.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Industry.dailyCandidates().catch((e) => { console.error(e); return []; }),
         window.Pcc.dailyCandidates().catch((e) => { console.error(e); return []; }),
+        window.Hire104 ? window.Hire104.dailyCandidates().catch((e) => { console.error(e); return []; }) : [],
       ]);
       /*
        * 挑之前先把匯入時會被擋下來的剔掉，不然挑了 10 家只進來 8 家（使用者：「新名單匯入的數字不到 10 間」）：
@@ -3818,6 +3811,8 @@
         { key: 'fa', label: '新設工廠', mod: window.Factory, list: faAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'in', label: '產業名單', mod: window.Industry, list: inAll.filter((r) => notBuried(r.name, r.taxId)) },
         { key: 'pc', label: '政府標案得標', mod: window.Pcc, list: pcAll.filter((r) => notBuried(r.name, r.taxId)) },
+        // 104 徵才中（版本 410）：Mac 每週抓的候選池，跟其他八份一起揉、一樣保底一家；排最後＝同一家也在別份的話用那一份的資料匯入
+        { key: 'hi', label: '104 徵才中', mod: window.Hire104, list: hiAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
       let merged = mergeFeed(SRC).filter((c) => capitalOk(c.capital));   // 資本額門檻（版本 362）
       const mergedKeys = new Set(merged.map((c) => c.key));
@@ -3940,7 +3935,7 @@
       }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
-      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in')], need, feedShares());
+      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in'), per('hi')], need, feedShares());
       let bizTake = Math.min(bz.length, take[2]);
       const mixTake = Math.min(merged.length, need - bizTake);
       bizTake = Math.min(bz.length, need - mixTake);
@@ -4139,7 +4134,7 @@
       ]));
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
-        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單'];
+        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '104 徵才中'];
         const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 2、出進口 2、產業名單 0、其他 1；版本 355、408）
         const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
         const hint = el('span', { className: 'muted share-hint' });
@@ -4152,7 +4147,7 @@
         inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
         refresh();
         host.append(el('div', { className: 'card-actions cap-row share-row' }, [
-          el('span', { className: 'muted', textContent: '新名單八個來源的比例：' }),
+          el('span', { className: 'muted', textContent: '新名單九個來源的比例：' }),
           ...names.flatMap((n, i) => [el('span', { className: 'muted share-name', textContent: n }), inputs[i]]),
           hint,
         ]));
@@ -8797,7 +8792,7 @@ export default {
     factory: { input: '#factory-q', placeholder: '搜尋新設工廠：名稱、統編、地址、行業、主要產品、電話' },
     industry: { input: '#industry-q', placeholder: '搜尋產業名單：名稱、統編、地址、類別、行業、電話' },
     pcc: { input: '#pcc-q', placeholder: '搜尋政府標案得標：名稱、統編、地址、標案名稱、招標機關、電話' },
-    mix: { input: '#mix-q', placeholder: '搜尋新名單（八份合併）：名稱、統編、地址、電話、訊號' },
+    mix: { input: '#mix-q', placeholder: '搜尋新名單（九份合併）：名稱、統編、地址、電話、訊號' },
   };
   /** 切分頁時把頂端搜尋欄對齊那一頁：字、提示文字、能不能打 */
   function syncSearchBox() {

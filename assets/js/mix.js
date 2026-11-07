@@ -191,7 +191,7 @@
   async function reload() {
     seenVersion = global.srcHiddenVersion || 0;
     $('#mix-loading').hidden = false;
-    $('#mix-loading').textContent = '七份名單合併中…（第一次要下載各份資料，會久一點）';
+    $('#mix-loading').textContent = '九份名單合併中…（第一次要下載各份資料，會久一點）';
     try {
       const got = typeof global.mixCandidates === 'function' ? await global.mixCandidates() : [];
       items = got.map((it) => { const d = digest(it); return { ...it, d, blob: [it.name, d.taxId, d.address, d.tel, ...it.signals, ...it.facts.map((x) => `${x.label} ${x.info || ''}`)].join(' ').toLowerCase() }; });
