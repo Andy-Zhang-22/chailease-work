@@ -54,7 +54,7 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
      {key:'30000002',name:'丑二工業有限公司',src:'104 徵才中',count:0,row:rows[2]},
      {key:'30000005',name:'戊五被刪有限公司',src:'104 徵才中',count:9,row:rows[3]},
      {key:'30000003',name:'寅三實業有限公司',src:'104 徵才中',count:4,row:rows[4]},
-     {key:'30000004',name:'卯四科技有限公司',src:'104 徵才中',count:2,row:rows[5]},
+     {key:'30000004',name:'卯四科技有限公司',src:'104 徵才中',count:2,fin:'財務經理',row:rows[5]},   // 版本 417：徵財務主管的
      {key:'30000006',name:'辰六精機有限公司',src:'104 徵才中',count:2,row:rows[6]}]}));
  },{head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('子一電子有限公司','30000001','02-2666-7777'),row('丑二工業有限公司','30000002','02-2888-9999'),
    row('戊五被刪有限公司','30000005','02-2555-0000'),row('寅三實業有限公司','30000003','02-2444-5555'),row('卯四科技有限公司','30000004','02-2777-8888'),row('辰六精機有限公司','30000006','02-2111-2222')]});
@@ -66,6 +66,8 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  const pn=(n)=>pv.find(x=>x.name===n);
  chk(pn('子一電子有限公司') && pn('子一電子有限公司').signals.includes('104 徵才中（7 件）') && pn('寅三實業有限公司') && pn('卯四科技有限公司') && pn('辰六精機有限公司'), `每週池的公司進每日揉合、帶訊號 104 徵才中（N 件）：${pv.map(x=>x.name+'('+x.signals.join('/')+')').join('、')}`);
  chk(!pn('丑二工業有限公司') && !pn('戊五被刪有限公司') && !pn('甲一精密有限公司'), `0 件、刪過、已在名單的不列：${pv.map(x=>x.name).join('|')}`);
+ // 版本 417：徵財務主管的排最前（卯四只有 2 件，仍在 7 件的子一前面）、多一個訊號
+ chk(pv[0] && pv[0].name==='卯四科技有限公司' && pv[0].signals.includes('104 徵財務主管（財務經理）'), `徵財務主管的排最前、帶訊號：${pv.map(x=>x.name).join('|')}／${pv[0]&&pv[0].signals.join('、')}`);
  // 合併頁：來源籤「104 徵才中」、只看它、卡片那句
  await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForSelector('#mix-fSrc .chip'); await pg.waitForTimeout(1000);
  const chip=(await pg.locator('#mix-fSrc .chip:has-text("104 徵才中")').textContent().catch(()=>'')).replace(/\s+/g,' ');
@@ -73,6 +75,7 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await pg.locator('#mix-fSrc .chip:has-text("104 徵才中")').click(); await pg.waitForTimeout(500);
  const mixCards=await pg.$$eval('#paneMix .card', a=>a.map(x=>x.textContent.replace(/\s+/g,' ')));
  chk(mixCards.length===5 && mixCards.some(t=>/子一電子有限公司/.test(t) && /104 徵才中 7 件/.test(t)) && mixCards.some(t=>/甲一精密有限公司/.test(t) && /已在名單/.test(t)), `只看 104 徵才中 5 家、卡片寫職缺數、甲一標已在名單：${mixCards.length}`);
+ chk(mixCards.some(t=>/卯四科技有限公司/.test(t) && /徵財務主管：財務經理/.test(t)), '合併頁卡片寫徵財務主管的職稱');
  // 從合併頁加入：備註帶 104 徵才中、卡片標 104 徵才 N 件
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#paneMix .card')].find(x=>x.textContent.includes('子一電子有限公司')); const b=c.querySelector('button.mix-add, .btn-primary'); if (b) b.click(); }); await pg.waitForTimeout(1500);
  const zi=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='子一電子有限公司'); return r?{notes:r.notesRaw,source:r.source,phone:r.phoneRaw}:null; });
@@ -80,6 +83,14 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
  const zb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='子一電子有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
  chk(zb && zb.includes('104 徵才 7 件'), `名單卡片從備註標 104 徵才 7 件：${JSON.stringify(zb)}`);
+ // 版本 417：加徵財務主管的那家，備註多一行、卡片標「・財務主管」
+ await pg.evaluate(()=>window.switchTab('mix')); await pg.waitForTimeout(800);
+ await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#paneMix .card')].find(x=>x.textContent.includes('卯四科技有限公司')); const b=c.querySelector('button.mix-add, .btn-primary'); if (b) b.click(); }); await pg.waitForTimeout(1500);
+ const mao=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='卯四科技有限公司'); return r?r.notesRaw:null; });
+ chk(mao && /^104 徵才中：2 件[^\n]*\n徵財務主管：財務經理/.test(mao), `備註帶徵財務主管：${JSON.stringify(mao)}`);
+ await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
+ const mb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='卯四科技有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
+ chk(mb && mb.includes('104 徵才 2 件・財務主管'), `名單卡片標 104 徵才 2 件・財務主管：${JSON.stringify(mb)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();

@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-416';
+  const APP_VERSION = '20261107-417';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2794,7 +2794,7 @@
    */
   const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
   /** 備註裡的「104 徵才中：N 件」「104 徵才中（N 件）」→ { count }（版本 410：每週池經每日新名單或合併頁加進來的，沒有 Mac 寫的狀態） */
-  const hiringFromNotes = (rec) => { const m = /104 徵才中[：（]\s*(\d+) 件/.exec(String((rec && rec.notesRaw) || '')); return m ? { count: Number(m[1]), at: 0, fromNotes: true } : null; };
+  const hiringFromNotes = (rec) => { const t = String((rec && rec.notesRaw) || ''); const m = /104 徵才中[：（]\s*(\d+) 件/.exec(t); const f = /徵財務主管[：（]([^\n；）]+)/.exec(t); return m ? { count: Number(m[1]), at: 0, fromNotes: true, fin: f ? f[1].trim() : '' } : null; };
   const OPP_ORDER = ['renew', 'fresh'];
   /** 標案的決標日（Pcc.lookup 的 ym：y／m／d）→ 'YYYY-MM-DD'、'2026/10/27'；元 → '4,932 萬' */
   const awardIso = (a) => (a && a.ym && a.ym.d ? `${a.ym.y}-${String(a.ym.m).padStart(2, '0')}-${String(a.ym.d).padStart(2, '0')}` : '');
@@ -3492,7 +3492,9 @@
     // 104 徵才中排第一層（版本 415；使用者 11/07：「有在徵才才是最低標的門檻」——還在請人才確定公司還在做生意）：
     // 版本 413 原本排在四項都符合的後面。排序不是門檻（使用者定的），每頁保底一家、商行那份照舊，所以其他來源沒在 104 的還是會各有一家
     const hire = (c) => Number([...c.signals].some((x) => /^104 徵才中/.test(x)));
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || hire(b) - hire(a) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
+    // 徵財務主管的再排最前（版本 417；使用者：「徵才中有徵財務主管的優先挑給我打」）
+    const fin = (c) => Number([...c.signals].some((x) => /^104 徵財務主管/.test(x)));
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || fin(b) - fin(a) || hire(b) - hire(a) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
       || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
     return out;
   }
@@ -4162,7 +4164,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面，版本 415），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面、其中徵財務主管的更前，版本 415、417），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -4857,7 +4859,7 @@
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.intel && r.intel.expansion ? el('span', { className: 'badge badge-intel', textContent: '🌐 網路有擴張訊號', title: r.intel.summary }) : '',
-      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件`, title: `104 上目前有 ${r.hiring.count} 個職缺（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
+      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件${r.hiring.fin ? '・財務主管' : ''}`, title: `104 上目前有 ${r.hiring.count} 個職缺${r.hiring.fin ? `，含${r.hiring.fin}` : ''}（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));

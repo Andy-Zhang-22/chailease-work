@@ -97,6 +97,35 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   assert.strictEqual(xin[0], '英屬開曼群島商辛八有限公司臺灣分公司', '公司名稱用稅籍的登記名');
 });
 
+test('write：徵財務主管的排最前、備註多一行、只在職缺搜尋出現的也收；池子原有的補上（版本 417）', async () => {
+  const fx = fixture();
+  const res = JSON.parse(fs.readFileSync(path.join(fx.work, 'result.json'), 'utf8'));
+  res.list = res.list.filter((x) => ['甲一精密有限公司', '丙三工程有限公司'].includes(x.name));
+  res.fin = [{ name: '丙三工程有限公司', area: '新北市板橋區', title: '財務經理' }, { name: '乙二科技股份有限公司(乙二)', area: '台北市中山區', title: '財務長' }];   // 乙二只在職缺搜尋出現
+  fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify(res));
+  let r = await run(['--sync', path.join(fx.dir, 'sync.json'), 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.match(r.out, /徵財務主管：職缺搜尋 2 家，新進池子的 2 家、池子裡原有的補上 0 家/);
+  assert.doesNotMatch(r.out, /丙三|乙二|財務經理/, '終端機不印公司名、職稱');
+  let pool = JSON.parse(JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8')).settings['hiring-pool-104'].v);
+  assert.deepStrictEqual(pool.list.map((x) => [x.key, x.fin || '', x.count]), [['33333333', '財務經理', 5], ['22222222', '財務長', 1], ['11111111', '', 2]],
+    '徵財務主管的排最前（丙三目標資本額、乙二 9 億只在職缺搜尋出現 count 算 1），甲一沒徵的在後');
+  const cells = (row) => { const out = []; let cur = '', q = false; for (const ch of row) { if (q) { if (ch === '"') q = false; else cur += ch; } else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; };
+  assert.match(cells(pool.list[0].row)[11], /^104 徵才中：5 件（[^）]*查）\n徵財務主管：財務經理\n每日新名單，符合：104 徵才中$/);
+  assert.doesNotMatch(cells(pool.list[2].row)[11], /徵財務主管/);
+  // 下週：甲一這次在職缺搜尋出現 → 池子裡原有的那筆補上職稱、備註加一行；沒新公司也要寫回
+  res.list = []; res.fin = [{ name: '甲一精密有限公司', area: '新北市新莊區', title: '財務部主管' }];
+  fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify(res));
+  r = await run(['--sync', path.join(fx.dir, 'sync.json'), 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.match(r.out, /池子裡原有的補上 1 家/);
+  pool = JSON.parse(JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8')).settings['hiring-pool-104'].v);
+  const jia = pool.list.find((x) => x.key === '11111111');
+  assert.strictEqual(jia.fin, '財務部主管');
+  assert.match(cells(jia.row)[11], /^104 徵才中：2 件（[^）]*查）\n徵財務主管：財務部主管\n每日新名單，符合：104 徵才中$/);
+  assert.strictEqual(pool.list.length, 3, '沒有新公司，池子家數不變');
+});
+
 test('write 第二次：池子跨週累積、同一家跳過、不設上限（版本 411）', async () => {
   const fx = fixture();
   const syncP = path.join(fx.dir, 'sync.json');
