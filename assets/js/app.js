@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-411';
+  const APP_VERSION = '20261107-412';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5054,7 +5054,9 @@
     return '';
   }
   function funnelStats(views) {
-    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
+    // 約到拜訪（版本 412；使用者：「新名單跟既有的主力名單約訪率有差嗎」）：這家有任何一則勾了約到拜訪的紀錄就算
+    const met = new Set(state.logs.filter((l) => l.meeting).map((l) => l.recordId));
+    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0, meetings: 0 });
     const byOrigin = new Map(FUNNEL_ORIGINS.map((k) => [k, blank()]));
     const byRule = new Map();   // 「動產擔保｜成立 5 年內」→ 統計
     const bySignal = new Map();   // 「本期增資」→ 統計（不分來源）
@@ -5066,6 +5068,7 @@
       if (v.outcome === 'contacted') t.reached += 1;
       if (v.chance === 'yes') t.chance += 1;
       if (v.blocked) t.blocked += 1;
+      if (met.has(v.id)) t.meetings += 1;
     };
     views.forEach((v) => {
       const o = freshOrigin(v);
@@ -8601,7 +8604,9 @@ export default {
     const views = allViews();
     const f = window.funnelStats(views);
     const month = (iso) => String(iso || '').slice(0, 7);
-    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0 });
+    const blank = () => ({ n: 0, called: 0, reached: 0, chance: 0, blocked: 0, meetings: 0 });
+    const met = new Set(state.logs.filter((l) => l.meeting).map((l) => l.recordId));
+    const isFresh = (v) => /^每日新名單/.test(String(v.source || ''));
     const logsByMonth = {};
     state.logs.forEach((l) => {
       const m = month(l.date); if (!m) return;
@@ -8617,12 +8622,32 @@ export default {
       if (v.outcome === 'contacted') t.reached += 1;
       if (v.chance === 'yes') t.chance += 1;
       if (v.blocked) t.blocked += 1;
+      if (met.has(v.id)) t.meetings += 1;
+    });
+    // 每日新名單 vs 其他名單（版本 412）：整份的家數、打過、接通、約到拜訪；約訪再按紀錄的月份分兩邊
+    const byList = { fresh: blank(), main: blank() };
+    views.forEach((v) => {
+      const t = isFresh(v) ? byList.fresh : byList.main;
+      t.n += 1;
+      if (v.blocked || (v.outcome && v.outcome !== 'new')) t.called += 1;
+      if (v.outcome === 'contacted') t.reached += 1;
+      if (v.chance === 'yes') t.chance += 1;
+      if (v.blocked) t.blocked += 1;
+      if (met.has(v.id)) t.meetings += 1;
+    });
+    const srcOf = new Map(views.map((v) => [v.id, isFresh(v) ? 'fresh' : 'main']));
+    const meetByMonth = {};
+    state.logs.forEach((l) => {
+      if (!l.meeting) return;
+      const m = month(l.date); if (!m) return;
+      const t = meetByMonth[m] || (meetByMonth[m] = { fresh: 0, main: 0 });
+      t[srcOf.get(l.recordId) || 'main'] += 1;
     });
     const recent = (o) => Object.fromEntries(Object.keys(o).sort().slice(-6).map((k) => [k, o[k]]));
     return {
       generatedAt: new Date().toISOString(), version: APP_VERSION, device: deviceLabel(),
       customers: views.length, settings: { mainCap: mainCap(), newQuota: newQuota() },
-      funnel: f, freshByMonth: recent(freshByMonth), logsByMonth: recent(logsByMonth),
+      funnel: f, freshByMonth: recent(freshByMonth), logsByMonth: recent(logsByMonth), byList, meetByMonth: recent(meetByMonth),
       usage: Object.fromEntries(Object.entries(usageLoad()).map(([m, o]) => [m, Object.fromEntries(Object.entries(o).filter(([k]) => usageKeyOk(k)))])),
     };
   }

@@ -45,6 +45,8 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  chk(s.length===1 && /^電話推廣名單-摘要-[^-]+-(App|瀏覽器)-[a-z0-9]+\.json$/.test(s[0].name), `同步後寫摘要檔：${s.map(x=>x.name).join('、')}`);
  const o=s[0]&&s[0].obj||{};
  chk(o.customers===1 && o.funnel && o.funnel.byOrigin && o.logsByMonth && o.usage && o.settings && typeof o.settings.mainCap==='number', `摘要內容：${Object.keys(o).join('、')}`);
+ // 版本 412：每日新名單 vs 其他名單的約訪（byList、meetByMonth），各來源也多 meetings
+ chk(o.byList && o.byList.fresh && o.byList.main && typeof o.byList.main.meetings==='number' && o.byList.fresh.n+o.byList.main.n===1 && o.meetByMonth && typeof o.meetByMonth==='object' && Object.values(o.funnel.byOrigin).every(x=>typeof x.meetings==='number'), `摘要分兩邊算約訪：${JSON.stringify(o.byList)} ${JSON.stringify(o.meetByMonth)}`);
  const txt=JSON.stringify(o);
  chk(!/甲範例|中正路|2222/.test(txt) && txt.length<20000, `摘要裡沒有公司名稱、地址、電話，而且很小（${txt.length} 字）`);
  await pg.click('#btnSync'); await pg.waitForTimeout(1200);
