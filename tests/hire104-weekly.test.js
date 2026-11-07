@@ -170,6 +170,7 @@ test('prepare：這週抓過就不抓；--force 照樣開接收器', async () =>
   const js = fs.readFileSync(path.join(fx.work, 'snippet.js'), 'utf8');
   assert.match(js, /sw=2/);
   assert.match(js, /recv\.html/);
+  assert.match(js, /重試 2 次仍失敗/, '連線錯誤要重試（版本 418）');
   assert.match(js, /開始抓 104 徵才中/);
   assert.match(js, new RegExp(`127\\.0\\.0\\.1:${PORT}`));
   const pid = Number(fs.readFileSync(path.join(fx.work, 'receiver.pid'), 'utf8'));
