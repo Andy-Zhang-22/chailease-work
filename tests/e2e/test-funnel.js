@@ -31,8 +31,8 @@ const RECS=[
  },RECS);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1000);
  const f=await pg.evaluate(()=>window.funnelStats());
- chk(JSON.stringify(f.byOrigin['動產擔保'])===JSON.stringify({n:4,called:4,reached:2,chance:1,blocked:1}), `動產擔保：${JSON.stringify(f.byOrigin['動產擔保'])}`);
- chk(JSON.stringify(f.byOrigin['登記清冊'])===JSON.stringify({n:2,called:1,reached:1,chance:1,blocked:0}), `登記清冊：${JSON.stringify(f.byOrigin['登記清冊'])}`);
+ chk(JSON.stringify(f.byOrigin['動產擔保'])===JSON.stringify({n:4,called:4,reached:2,chance:1,blocked:1,meetings:0}), `動產擔保：${JSON.stringify(f.byOrigin['動產擔保'])}`);
+ chk(JSON.stringify(f.byOrigin['登記清冊'])===JSON.stringify({n:2,called:1,reached:1,chance:1,blocked:0,meetings:0}), `登記清冊：${JSON.stringify(f.byOrigin['登記清冊'])}`);
  chk(f.byOrigin['商行／企業社'].n===1 && f.byOrigin['商行／企業社'].called===0, `商行：${JSON.stringify(f.byOrigin['商行／企業社'])}`);
  chk(f.byRule['動產擔保｜成立 5 年內'].n===3 && f.byRule['動產擔保｜成立 5 年內'].called===3 && f.byRule['登記清冊｜增資'].chance===1, `依條件：${JSON.stringify(f.byRule)}`);
  // 訊號成效：不分來源、同時有幾個訊號（使用者：「都做」）
