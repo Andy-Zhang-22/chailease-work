@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-413';
+  const APP_VERSION = '20261107-414';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -1668,9 +1668,10 @@
    */
   const isMobileTel = (t) => /^09\d{8}$/.test(taxOnly(t));
   const dialOf = (p) => String((p && (p.dial || p.digits)) || '').split(',')[0];   // 拆出來的電話：dial 是數字（有分機接在逗號後）
-  async function publicPhonesOf(tax) {
+  async function publicPhonesOf(tax, { noLoad = false } = {}) {
     const out = [];
-    if (window.Trade && window.Trade.phoneOf) {
+    // noLoad（版本 414）：只對已經載在記憶體裡的名單，不去下載（詳細頁打開時用；貿易署電話表要另外載，跳過）
+    if (!noLoad && window.Trade && window.Trade.phoneOf) {
       const p = await window.Trade.phoneOf(tax).catch(() => null);
       if (p && p.tel) out.push({ tel: p.tel, kind: 'trade', name: '出進口廠商登記', issued: p.issued || '' });
     }
@@ -1683,12 +1684,12 @@
   }
   async function publicPhones(sourceName, opts = {}) {
     if (!window.Trade || !window.Trade.phoneOf) return { tried: 0, found: 0, mobiles: 0 };
-    await loadPhoneSources();
+    if (!opts.noLoad) await loadPhoneSources();
     const views = allViews().filter((v) => (!sourceName || v.source === sourceName) && !v.blocked && taxOnly(v.taxId).length === 8);
     let tried = 0; let found = 0; let mobiles = 0;
     for (const v of views) {
       if (v.phones.length && v.phones.some((p) => isMobileTel(dialOf(p)))) continue;
-      const got = await publicPhonesOf(v.taxId);
+      const got = await publicPhonesOf(v.taxId, { noLoad: !!opts.noLoad });
       const st = state.userStates.get(v.id) || {};
       if (!v.phones.length) {
         tried += 1;
@@ -5655,8 +5656,10 @@
     const body = $('#drawerBody');
     body.textContent = '';
     // 沒電話、有統編：打開詳細頁就從公開資料補（版本 409；補到會重畫，publicPhones 自己 reload＋render）
+    // 版本 414：只對已載好的名單（標案一開網站就載；其他頁打開過才有），不在這裡下載幾十 MB 的清冊——
+    // 手機上會卡，CI 的 test-registry-newrec 也因為主執行緒忙著解析清冊而晚套用商工登記。沒載到的隔天後台那一輪會補。
     if (!r.phones.length && !r.blocked && taxOnly(r.taxId).length === 8 && !(opts && opts.noPhoneFill)) {
-      publicPhones(r.source).then((got) => { if ((got.found || got.mobiles) && !$('#drawer').hidden) openDetail(id, { ...(opts || {}), noPhoneFill: true }); }).catch(() => {});
+      publicPhones(r.source, { noLoad: true }).then((got) => { if ((got.found || got.mobiles) && !$('#drawer').hidden) openDetail(id, { ...(opts || {}), noPhoneFill: true }); }).catch(() => {});
     }
 
     // 版本 316 拿掉拜訪準備、🤖 問 Claude、承作檢核（使用次數 0；有機會／無機會使用者要留）；「⋯」沒東西可收就一起拿掉
