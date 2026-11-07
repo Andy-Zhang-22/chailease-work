@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-415';
+  const APP_VERSION = '20261107-416';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3530,7 +3530,7 @@
     // 104 徵才中（版本 410）：Mac 每週抓的候選池（同步檔設定 hiring-pool-104），沒有自己的分頁
     { key: 'hi', tab: '', label: '104 徵才中', mod: () => window.Hire104 },
     // 商行最後一個：同一家也在別份名單的話，加入名單走那一份的流程（訪談內容寫得比較多）
-    { key: 'bz', tab: 'biz', label: '商行／企業社', mod: () => window.Biz },
+    { key: 'bz', tab: '', label: '商行／企業社', mod: () => window.Biz },   // 版本 416：商行頁收掉，「🔗 也在」只顯示字不跳頁
   ];
   window.MIX_SOURCES = MIX_SOURCES.map(({ key, tab, label }) => ({ key, tab, label }));
   /**
@@ -3624,7 +3624,7 @@
     const hits = MIX_SOURCES.filter((x) => x.tab !== selfTab && x.mod() && x.mod().factsOf).map((x) => ({ x, f: x.mod().factsOf(k) })).filter((h) => h.f);
     if (!hits.length) return '';
     const box = el('p', { className: 'cross-line' }, [document.createTextNode('🔗 也在：')]);
-    hits.forEach(({ x, f }, i) => box.append(i ? '・' : '', el('button', { className: 'link-btn cross-src', type: 'button', textContent: x.label, onclick: (e) => { e.stopPropagation(); switchTab(x.tab); } }), document.createTextNode(f.info ? `（${f.info}）` : '')));
+    hits.forEach(({ x, f }, i) => box.append(i ? '・' : '', x.tab ? el('button', { className: 'link-btn cross-src', type: 'button', textContent: x.label, onclick: (e) => { e.stopPropagation(); switchTab(x.tab); } }) : el('span', { className: 'cross-src', textContent: x.label }), document.createTextNode(f.info ? `（${f.info}）` : '')));
     return box;
   };
   /*
@@ -9094,7 +9094,7 @@ export default {
    */
   const SOURCE_TABS = ['mix', 'leads', 'chattel', 'biz', 'trade', 'nhi', 'factory', 'industry', 'pcc', 'listed'];
   // 版本 327：第二排只剩合併、商行、上市櫃三個按鈕；其他六頁沒有按鈕（?tab= 與測試還開得到），「找名單」只記得這三個
-  const SHOWN_SOURCE_TABS = ['mix', 'biz', 'listed'];
+  const SHOWN_SOURCE_TABS = ['mix', 'listed'];   // 商行那頁版本 416 收掉（找名單只剩合併頁、上市櫃；商行在合併頁裡）
   function switchTab(tab) {
     if (tab === 'sources') { let last = ''; try { last = localStorage.getItem('sources-last') || ''; } catch (e) { last = ''; } tab = SHOWN_SOURCE_TABS.includes(last) ? last : 'mix'; }
     if (!(tab === 'all' || tab === 'cal' || tab === 'rules' || SOURCE_TABS.includes(tab))) return;

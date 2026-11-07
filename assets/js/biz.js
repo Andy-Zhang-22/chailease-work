@@ -563,7 +563,8 @@
    */
   function dailyFacts(r) {
     const d = r.monthly ? r : r.dyn || null;
-    const sig = !d ? [] : d.kind === '設立' ? ['剛設立商行'] : reasonKind(d.reason || '') === 'up' ? ['本期增資'] : [];
+    // 版本 416：商行頁收掉，「本月變更」改成合併頁的訊號「本期變更（案由）」；增資照舊另一顆
+    const sig = !d ? [] : d.kind === '設立' ? ['剛設立商行'] : reasonKind(d.reason || '') === 'up' ? ['本期增資'] : d.reason ? [`本期變更（${d.reason}）`] : ['本期變更'];
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals: sig,
       ageRank: global.Rules && global.Rules.ageRank ? global.Rules.ageRank(r.years) : 3, capOk: r.capital >= 3000000 && r.capital <= 60000000,
       phone: hasPhone(r) || !!(foundOf(r) && foundOf(r).tel), branchRank: branchRank(r), industry: (r.inds || []).join('、'), mobile: phoneKindsOf(r).has('M') };

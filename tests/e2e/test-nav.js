@@ -19,17 +19,18 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  // 按找名單：第二排只剩全部（合併）、商行／企業社、上市櫃（版本 327），預設開合併頁
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(400);
  const subs=await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(await pg.locator('#subtabs').isVisible() && subs.length===3 && subs[0].startsWith('全部（合併）') && subs[1].startsWith('商行／企業社') && subs[2].startsWith('上市櫃') && !subs.some(t=>/電子發票/.test(t)), `第二排全部＋七份＋上市櫃：${subs.join(' | ')}`);
+ chk(await pg.locator('#subtabs').isVisible() && subs.length===2 && subs[0].startsWith('全部（合併）') && subs[1].startsWith('上市櫃') && !subs.some(t=>/電子發票/.test(t)), `第二排全部＋七份＋上市櫃：${subs.join(' | ')}`);
  chk(await pg.locator('.tab[data-tab="sources"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#subtabs .subtab[data-tab="mix"]').evaluate(e=>e.classList.contains('is-active')) && await pg.locator('#paneMix').isVisible(), '找名單預設開合併頁');
- await pg.click('#subtabs .subtab[data-tab="biz"]'); await pg.waitForTimeout(300);
- chk(await pg.locator('#paneBiz').isVisible() && await pg.locator('#paneMix').isHidden() && await pg.locator('#subtabs .subtab[data-tab="biz"]').evaluate(e=>e.classList.contains('is-active')), '商行在同一排');
+ // 版本 416：商行那頁收掉（商行在合併頁裡），第二排只剩合併頁、上市櫃
+ await pg.click('#subtabs .subtab[data-tab="listed"]'); await pg.waitForTimeout(300);
+ chk(await pg.locator('#paneListed').isVisible() && await pg.locator('#paneMix').isHidden() && await pg.locator('#subtabs .subtab[data-tab="listed"]').evaluate(e=>e.classList.contains('is-active')), '上市櫃在同一排');
  // 出進口廠商沒有按鈕了，程式切過去還能開（?tab=、測試用）：pane 換、搜尋欄提示換，但「找名單」不記它
  await pg.evaluate(()=>window.switchTab('trade')); await pg.waitForTimeout(400);
- chk(await pg.locator('#paneTrade').isVisible() && await pg.locator('#paneBiz').isHidden() && /出進口廠商/.test(await pg.getAttribute('#search','placeholder')) && (await pg.$$eval('#subtabs .subtab.is-active',a=>a.length))===0, '切到出進口廠商：沒有按鈕亮');
+ chk(await pg.locator('#paneTrade').isVisible() && await pg.locator('#paneListed').isHidden() && /出進口廠商/.test(await pg.getAttribute('#search','placeholder')) && (await pg.$$eval('#subtabs .subtab.is-active',a=>a.length))===0, '切到出進口廠商：沒有按鈕亮');
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  chk(await pg.locator('#subtabs').isHidden() && await pg.locator('#paneList').isVisible(), '回重點推廣名單：第二排收起來');
  await pg.click('.tab[data-tab="sources"]'); await pg.waitForTimeout(300);
- chk(await pg.locator('#paneBiz').isVisible(), '再按找名單回到上次按的商行（沒按鈕的頁不記）');
+ chk(await pg.locator('#paneListed').isVisible(), '再按找名單回到上次按的上市櫃（沒按鈕的頁不記）');
  // 規則從右上選單（進階）；統計那頁拿掉了
  await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('#menu [data-act="rules"]'); await pg.waitForTimeout(400);
  chk(await pg.locator('#paneRules').isVisible() && await pg.locator('#subtabs').isHidden() && (await pg.$$eval('#tabs .tab.is-active',a=>a.length))===0, '選單進規則：分頁列不亮、第二排收起來');
