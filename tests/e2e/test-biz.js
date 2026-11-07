@@ -30,7 +30,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.goto('http://localhost:9488/index.html'); await pg.waitForSelector('#dropzone'); await pg.click('#importer .drawer-close');
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); localStorage.setItem('registry-auto','0'); localStorage.setItem('daily-feed-auto','0'); localStorage.setItem('auto-rebalance','0'); },[mk('1','樹德醫療器材行','91214059')]);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(500);
- chk(await pg.locator('.subtab[data-tab=\"biz\"]').count()===1, '找名單底下有「商行／企業社」');
+ chk(await pg.locator('.subtab[data-tab=\"biz\"]').count()===0, '找名單底下沒有「商行／企業社」按鈕（版本 416 收進合併頁；程式還切得過去）');
  await pg.evaluate(()=>window.switchTab('biz')); await pg.waitForSelector('#biz-cards .card'); await pg.waitForTimeout(400);
  const sub=await pg.textContent('#biz-sub');
  chk(/新北市的商行、企業社 3 家（獨資 2、合夥 1）/.test(sub) && /50 萬 以上/.test(sub) && /查到負責人的 2 家/.test(sub), `副標：${sub}`);
