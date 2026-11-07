@@ -52,12 +52,14 @@
     if (taxId.length !== 8) return null;
     const note = col('訪談內容');
     const m = /104 徵才中：(\d+) 件（([^）]*)查）/.exec(note);
+    const fm = /徵財務主管：([^\n；]+)/.exec(note);
     const year = Number(col('成立')) || 0;
     const r = {
       key: taxId, taxId, name: String(c.name || col('公司名稱')).trim(), tel: col('電話'), address: col('地址'), industry: col('產業別'),
       capital: (Number(col('資本額').replace(/\D/g, '')) || 0) * 1000,   // 仟元 → 元
       foundedYear: year, years: year ? new Date().getFullYear() - year : null,
       count: Number(c.count) || (m ? Number(m[1]) : 0), checked: m ? m[2].trim() : '',
+      fin: String(c.fin || (fm ? fm[1] : '')).trim(),   // 徵財務主管的職稱（版本 417）
     };
     r.branch = branchOf(r.address);
     return r;
@@ -90,8 +92,8 @@
   const deletedOf = (r) => (typeof global.deletedCompany === 'function' ? global.deletedCompany(r.name, r.taxId) : false);
   const isHid = (r) => (typeof global.srcHidden === 'function' ? global.srcHidden(r.taxId) : false);
   // 優先順序（是順序不是門檻）：104 徵才中（都有）→ 資本額 300～6,000 萬 → 有電話 → 我的分公司（遠近）→ 成立 2～7 年；全一樣職缺多的先
-  const DAILY_PRIORITY = ['104 徵才中', '資本額 300～6,000 萬', '有電話', '我的分公司', '成立 2～7 年'];
-  const dailyChecks = (r) => [true, capRank(r), !!r.tel, branchRank(r), ageRankOf(r)];
+  const DAILY_PRIORITY = ['104 徵才中', '徵財務主管', '資本額 300～6,000 萬', '有電話', '我的分公司', '成立 2～7 年'];
+  const dailyChecks = (r) => [true, !r.fin, capRank(r), !!r.tel, branchRank(r), ageRankOf(r)];   // !r.fin：有徵財務主管的 false 排前面（數字越小越前）
   function dailyCompare(a, b) {
     for (let i = 0; i < a._checks.length; i++) {
       const x = a._checks[i]; const y = b._checks[i];
@@ -102,7 +104,7 @@
     return b.count - a.count || b.capital - a.capital;
   }
   const whyOf = (r) => {
-    const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : r._checks[i])).map((x) => (x === '104 徵才中' ? `104 徵才中（${r.count} 件）` : x));
+    const hit = DAILY_PRIORITY.filter((_, i) => (typeof r._checks[i] === 'number' ? r._checks[i] === 0 : i === 1 ? !!r.fin : r._checks[i])).map((x) => (x === '104 徵才中' ? `104 徵才中（${r.count} 件）` : x === '徵財務主管' ? `徵財務主管（${r.fin}）` : x));
     const rk = r._checks[DAILY_PRIORITY.indexOf('我的分公司')];
     const relax = rk > 0 && rk < 9 ? `分公司放寬到 ${r.branch.key}` : '';
     return [`符合：${hit.join('、')}`, relax].filter(Boolean).join('；');
@@ -115,16 +117,16 @@
       .sort(dailyCompare);
   }
   function dailyFacts(r) {
-    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
+    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`, ...(r.fin ? [`104 徵財務主管（${r.fin}）`] : [])], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
   }
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}`, ym: '', add: () => addToList([r]) };
+      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.fin ? `，徵財務主管：${r.fin}` : ''}`, ym: '', add: () => addToList([r]) };
   }
   const factsOf = (taxId) => { const r = lookup(taxId); return r ? cardFacts(r) : null; };
 
   /* ---------------- 加入客戶名單 ---------------- */
-  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}`;
+  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.fin ? `\n徵財務主管：${r.fin}` : ''}`;
   function toStandardCsv(list, dates) {
     const today = todayIso();
     const lines = [HEAD.join(','), ...list.map((r, i) => [r.name, r.taxId, '', r.foundedYear || '', thousands(r.capital), r.tel, '', '', r.industry, (dates && dates[i]) || '', '',

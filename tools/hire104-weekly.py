@@ -70,8 +70,13 @@ JS = r"""(() => {
   const GAP = __GAP__, MAXP = 100, URL_ = __URL__, TOKEN = __TOKEN__;
   const RECV_ORIGIN = new URL(URL_).origin, RECV_PAGE = URL_ + 'recv.html';
   const seen = new Map();
-  const st = window.__hire104 = { started: 0, areas: 0, areaDone: 0, pages: 0, overflow: 0, stopped: '', finished: false, sent: false, sendError: '', resendAt: null };
-  st.poll = () => JSON.stringify({ started: !!st.started, areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError, resendAt: st.resendAt });
+  // 徵財務主管（版本 417；使用者：「徵才中有徵財務主管的優先挑給我打」）：職缺搜尋這幾個關鍵字，職稱是主管級、工作地臺北／新北的，記公司名＋職稱。
+  // 關鍵字與職稱規則跟「104 徵財務主管名單」那份作法一樣。只記職稱，不記薪資、內容。
+  const FIN_KW = ['財務長', 'CFO', '財務總監', '財務副總', '財務主管', '財會主管', '財務經理', '財務副理', '財務協理'];
+  const FIN_RE = /財務長|財務總監|財務副總|CFO|Chief Financial|Finance Director|Head of Finance|Finance Manager|財(務|會)[^專助員師]{0,6}(主管|經理|副理|襄理|主任|處長|協理)/;
+  const fin = new Map();
+  const st = window.__hire104 = { started: 0, areas: 0, areaDone: 0, pages: 0, overflow: 0, finPages: 0, stopped: '', finished: false, sent: false, sendError: '', resendAt: null };
+  st.poll = () => JSON.stringify({ started: !!st.started, areas: st.areas, areaDone: st.areaDone, pages: st.pages, companies: seen.size, fin: fin.size, finPages: st.finPages, overflow: st.overflow, stopped: st.stopped, finished: st.finished, sent: st.sent, sendError: st.sendError, resendAt: st.resendAt });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let win = null;
   const fromRecv = (pred, ms) => new Promise((res) => {
@@ -97,7 +102,7 @@ JS = r"""(() => {
     try { return JSON.parse(t); } catch (e) { throw new Error(/captcha|驗證/i.test(t) ? '驗證碼' : `不是 JSON（HTTP ${res.status}）`); }
   };
   const send = async () => {
-    const body = JSON.stringify({ at: Date.now(), areas: st.areas, areaDone: st.areaDone, pages: st.pages, overflow: st.overflow, stopped: st.stopped, list: [...seen.values()] });
+    const body = JSON.stringify({ at: Date.now(), areas: st.areas, areaDone: st.areaDone, pages: st.pages, overflow: st.overflow, stopped: st.stopped, list: [...seen.values()], fin: [...fin.values()] });
     st.sendError = '';
     if (win && !win.closed) {
       const reply = fromRecv((d) => 'ok' in d, 60000);
@@ -135,6 +140,26 @@ JS = r"""(() => {
           if (!rows.length) break;
         }
         st.areaDone += 1;
+      }
+      // 徵財務主管：每個關鍵字最多 30 頁，連續 2 頁沒命中就換下一個；一頁一次、間隔照舊
+      for (const kw of FIN_KW) {
+        let miss = 0;
+        for (let p = 1; p <= 30; p++) {
+          await sleep(GAP);
+          const j = await get(`/jobs/search/api/jobs?jobsource=index_s&keyword=${encodeURIComponent(kw)}&mode=s&order=1&page=${p}&pagesize=20`);
+          const rows = Array.isArray(j && j.data) ? j.data : [];
+          st.finPages += 1;
+          if (!rows.length) break;
+          let hit = 0;
+          rows.forEach((x) => {
+            const title = String((x && x.jobName) || ''); const addr = String((x && x.jobAddrNoDesc) || ''); const n = String((x && x.custName) || '');
+            if (!n || !FIN_RE.test(title) || !/^(臺北市|台北市|新北市)/.test(addr)) return;
+            hit += 1;
+            if (!fin.has(n)) fin.set(n, { name: n, area: addr.slice(0, 6), title });
+          });
+          miss = hit ? 0 : miss + 1;
+          if (miss >= 2) break;
+        }
       }
     } catch (e) { st.stopped = (e && e.message) || String(e); }
     await send();
@@ -199,10 +224,27 @@ def pick(cands, city):
     return next(iter(uniq.values())) if len(uniq) == 1 else None
 
 
-def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozenset()):
+def fin_map(fin):
+    """徵財務主管的公司（網頁抓的 [{name, area, title}]）→ 正規化名 → 職稱（含去外商分公司後綴的名字）"""
+    m = {}
+    for x in fin or []:
+        n = norm(x.get('name')); t = str(x.get('title') or '').strip()
+        if not n or not t: continue
+        m.setdefault(n, t); m.setdefault(strip_branch(n), t)
+    return m
+
+
+def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozenset(), fin=None):
     """104 抓到的公司 → 這次新進候選池的（list 已排好）＋統計。crawl：[{name, area, count}]；fia_rows：正規化名 → [稅籍列]；
-    in_pool：池子裡已經有的統編（版本 411：池子跨週累積，同一家再抓到就跳過，舊的那筆照留）。"""
-    stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0, 'dup': 0}
+    in_pool：池子裡已經有的統編（版本 411：池子跨週累積，同一家再抓到就跳過，舊的那筆照留）；
+    fin：徵財務主管的公司（版本 417）：排最前面、備註多一行「徵財務主管：職稱」、list 多 fin；只在職缺搜尋出現、找公司沒抓到的也收（count 算 1）。"""
+    fm = fin_map(fin)
+    crawl = list(crawl)
+    have = {norm(c.get('name')) for c in crawl}
+    for x in fin or []:
+        n = norm(x.get('name'))
+        if n and n not in have: have.add(n); crawl.append({'name': x.get('name'), 'area': x.get('area') or '', 'count': 1})
+    stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0, 'dup': 0, 'fin': 0}
     out, seen = [], set()
     for c in crawl:
         if int(c.get('count') or 0) <= 0: continue
@@ -223,22 +265,46 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
         if cap and cap < CAP_FLOOR: stats['lowCap'] += 1; continue
         tel = phones.get(hit['tax'], '')
         if not tel: stats['noPhone'] += 1; continue   # 每日新名單只進有電話的（版本 318）
-        out.append({'hit': hit, 'count': int(c['count']), 'tel': tel, 'target': CAP_LO <= cap <= CAP_HI})
-    out.sort(key=lambda x: (not x['target'], -x['count'], x['hit']['name']))
+        title = fm.get(n) or fm.get(strip_branch(n)) or ''
+        out.append({'hit': hit, 'count': int(c['count']), 'tel': tel, 'target': CAP_LO <= cap <= CAP_HI, 'fin': title})
+    out.sort(key=lambda x: (not x['fin'], not x['target'], -x['count'], x['hit']['name']))
     if POOL_MAX: out = out[:POOL_MAX]
     md = f'{today.month}/{today.day}'
     lst = []
     for x in out:
         h = x['hit']
-        note = f"104 徵才中：{x['count']} 件（{md} 查）\n每日新名單，符合：104 徵才中"
+        note = f"104 徵才中：{x['count']} 件（{md} 查）" + (f"\n徵財務主管：{x['fin']}" if x['fin'] else '') + "\n每日新名單，符合：104 徵才中"
         row = csv_row([h['name'], h['tax'], '', year_of(h['setup']), f"{h['cap']:,}" if h['cap'] else '', x['tel'], '', '', h['ind'], DAY, '', note, h['addr'], today.isoformat(), ''])
-        lst.append({'key': h['tax'], 'name': h['name'], 'src': '104 徵才中', 'count': x['count'], 'week': week_of(today), 'row': row})
+        e = {'key': h['tax'], 'name': h['name'], 'src': '104 徵才中', 'count': x['count'], 'week': week_of(today), 'row': row}
+        if x['fin']: e['fin'] = x['fin']; stats['fin'] += 1
+        lst.append(e)
     stats['pool'] = len(lst)
     stats['target'] = sum(1 for x in out if x['target'])
     return lst, stats
 
 
 # ---------- 讀檔 ----------
+def apply_fin(entries, fin):
+    """池子裡已經有的（上週抓的）這次在職缺搜尋出現徵財務主管：補 fin、備註加一行（版本 417）。回補到幾家。"""
+    fm = fin_map(fin)
+    n = 0
+    for e in entries:
+        nm = norm(e.get('name'))
+        title = fm.get(nm) or fm.get(strip_branch(nm))
+        if not title or e.get('fin') == title: continue
+        e['fin'] = title
+        cells = next(csv.reader([e.get('row') or '']), [])
+        if len(cells) == len(HEAD):
+            note = cells[HEAD.index('訪談內容')]
+            note = re.sub(r'\n?徵財務主管：[^\n]*', '', note)
+            lines = note.split('\n')
+            lines.insert(1, f'徵財務主管：{title}')
+            cells[HEAD.index('訪談內容')] = '\n'.join(lines)
+            e['row'] = csv_row(cells)
+        n += 1
+    return n
+
+
 def read_fia(path, wanted):
     """稅籍檔只留名字在 wanted 裡的（含外商分公司去後綴）。回 正規化名 → [ {tax, name, hq, city, org, cap, setup, addr, ind} ]"""
     out = {}
@@ -421,7 +487,8 @@ def cmd_write(a):
         print('還沒收到 104 的結果（網頁那段沒跑完，或沒送回 Mac）；同步檔不動。'); return 1
     with open(path, encoding='utf-8') as f: res = json.load(f)
     crawl = res.get('list') or []
-    if not crawl:
+    fin = res.get('fin') or []
+    if not crawl and not fin:
         print(f"一家都沒抓到{('（' + res.get('stopped') + '）') if res.get('stopped') else ''}；同步檔不動。"); return 1
     today = datetime.date.today()
     wanted = set()
@@ -442,9 +509,14 @@ def cmd_write(a):
     # 池子跨週累積（版本 411）：舊的照留，這次只加池子裡沒有的；表頭不同（以後改欄位）才整個重來
     old = h104.setting_json(data, POOL_KEY) or {}
     old_list = [x for x in (old.get('list') or []) if isinstance(x, dict) and x.get('key') and x.get('row')] if old.get('head') == ','.join(HEAD) else []
-    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list))
+    for x in fin:
+        n = norm(x.get('name')); wanted.add(n); wanted.add(strip_branch(n))
+    fia = read_fia(ensure_fia(a.fia), wanted) if fin else fia
+    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list), fin=fin)
     stats.update({'areas': res.get('areas'), 'pages': res.get('pages'), 'overflow': res.get('overflow'), 'stopped': res.get('stopped') or ''})
-    if not lst:
+    stats['finOld'] = apply_fin(old_list, fin)
+    stats['finCrawl'] = len(fin)
+    if not lst and not stats['finOld']:
         print(f"抓了 {stats['crawled']} 家，可以新進候選池的 0 家（池子裡已有 {stats['dup']} 家）；同步檔不動。"); return 1
     merged = old_list + lst
     stats['total'] = len(merged)
@@ -452,7 +524,8 @@ def cmd_write(a):
     stop = f"；中途停了：{stats['stopped']}" if stats['stopped'] else ''
     print(f"抓了 {stats['crawled']} 家（{stats['pages']} 頁，徵才中 {stats['hiring']}），對上統編 {stats['matched']}（同名不確定 {stats['ambiguous']}、查無 {stats['noTax']}）；"
           f"池子裡已有 {stats['dup']}、已在名單或刪過 {stats['already']}、資本額未滿 200 萬 {stats['lowCap']}、沒電話 {stats['noPhone']}；"
-          f"新進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}），池子共 {stats['total']} 家{stop}。已寫回同步檔（備份在 {backup}）")
+          f"新進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}），池子共 {stats['total']} 家{stop}。"
+          f"徵財務主管：職缺搜尋 {stats['finCrawl']} 家，新進池子的 {stats['fin']} 家、池子裡原有的補上 {stats['finOld']} 家。已寫回同步檔（備份在 {backup}）")
     return 0
 
 
