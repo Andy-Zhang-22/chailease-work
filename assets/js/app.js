@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-419';
+  const APP_VERSION = '20261108-421';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3388,7 +3388,7 @@
    *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
   // 沒設的預設（版本 355 使用者：「商行企業社的比例拉高可以」）：商行 2、其他 1（15 家裡商行約 3 家，以前平分約 2 家）
   // 版本 408（10 月成效覆盤，使用者：「照你說的做」）：出進口廠商接通 83% 最高拉到 2；產業名單 38% 最低降到 0（每頁保底一家照舊）
-  const DEFAULT_SHARES = [1, 1, 2, 2, 1, 1, 1, 0, 1];   // 第九個：104 徵才中（版本 410）
+  const DEFAULT_SHARES = [1, 1, 3, 2, 1, 1, 1, 0, 1];   // 第九個：104 徵才中（版本 410）；商行 2→3（版本 421：38 家約到 6 家，是公司名單的兩倍多）
   function feedShares() {
     const raw = registryPref('feed-shares');
     if (!raw) return DEFAULT_SHARES.slice();
@@ -4150,14 +4150,14 @@
       // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
       {
         const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '104 徵才中'];
-        const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 2、出進口 2、產業名單 0、其他 1；版本 355、408）
+        const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 3、出進口 2、產業名單 0、其他 1；版本 355、408、421）
         const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
         const hint = el('span', { className: 'muted share-hint' });
         const refresh = () => {
           const vals = inputs.map((x) => Math.max(0, Math.round(Number(x.value) || 0)));
           const any = inputs.some((x) => x.value !== '') && vals.some((v) => v > 0);
           const preview = splitByShares(Array(names.length).fill(999), quota, any ? vals : DEFAULT_SHARES);
-          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝預設商行 2、出進口 2、產業名單 0、其他 1（${preview.join('、')}）`;
+          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝預設商行 3、出進口 2、產業名單 0、其他 1（${preview.join('、')}）`;
         };
         inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
         refresh();
@@ -4173,7 +4173,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 2、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面、其中徵財務主管的更前，版本 415、417），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 3、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面、其中徵財務主管的更前，版本 415、417），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -5043,7 +5043,7 @@
    * 看哪一條真的比較打得出東西。來源從檔名看，每日新名單的看訪談內容開頭（動保：／新公司清冊／商行／企業社）。
    * 成案系統裡沒有，「有機會」當代理指標。
    */
-  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '政府標案得標'];
+  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '政府標案得標', '104 徵才中'];
   function freshOrigin(v) {
     const src = String(v.source || '');
     if (/^動產擔保名單/.test(src)) return '動產擔保';
@@ -5055,6 +5055,7 @@
     if (/^新設工廠/.test(src)) return '新設工廠';
     if (/^產業名單/.test(src)) return '產業名單';
     if (/^政府標案得標/.test(src)) return '政府標案得標';
+    if (/^104徵才中/.test(src)) return '104 徵才中';   // 版本 420：合併頁加入的 104 池子（檔名 104徵才中-日期-N家）
     if (!/^每日新名單/.test(src)) return '';
     const n = String(v.notesRaw || '');
     if (/^動保：/.test(n)) return '動產擔保';
@@ -5066,6 +5067,7 @@
     if (/^工廠登記 /.test(n)) return '新設工廠';
     if (/^產業名單：/.test(n)) return '產業名單';
     if (/^政府標案得標 /.test(n)) return '政府標案得標';
+    if (/^104 徵才中/.test(n)) return '104 徵才中';   // 版本 420：每日新名單從 104 池子挑的，備註開頭「104 徵才中：N 件」
     return '';
   }
   function funnelStats(views) {
