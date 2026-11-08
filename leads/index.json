@@ -1,109 +1,5 @@
 {
  "periods": {
-  "11504": {
-   "generatedAt": "2026-09-25T02:25:12.158Z",
-   "period": "11504",
-   "files": [
-    {
-     "city": "宜蘭縣",
-     "type": "change",
-     "path": "11504/宜蘭縣-change.csv",
-     "rows": 120,
-     "capitalUp": 9
-    },
-    {
-     "city": "宜蘭縣",
-     "type": "setup",
-     "path": "11504/宜蘭縣-setup.csv",
-     "rows": 29,
-     "capitalUp": 0
-    },
-    {
-     "city": "桃園市",
-     "type": "change",
-     "path": "11504/桃園市-change.csv",
-     "rows": 1318,
-     "capitalUp": 157
-    },
-    {
-     "city": "桃園市",
-     "type": "setup",
-     "path": "11504/桃園市-setup.csv",
-     "rows": 340,
-     "capitalUp": 0
-    },
-    {
-     "city": "基隆市",
-     "type": "change",
-     "path": "11504/基隆市-change.csv",
-     "rows": 70,
-     "capitalUp": 10
-    },
-    {
-     "city": "基隆市",
-     "type": "setup",
-     "path": "11504/基隆市-setup.csv",
-     "rows": 19,
-     "capitalUp": 0
-    },
-    {
-     "city": "新北市",
-     "type": "change",
-     "path": "11504/新北市-change.csv",
-     "rows": 2399,
-     "capitalUp": 250
-    },
-    {
-     "city": "新北市",
-     "type": "setup",
-     "path": "11504/新北市-setup.csv",
-     "rows": 625,
-     "capitalUp": 0
-    },
-    {
-     "city": "新竹市",
-     "type": "change",
-     "path": "11504/新竹市-change.csv",
-     "rows": 227,
-     "capitalUp": 18
-    },
-    {
-     "city": "新竹市",
-     "type": "setup",
-     "path": "11504/新竹市-setup.csv",
-     "rows": 68,
-     "capitalUp": 0
-    },
-    {
-     "city": "新竹縣",
-     "type": "change",
-     "path": "11504/新竹縣-change.csv",
-     "rows": 321,
-     "capitalUp": 26
-    },
-    {
-     "city": "新竹縣",
-     "type": "setup",
-     "path": "11504/新竹縣-setup.csv",
-     "rows": 81,
-     "capitalUp": 0
-    },
-    {
-     "city": "臺北市",
-     "type": "change",
-     "path": "11504/臺北市-change.csv",
-     "rows": 3978,
-     "capitalUp": 238
-    },
-    {
-     "city": "臺北市",
-     "type": "setup",
-     "path": "11504/臺北市-setup.csv",
-     "rows": 516,
-     "capitalUp": 0
-    }
-   ]
-  },
   "11505": {
    "generatedAt": "2026-09-25T02:23:39.222Z",
    "period": "11505",
@@ -623,10 +519,114 @@
      "capitalUp": 0
     }
    ]
+  },
+  "11510": {
+   "generatedAt": "2026-11-08T06:43:49.017Z",
+   "period": "11510",
+   "files": [
+    {
+     "city": "宜蘭縣",
+     "type": "change",
+     "path": "11510/宜蘭縣-change.csv",
+     "rows": 116,
+     "capitalUp": 12
+    },
+    {
+     "city": "宜蘭縣",
+     "type": "setup",
+     "path": "11510/宜蘭縣-setup.csv",
+     "rows": 32,
+     "capitalUp": 0
+    },
+    {
+     "city": "桃園市",
+     "type": "change",
+     "path": "11510/桃園市-change.csv",
+     "rows": 1115,
+     "capitalUp": 143
+    },
+    {
+     "city": "桃園市",
+     "type": "setup",
+     "path": "11510/桃園市-setup.csv",
+     "rows": 249,
+     "capitalUp": 0
+    },
+    {
+     "city": "基隆市",
+     "type": "change",
+     "path": "11510/基隆市-change.csv",
+     "rows": 81,
+     "capitalUp": 6
+    },
+    {
+     "city": "基隆市",
+     "type": "setup",
+     "path": "11510/基隆市-setup.csv",
+     "rows": 22,
+     "capitalUp": 0
+    },
+    {
+     "city": "新北市",
+     "type": "change",
+     "path": "11510/新北市-change.csv",
+     "rows": 2301,
+     "capitalUp": 263
+    },
+    {
+     "city": "新北市",
+     "type": "setup",
+     "path": "11510/新北市-setup.csv",
+     "rows": 470,
+     "capitalUp": 0
+    },
+    {
+     "city": "新竹市",
+     "type": "change",
+     "path": "11510/新竹市-change.csv",
+     "rows": 231,
+     "capitalUp": 27
+    },
+    {
+     "city": "新竹市",
+     "type": "setup",
+     "path": "11510/新竹市-setup.csv",
+     "rows": 57,
+     "capitalUp": 0
+    },
+    {
+     "city": "新竹縣",
+     "type": "change",
+     "path": "11510/新竹縣-change.csv",
+     "rows": 274,
+     "capitalUp": 28
+    },
+    {
+     "city": "新竹縣",
+     "type": "setup",
+     "path": "11510/新竹縣-setup.csv",
+     "rows": 70,
+     "capitalUp": 0
+    },
+    {
+     "city": "臺北市",
+     "type": "change",
+     "path": "11510/臺北市-change.csv",
+     "rows": 3443,
+     "capitalUp": 286
+    },
+    {
+     "city": "臺北市",
+     "type": "setup",
+     "path": "11510/臺北市-setup.csv",
+     "rows": 385,
+     "capitalUp": 0
+    }
+   ]
   }
  },
- "latest": "11509",
- "generatedAt": "2026-10-08T02:06:07.075Z",
- "foundedAt": "2026-10-08T02:06:07.075Z",
+ "latest": "11510",
+ "generatedAt": "2026-11-08T07:12:16.170Z",
+ "foundedAt": "2026-11-08T07:12:16.170Z",
  "kind": "cmpy"
 }
