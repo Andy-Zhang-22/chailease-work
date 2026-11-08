@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261107-419';
+  const APP_VERSION = '20261108-420';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5043,7 +5043,7 @@
    * 看哪一條真的比較打得出東西。來源從檔名看，每日新名單的看訪談內容開頭（動保：／新公司清冊／商行／企業社）。
    * 成案系統裡沒有，「有機會」當代理指標。
    */
-  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '政府標案得標'];
+  const FUNNEL_ORIGINS = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '政府標案得標', '104 徵才中'];
   function freshOrigin(v) {
     const src = String(v.source || '');
     if (/^動產擔保名單/.test(src)) return '動產擔保';
@@ -5055,6 +5055,7 @@
     if (/^新設工廠/.test(src)) return '新設工廠';
     if (/^產業名單/.test(src)) return '產業名單';
     if (/^政府標案得標/.test(src)) return '政府標案得標';
+    if (/^104徵才中/.test(src)) return '104 徵才中';   // 版本 420：合併頁加入的 104 池子（檔名 104徵才中-日期-N家）
     if (!/^每日新名單/.test(src)) return '';
     const n = String(v.notesRaw || '');
     if (/^動保：/.test(n)) return '動產擔保';
@@ -5066,6 +5067,7 @@
     if (/^工廠登記 /.test(n)) return '新設工廠';
     if (/^產業名單：/.test(n)) return '產業名單';
     if (/^政府標案得標 /.test(n)) return '政府標案得標';
+    if (/^104 徵才中/.test(n)) return '104 徵才中';   // 版本 420：每日新名單從 104 池子挑的，備註開頭「104 徵才中：N 件」
     return '';
   }
   function funnelStats(views) {

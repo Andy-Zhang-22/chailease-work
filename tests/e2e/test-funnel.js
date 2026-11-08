@@ -13,6 +13,8 @@ const RECS=[
  mk('l1','清冊一有限公司','每日新名單-2026-09-29.csv','新公司清冊 115/8 變更：增資\n每日新名單，符合：本期、增資'),
  mk('l2','清冊二有限公司','登記清冊-11508-2家.csv','新公司清冊 115/8 變更：增資'),
  mk('b1','商行一企業社','每日新名單-2026-09-29.csv','商行／企業社（稅籍登記）：獨資\n每日新名單，符合：有商業登記、我的分公司'),
+ mk('h1','徵才一有限公司','每日新名單-2026-11-08.csv','104 徵才中：3 件（11/8 查）\n徵財務主管：財務經理\n每日新名單，符合：104 徵才中（3 件）、104 徵財務主管（財務經理）'),
+ mk('h2','徵才二有限公司','104徵才中-2026-11-08-1家.csv','104 徵才中：1 件（11/8 查）'),
  mk('x1','主力客戶有限公司','A名單.csv','2026/09/01 談過'),
 ];
 (async()=>{
@@ -28,6 +30,8 @@ const RECS=[
    await window.Store.setState({recordId:'c3',outcome:'contacted',lastDate:'2026-09-29'});
    await window.Store.setState({recordId:'c4',outcome:'blocked',lastDate:'2026-09-30'});
    await window.Store.setState({recordId:'l1',outcome:'contacted',chance:'yes',chanceAt:now,lastDate:'2026-09-29'});
+   await window.Store.setState({recordId:'h1',outcome:'contacted',lastDate:'2026-11-08'});
+   await window.Store.addLog({recordId:'h1',date:'2026-11-08',text:'約好下週拜訪',outcome:'contacted',meeting:true,createdAt:now});
  },RECS);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(1000);
  const f=await pg.evaluate(()=>window.funnelStats());
@@ -37,8 +41,11 @@ const RECS=[
  chk(f.byRule['動產擔保｜成立 5 年內'].n===3 && f.byRule['動產擔保｜成立 5 年內'].called===3 && f.byRule['登記清冊｜增資'].chance===1, `依條件：${JSON.stringify(f.byRule)}`);
  // 訊號成效：不分來源、同時有幾個訊號（使用者：「都做」）
  chk(f.bySignal['成立 5 年內'].n===3 && f.bySignal['成立 5 年內'].called===3 && f.bySignal['增資'].chance===1 && f.bySignal['3 個月內到期'].n===1, `依訊號（不分來源）：${JSON.stringify(f.bySignal)}`);
- chk(f.bySigCount['2 個'].n===3 && f.bySigCount['1 個'].n===2 && f.bySigCount['2 個'].chance===2, `依訊號數：${JSON.stringify(f.bySigCount)}`);
- chk(!Object.keys(f.byRule).some(k=>/主力客戶/.test(k)) && Object.values(f.byOrigin).reduce((a,t)=>a+t.n,0)===7, '主力名單不算');
+ chk(f.bySigCount['2 個'].n===4 && f.bySigCount['1 個'].n===2 && f.bySigCount['2 個'].chance===2 && f.bySigCount['2 個'].meetings===1, `依訊號數：${JSON.stringify(f.bySigCount)}`);
+ // 版本 420：104 徵才中也是一個來源（每日新名單從池子挑的、合併頁加入的都算），訊號裡的 104 徵才中、徵財務主管各自算接通與約訪
+ chk(JSON.stringify(f.byOrigin['104 徵才中'])===JSON.stringify({n:2,called:1,reached:1,chance:0,blocked:0,meetings:1}), `104 徵才中：${JSON.stringify(f.byOrigin['104 徵才中'])}`);
+ chk(f.bySignal['104 徵才中'] && f.bySignal['104 徵才中'].meetings===1 && f.bySignal['104 徵財務主管'] && f.bySignal['104 徵財務主管'].reached===1, `104 訊號：${JSON.stringify(f.bySignal['104 徵才中'])} ${JSON.stringify(f.bySignal['104 徵財務主管'])}`);
+ chk(!Object.keys(f.byRule).some(k=>/主力客戶/.test(k)) && Object.values(f.byOrigin).reduce((a,t)=>a+t.n,0)===9, '主力名單不算');
  chk(await pg.evaluate(()=>!!window.buildSummary().funnel.byOrigin['動產擔保']), '摘要檔帶這份數字');
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`${bad} 個失敗`:'全部通過');
