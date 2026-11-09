@@ -498,7 +498,7 @@
     const before = Number(($('#chattel-when') && $('#chattel-when').value) || 60) || 0;
     const wants = fresh.map((r) => wantedDate(r, before));
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(wants) : wants;
-    const file = new File([toCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
+    const file = new File([toCsv(fresh, dates)], (global.uniqueSourceName || ((x) => x))(csvName(fresh.length)), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(r.key));
     openJustAdded(file.name, fresh.length === 1, { name: fresh[0].cust && fresh[0].cust.name, taxId: fresh[0].cust && fresh[0].cust.id });

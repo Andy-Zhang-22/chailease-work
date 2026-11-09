@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261108-421';
+  const APP_VERSION = '20261109-422';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3946,8 +3946,14 @@
        * 池子還沒抓過（沒資料）才退回原本的排序，不然每天會一家都挑不到。
        */
       const poolReady = !!(window.Hire104 && window.Hire104.poolInfo && window.Hire104.poolInfo().n > 0);
-      let notHiring = 0;
-      if (poolReady) { const only = merged.filter((c) => [...c.signals].some((x) => /^104 徵才中/.test(x))); notHiring = merged.length - only.length; merged = only; }
+      let notHiring = 0; let hiringOnly = null;
+      if (poolReady) {
+        const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
+        hiringOnly = merged.filter(isHiring); const rest = merged.filter((c) => !isHiring(c));
+        notHiring = rest.length;
+        // 版本 422（使用者 11/09「好」）：有電話的 104 徵才中不夠額度時（11/09 只挑到 7／15），剩下的名額退回原本的排序補滿；徵才中的照樣先挑
+        merged = [...hiringOnly, ...rest];
+      }
       // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
       const per = (k) => merged.filter((c) => c.recs[k]).length;
       const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in'), per('hi')], need, feedShares());
@@ -3959,6 +3965,10 @@
       if (research) {
         const strongM = merged.filter((c) => strongKey(c.key));
         picks = pickMerged(strongM, mixTake, SRC.map((x) => x.key));
+        if (picks.length < mixTake) { const used = new Set(picks.map((p) => p.c.key)); picks.push(...pickMerged(merged.filter((c) => !used.has(c.key)), mixTake - picks.length, [])); }
+      } else if (hiringOnly) {
+        // 104 徵才中的先挑（每頁保底也只在這群裡算），不夠額度才用其他的照排序補滿（補的不保底）
+        picks = pickMerged(hiringOnly, mixTake, SRC.map((x) => x.key));
         if (picks.length < mixTake) { const used = new Set(picks.map((p) => p.c.key)); picks.push(...pickMerged(merged.filter((c) => !used.has(c.key)), mixTake - picks.length, [])); }
       } else picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
       const pickB = bz.slice(0, bizTake);
@@ -4021,7 +4031,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, notHiring, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
+      const summary = { picked, got, lost, skippedNoPhone, notHiring, hiringPicked: hiringOnly ? picks.filter((p) => hiringOnly.includes(p.c)).length : null, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;
@@ -8967,6 +8977,19 @@ export default {
      * 只給它讀 allViews（有快取）與 openDetail，名單的邏輯還是全在這裡。
      */
     window.customerViews = () => allViews();
+    /*
+     * 各分頁「加入」用的檔名（版本 422）：同一天從同一頁分兩次各加一家，檔名都是「來源-日期-1家.csv」，
+     * 第二次匯入照「同名重匯＝更新」把第一次那家整批換掉（test-hiring 抓到：合併頁加了子一再加卯四，子一就不見）。
+     * 名單裡已有同名來源就在後面接 -2、-3。
+     */
+    window.uniqueSourceName = (name) => {
+      const have = new Set(state.records.map((r) => String(r.source || '')));
+      if (!have.has(name)) return name;
+      const base = name.replace(/\.csv$/i, '');
+      let i = 2;
+      while (have.has(`${base}-${i}.csv`)) i += 1;
+      return `${base}-${i}.csv`;
+    };
     window.dailyFeed = dailyFeed;   // 後台（feed-drive.mjs 用無頭瀏覽器開網站挑新名單）、測試用
     window.runSync = runSync;
     window.openCustomer = (id) => openDetail(id);

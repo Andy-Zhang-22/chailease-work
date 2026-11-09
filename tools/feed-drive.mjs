@@ -171,7 +171,7 @@ async function main() {
     else {
       const src = Object.entries(res.bySrc || {}).map(([k, v]) => `${k} ${v}`).join('、');
       const ph = res.phones || {};
-      line = `${today} 後台挑了 ${res.picked} 家（${src}${res.biz ? `；商行／企業社 ${res.biz}` : ''}），排在 ${res.day}`
+      line = `${today} 後台挑了 ${res.picked} 家（${src}${res.biz ? `；商行／企業社 ${res.biz}` : ''}${res.hiringPicked != null ? `；其中 104 徵才中 ${res.hiringPicked} 家` : ''}），排在 ${res.day}`
         + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}${res.skippedNoPhone ? `；沒電話的跳過 ${res.skippedNoPhone} 家` : ''}`
         + `${ph.trade ? `；出進口電話表對到 ${ph.trade.found}/${ph.trade.tried}` : ''}${ph.google ? `，Google 地圖找到 ${ph.google.found}/${ph.google.tried}` : ''}`
         + `${res.gate ? `；挑的時候 Google 地圖查了 ${res.gate.tried} 家、查到 ${res.gate.found} 家${res.gate.error ? `（第一個錯：${res.gate.error}）` : ''}` : ''}`

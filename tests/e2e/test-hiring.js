@@ -92,11 +92,20 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  await pg.evaluate(()=>window.switchTab('all')); await pg.waitForTimeout(500);
  const mb=await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.querySelector('.card-name').textContent.trim()==='卯四科技有限公司'); return c?[...c.querySelectorAll('.badge')].map(b=>b.textContent.trim()):null; });
  chk(mb && mb.includes('104 徵才 2 件・財務主管'), `名單卡片標 104 徵才 2 件・財務主管：${JSON.stringify(mb)}`);
- // 版本 419：104 徵才中是必要條件——每日揉合只從池子裡挑；丁四在標案有電話、有訊號（剛得標），但不在 104 池子、也不在名單，不挑；商行那份不受限（這裡沒商行）
+ // 版本 422：同一天從合併頁分兩次各加一家，第二次不能把第一次那家換掉（檔名接 -2）
+ const twice=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^104徵才中-/.test(r.source)).map(r=>r.company+'@'+r.source).sort());
+ chk(twice.length===2 && twice.some(x=>/^子一電子有限公司@104徵才中-\d{4}-\d{2}-\d{2}-1家\.csv$/.test(x)) && twice.some(x=>/^卯四科技有限公司@104徵才中-\d{4}-\d{2}-\d{2}-1家-2\.csv$/.test(x)), `分兩次加的兩家都在、第二份檔名接 -2：${twice.join('|')}`);
+ // 版本 419：104 徵才中先挑——額度 1 家時只挑池子裡的寅三（職缺最多、還沒在名單的）；丁四在標案有電話、有訊號（剛得標），但不在 104 池子，輪不到；商行那份不受限（這裡沒商行）
+ await pg.evaluate(()=>localStorage.setItem('new-quota','1'));
  const df=await pg.evaluate(()=>window.dailyFeed({more:true,awaitPhones:false})); await pg.waitForTimeout(1200);
- chk(df && df.picked>=1 && df.notHiring>=1 && Object.keys(df.bySrc||{}).every(k=>k==='104 徵才中'), `每日新名單只從 104 徵才中挑、不在 104 的（丁四）被濾掉：${JSON.stringify({picked:df&&df.picked,notHiring:df&&df.notHiring,bySrc:df&&df.bySrc})}`);
- const names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
+ chk(df && df.picked===1 && df.notHiring>=1 && df.hiringPicked===1 && Object.keys(df.bySrc||{}).every(k=>k==='104 徵才中'), `額度 1：只挑 104 徵才中的、不在 104 的（丁四）排後面：${JSON.stringify({picked:df&&df.picked,notHiring:df&&df.notHiring,hiringPicked:df&&df.hiringPicked,bySrc:df&&df.bySrc})}`);
+ let names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
  chk(!names.includes('丁四營造有限公司') && names.includes('寅三實業有限公司'), `丁四沒進名單、寅三（池子裡）進了：${names.join('|')}`);
+ // 版本 422：104 徵才中的挑完不夠額度，剩下的名額退回原本的排序補滿（使用者 11/09「好」）——額度放回 15 再補：辰六（池子裡最後一家）先、丁四補進來
+ await pg.evaluate(()=>localStorage.setItem('new-quota','15'));
+ const df2=await pg.evaluate(()=>window.dailyFeed({more:true,awaitPhones:false})); await pg.waitForTimeout(1200);
+ names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
+ chk(df2 && df2.picked>df2.hiringPicked && df2.hiringPicked===1 && names.includes('辰六精機有限公司') && names.includes('丁四營造有限公司'), `104 徵才中的挑完了，丁四補進來：${JSON.stringify({picked:df2&&df2.picked,hiringPicked:df2&&df2.hiringPicked,bySrc:df2&&df2.bySrc})}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();
