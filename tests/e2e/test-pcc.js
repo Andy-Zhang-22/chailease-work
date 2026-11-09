@@ -6,14 +6,14 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9598);
 const TODAY='2026-10-05';
 const q=(v)=>/[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
-const HEAD='統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額';
+const HEAD='統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額,近三件';
 const ROWS=[
- ['54867253','名祿營造有限公司','公司登記','新北市新莊區中正路100號','02-2960-0000','2026-09-28','某國小校舍整修工程','新北市政府教育局','12500000','2','2026-08-05','1150923-1','108/09/03','12000000'],
+ ['54867253','名祿營造有限公司','公司登記','新北市新莊區中正路100號','02-2960-0000','2026-09-28','某國小校舍整修工程','新北市政府教育局','12500000','2','2026-08-05','1150923-1','108/09/03','12000000',JSON.stringify([['2026-09-28','某國小校舍整修工程','新北市政府教育局','12500000'],['2026-08-05','某公園步道工程','新北市政府工務局','3000000']])],
  ['24908600','宇駿工程有限公司','公司登記','新北市板橋區文化路1號','','2026-08-20','道路養護工程','新北市政府工務局','3000000','1','2026-08-20','1150820-2','104/08/14','3000000'],
  ['02198779','蓮莊水電行','商業登記','新北市新莊區新樹路497巷11號','','2026-05-12','水電修繕','某公所','800000','1','2026-05-12','1150512-3','105/01/12',''],
  ['11111111','老客戶股份有限公司','公司登記','新北市新莊區中正路9號','02-1111-1111','2026-09-30','機房設備採購','某署','50000000','1','2026-09-30','1150930-1','100/01/01','50000000'],
  // 版本 409：聯絡過（9/29）之後又得標（10/01）→ 📈 有新變化；名單裡沒電話的，打開詳細頁從標案資料貼上手機。兩家放板橋，預設篩選（我的分公司）不會列
- ['22222222','舊客戶股份有限公司','公司登記','新北市板橋區文化路2號','02-2222-3333','2026-10-01','辦公設備採購','某局','8000000','1','2026-10-01','1151001-1','100/01/01','5000000'],
+ ['22222222','舊客戶股份有限公司','公司登記','新北市板橋區文化路2號','02-2222-3333','2026-10-01','辦公設備採購','某局','8000000','1','2026-10-01','1151001-1','100/01/01','5000000',JSON.stringify([['2026-10-01','辦公設備採購','某局','8000000'],['2026-06-10','冷氣汰換','某校','1200000'],['2026-03-02','清潔勞務','某所','500000']])],
  ['33333333','補電話股份有限公司','公司登記','新北市板橋區文化路3號','0922-333-444','2026-09-15','清潔服務','某所','1200000','1','2026-09-15','1150915-1','100/01/01','5000000'],
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
@@ -44,6 +44,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  const card=pg.locator('#pcc-cards .card:has-text("名祿")');
  chk((await card.locator('.card-name a[href="https://company.g0v.ronny.tw/id/54867253"]').count())===1, '公司名直達商工登記頁（商號走用統編查的規則在 normalize.test.js）');
  const ct=(await card.textContent()).replace(/\s+/g,' ');
+ chk(/📜 2026\/08\/05 新北市政府工務局「某公園步道工程」，決標 300 萬/.test(ct), `標案頁卡片列第二件（版本 425）：${ct.slice(0,200)}`);
  chk(/剛得標/.test(ct) && /得標 2 件/.test(ct) && /📞 02-2960-0000/.test(ct) && /🏆 2026\/09\/28 決標（1 個月前）/.test(ct) && /📜 某國小校舍整修工程/.test(ct) && /🏛 新北市政府教育局/.test(ct) && /💵 決標 1,250 萬/.test(ct) && /資本額 1,200 萬/.test(ct), `卡片：${ct.slice(0,260)}`);
  chk((await card.locator('.copy-dot').count())===2 && (await card.locator('.card-meta .copy-dot').count())===1 && (await card.locator('.phone-search a').count())===4 && (await card.locator('.phone-search input').count())===0, '公司名、電話後面各有複製點；有電話的也有找電話那排，但沒有貼電話的框');
  // 清掉預設：四家都出來，沒電話的有找電話那排
@@ -77,6 +78,9 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.textContent.includes('舊客戶')); c.querySelector('.card-name').click(); }); await pg.waitForTimeout(500);
  const al=(await pg.locator('#drawerBody .award-line').textContent().catch(()=>'')).replace(/\s+/g,' ');
  chk(/🏆 政府標案得標 2026\/10\/01：某局「辦公設備採購」，決標 800 萬/.test(al), `詳細頁一行得標：${al}`);
+ // 版本 425：近三件——第一件就是上面那行，再列第二、三件
+ const prev=(await pg.locator('#drawerBody .award-prev').allTextContents()).map(x=>x.replace(/\s+/g,' ').trim());
+ chk(prev.length===2 && /2026\/06\/10：某校「冷氣汰換」，決標 120 萬/.test(prev[0]) && /2026\/03\/02：某所「清潔勞務」，決標 50 萬/.test(prev[1]), `詳細頁再列前兩件：${prev.join(' / ')}`);
  await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
  // 版本 409：沒電話的打開詳細頁，從公開資料（標案）貼上手機
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#cards .card')].find(x=>x.textContent.includes('補電話')); c.querySelector('.card-name').click(); }); await pg.waitForTimeout(1500);
