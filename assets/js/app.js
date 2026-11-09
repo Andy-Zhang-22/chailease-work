@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261109-422';
+  const APP_VERSION = '20261109-423';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -6817,10 +6817,31 @@
      */
     const kvBox = el('textarea', {
       className: 'paste-box', rows: 4, id: 'kvPaste',
-      placeholder: '可直接貼上商工登記的公司資料，例如：\n統一編號\t12345675\n公司名稱\t範例數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t林美玲\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
+      placeholder: '只貼統編（8 碼）也可以，會自動查商工登記填好。\n或直接貼上商工登記的公司資料，例如：\n統一編號\t12345675\n公司名稱\t範例數位文創股份有限公司\n資本總額(元)\t1,100,000,000\n實收資本額(元)\t491,600,000\n代表人姓名\t林美玲\n公司所在地\t新北市三重區重新路5段609巷2號5樓\n最後核准變更日期\t114年07月16日',
     });
     const kvNote = el('p', { className: 'rule-note' });
+    /*
+     * 只填統編就新增（版本 423；使用者 11/09：「只想填統編進去後就可以新增」）：
+     * 貼上框只貼 8 碼、或統一編號那格打滿 8 碼（公司名稱還空著），就查商工登記（跟「連結其他公司」同一條，g0v 鏡像排第一），
+     * 公司名稱、負責人、資本額、成立年、地址自動填好，按「新增」就完成。查不到就把統編留著，讓使用者自己填名稱。
+     */
+    let lookingUp = '';
+    const byTaxId = async (taxId) => {
+      if (!window.Registry || !window.Registry.lookupByKeyword || taxId === lookingUp) return;
+      lookingUp = taxId;
+      kvNote.textContent = `正在用統編 ${taxId} 查商工登記…`;
+      try {
+        const res = await window.Registry.lookupByKeyword(taxId, { mirrorFirst: true });
+        if (lookingUp !== taxId) return;
+        const c = res && res.ok && res.companies && res.companies[0];
+        if (!c) { form.fill({ taxId }); kvNote.textContent = `統編 ${taxId} 查不到商工登記，請自己填公司名稱。`; return; }
+        form.fill({ company: c.name, taxId: c.taxId || taxId, owner: c.owner, capital: c.capital, capitalPaid: c.capitalPaid, founded: c.founded, regChanged: c.regChanged, address: c.address });
+        kvNote.textContent = `查到 ${c.name}${c.status ? `（${c.status}）` : ''}，已填好公司名稱、負責人、資本額、地址。請按「新增」。`;
+      } catch (err) { if (lookingUp === taxId) kvNote.textContent = `查商工登記失敗：${err && err.message ? err.message : err}`; }
+    };
     const kvRun = () => {
+      const only = kvBox.value.replace(/[\s\u3000-]/g, '');
+      if (/^\d{8}$/.test(only)) { byTaxId(only); return; }
       const got = window.Normalize.parseKeyValue(kvBox.value);
       if (!got) { kvNote.textContent = kvBox.value.trim() ? '看不出欄位／值的格式，請確認每行是「欄位名稱、Tab 或冒號、內容」。' : ''; return; }
       form.fill(got);
@@ -6829,6 +6850,7 @@
     };
     kvBox.oninput = kvRun;
     kvBox.onpaste = () => setTimeout(kvRun, 0);
+    form.inputs.taxId.oninput = () => { const t = form.inputs.taxId.value.replace(/\D/g, ''); if (t.length === 8 && !form.inputs.company.value.trim()) byTaxId(t); };
     /*
      * 拍名片給分身讀（使用者：「都做」）：系統讀不了照片（要付費的 API），所以把「照固定格式讀名片」的指示交給分身，
      * 使用者在 Claude 那邊附上名片照片送出，回覆整段貼回上面的框，欄位自動填好（parseKeyValue 認得聯絡人、職稱、手機）。
