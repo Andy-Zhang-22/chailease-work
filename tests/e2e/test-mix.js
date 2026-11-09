@@ -66,6 +66,14 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='true' && JSON.stringify((await names()).sort())===JSON.stringify(['丙三工業有限公司','名祿實業有限公司']), `重新整理後篩選還在：${(await names()).join('|')}`);
  await pg.click('#mix-reset'); await pg.waitForTimeout(300);
  chk((await pg.getAttribute('#mix-fSrc .chip:has-text("新設工廠")','aria-pressed'))==='false' && (await names()).length===4, '清除篩選就清掉');
+ // 版本 424：訊號是「且」——按「剛開始請人」剩 3 家，籤「剛登記工廠」旁寫 1（再加這個會剩 1 家）；再按「剛登記工廠」只剩名祿
+ await pg.locator('#mix-fSig .chip:has-text("剛開始請人")').click(); await pg.waitForTimeout(300);
+ const sigChip=(await pg.locator('#mix-fSig .chip:has-text("剛登記工廠")').textContent()).replace(/\s+/g,'');
+ chk((await names()).length===3 && sigChip==='剛登記工廠1', `按一個訊號剩 3 家、另一個籤旁寫再加會剩 1：${(await names()).join('|')}／${sigChip}`);
+ await pg.locator('#mix-fSig .chip:has-text("剛登記工廠")').click(); await pg.waitForTimeout(300);
+ chk(JSON.stringify(await names())===JSON.stringify(['名祿實業有限公司']), `兩個訊號都要有（且）：${(await names()).join('|')}`);
+ await pg.locator('#mix-fSig .chip:has-text("剛開始請人")').click(); await pg.locator('#mix-fSig .chip:has-text("剛登記工廠")').click(); await pg.waitForTimeout(300);
+ chk((await names()).length===4, '訊號都取消就回到全部');
  // 來源名稱只是文字（版本 327：那幾頁的按鈕收掉了，點了不跳頁）
  await c.locator('.mix-src:has-text("新設工廠")').click(); await pg.waitForTimeout(300);
  chk(await pg.locator('#paneMix').isVisible() && (await c.locator('button.mix-src').count())===0, '來源名稱是文字，點了留在合併頁');

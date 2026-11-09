@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261109-423';
+  const APP_VERSION = '20261109-424';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5103,7 +5103,7 @@
       add(byOrigin.get(o), v);
       const m = String(v.notesRaw || '').match(/每日新名單，符合：([^；\n]+)/);
       // 「利率不敏感（跟和潤借）」這種括號裡是細節，統計歸在同一條
-      if (m) m[1].split('、').map((x) => x.trim().replace(/（[^）]*）$/, '')).filter(Boolean).forEach((rule) => {
+      if (m) m[1].split('、').map((x) => x.trim().replace(/（[\s\S]*）$/, '')).filter(Boolean).forEach((rule) => {
         const k = `${o}｜${rule}`;
         if (!byRule.has(k)) byRule.set(k, blank());
         add(byRule.get(k), v);
@@ -5113,7 +5113,7 @@
        * 再看「同時有幾個訊號」——兩個以上的是不是真的比較打得出東西，挑名單的加總算分才有根據。
        */
       if (/每日新名單，/.test(String(v.notesRaw || ''))) {
-        const sigs = m ? [...new Set(m[1].split('、').map((x) => x.trim().replace(/（[^）]*）$/, '')).filter(Boolean))] : [];
+        const sigs = m ? [...new Set(m[1].split('、').map((x) => x.trim().replace(/（[\s\S]*）$/, '')).filter(Boolean))] : [];
         sigs.forEach((sg) => { if (!bySignal.has(sg)) bySignal.set(sg, blank()); add(bySignal.get(sg), v); });
         const c = sigs.length >= 3 ? '3 個以上' : sigs.length === 2 ? '2 個' : sigs.length === 1 ? '1 個' : '沒有（補位）';
         add(bySigCount.get(c), v);
