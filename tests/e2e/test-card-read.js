@@ -25,6 +25,22 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  await pg.click('#editorBody button:has-text("新增")'); await pg.waitForTimeout(800);
  const v=await pg.evaluate(()=>{ const x=window.customerViews().find(v=>v.company==='星辰精密有限公司'); return x?[x.keyman,x.phones.length,x.address,x.industry].join('|'):''; });
  chk(v==='陳大明 財務經理|2|新北市新莊區中正路1號|金屬加工', `新增的客戶：${v}`);
+ // 版本 423：只填統編就新增——貼上框只貼 8 碼、或統一編號那格打滿 8 碼，查商工登記自動填好，按「新增」
+ await pg.evaluate(()=>{ window.Registry.lookupByKeyword=async(kw)=>{ const t=String(kw).replace(/\D/g,''); const db={'12345675':{taxId:'12345675',name:'晨光測試有限公司',status:'核准設立',owner:'林小華',address:'新北市新莊區中正路9號',capital:'5,000',capitalPaid:'5,000',founded:'2019/03/05',regChanged:'2026/01/10'},'87654325':{taxId:'87654325',name:'暮色測試股份有限公司',status:'核准設立',owner:'張小文',address:'新北市三重區重新路8號',capital:'12,000',capitalPaid:'',founded:'2015/06/01',regChanged:''}}; return db[t]?{ok:true,companies:[db[t]]}:{ok:false,companies:[],reason:'查不到'}; }; });
+ await pg.evaluate(()=>document.querySelector('.way[data-act="new-customer"]').click()); await pg.waitForSelector('#kvPaste');
+ await pg.fill('#kvPaste','12345675'); await pg.waitForTimeout(400);
+ const f1=await pg.evaluate(()=>{ const i=[...document.querySelectorAll('#editorBody .edit-form input, #editorBody .edit-form textarea')]; return [i[0].value,i[1].value].join('|'); });
+ chk(f1==='晨光測試有限公司|12345675' && /查到 晨光測試有限公司（核准設立）.*請按「新增」/.test(await pg.textContent('#editorBody .rule-note')), `貼上框只貼統編：自動填好公司名稱、統編：${f1}／${await pg.textContent('#editorBody .rule-note')}`);
+ await pg.click('#editorBody button:has-text("新增")'); await pg.waitForTimeout(800);
+ const v2=await pg.evaluate(()=>{ const x=window.customerViews().find(v=>v.taxId==='12345675'); return x?[x.company,x.owner,x.capital,x.founded,x.address].join('|'):''; });
+ chk(v2==='晨光測試有限公司|林小華|5,000|2019/03/05|新北市新莊區中正路9號', `只填統編新增的客戶：${v2}`);
+ // 統一編號那格直接打 8 碼（公司名稱空著）也會查
+ await pg.evaluate(()=>document.querySelector('.way[data-act="new-customer"]').click()); await pg.waitForSelector('#kvPaste');
+ await pg.fill('#editorBody .edit-form label:nth-of-type(2) input','87654325'); await pg.waitForTimeout(400);
+ const f2=await pg.evaluate(()=>{ const i=[...document.querySelectorAll('#editorBody .edit-form input, #editorBody .edit-form textarea')]; return [i[0].value,i[1].value].join('|'); });
+ chk(f2==='暮色測試股份有限公司|87654325', `統一編號那格打滿 8 碼：自動填好：${f2}`);
+ await pg.fill('#kvPaste','99999999'); await pg.waitForTimeout(400);
+ chk(/統編 99999999 查不到商工登記/.test(await pg.textContent('#editorBody .rule-note')), `查不到就提示自己填：${await pg.textContent('#editorBody .rule-note')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
