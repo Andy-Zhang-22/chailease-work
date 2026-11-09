@@ -32,7 +32,8 @@
   const money = (n) => (global.Biz && global.Biz.money ? global.Biz.money(n) : String(n));
   const myBranch = () => { let b = ''; try { b = localStorage.getItem('my-branch') || ''; } catch (e) { /* 無痕 */ } return `${b || '新莊'}分公司`; };
   // 「最近買設備（2026/08）」「利率不敏感（跟和潤借）」這種括號裡是細節，篩選歸在同一條
-  const sigKey = (s) => String(s || '').replace(/（[^）]*）$/, '');
+  // 去掉尾巴的括號：「104 徵才中（7 件）」→「104 徵才中」。版本 424：括號套括號（徵財務主管的職稱「財務經理（FP&A）」）也要一次去乾淨，不然散成一個一個籤
+  const sigKey = (s) => String(s || '').replace(/（[\s\S]*）$/, '');
 
   let items = [];
   let limit = PAGE;
@@ -85,7 +86,8 @@
   function passes(it, except) {
     if (!showHidden && isHid(it)) return false;
     if (except !== 'src' && f.src.size && !it.facts.some((x) => f.src.has(x.key))) return false;
-    if (except !== 'sig' && f.sig.size && !it.signals.some((s) => f.sig.has(sigKey(s)))) return false;
+    // 訊號是「且」（版本 424；使用者：「我在篩選訊號時，為什麼數字沒有減少」）：按「104 徵才中」再按「食品工廠」＝徵才中的食品工廠。來源、電話那幾組照舊是「或」
+    if (except !== 'sig' && f.sig.size) { const keys = new Set(it.signals.map(sigKey)); for (const k of f.sig) if (!keys.has(k)) return false; }
     if (except !== 'cond') for (const [k, , fn] of COND) if (f.cond.has(k) && !fn(it)) return false;
     if (except !== 'phone' && f.phone.size && !phoneKinds(it).some((k) => f.phone.has(k))) return false;
     if (except !== 'mine' && f.mine.size && !f.mine.has(mineKey(it))) return false;
@@ -107,7 +109,8 @@
     const count = (except, pred) => items.filter((it) => pred(it) && passes(it, except)).length;
     chips($('#mix-fSrc'), (global.MIX_SOURCES || []).map((s) => [s.key, s.label, count('src', (it) => it.facts.some((x) => x.key === s.key))]), f.src);
     const sigs = new Map();
-    items.forEach((it) => { if (passes(it, 'sig')) new Set(it.signals.map(sigKey)).forEach((s) => sigs.set(s, (sigs.get(s) || 0) + 1)); });
+    // 籤旁的數字＝「再加這個會剩幾家」：連目前按著的訊號一起算，所以會跟著減少（版本 424）
+    items.forEach((it) => { if (passes(it)) new Set(it.signals.map(sigKey)).forEach((s) => sigs.set(s, (sigs.get(s) || 0) + 1)); });
     f.sig.forEach((s) => { if (!sigs.has(s)) sigs.set(s, 0); });
     chips($('#mix-fSig'), [...sigs.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => [s, s, n]), f.sig);
     chips($('#mix-fPhone'), PHONE.map(([k, label]) => [k, label, count('phone', (it) => phoneKinds(it).includes(k))]), f.phone);
