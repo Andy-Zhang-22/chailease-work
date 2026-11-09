@@ -36,7 +36,8 @@ CONFIG = {
     "keep_days": 180,                                  # pcc.csv 留最近幾天決標的公司
     "base": "https://pcc-api.openfun.app",
 }
-HEAD = ["統編", "名稱", "組織型態", "地址", "電話", "最近決標日", "標案名稱", "招標機關", "決標金額", "得標件數", "首次決標日", "案號", "成立日期", "資本額"]
+HEAD = ["統編", "名稱", "組織型態", "地址", "電話", "最近決標日", "標案名稱", "招標機關", "決標金額", "得標件數", "首次決標日", "案號", "成立日期", "資本額", "近三件"]
+RECENT_KEEP = 3   # 近三件（版本 425）：每家留最近三標 [[日期, 標案名稱, 招標機關, 決標金額], …]，JSON 字串放在一格
 RESULT_HEAD = ["決標日期", "標案名稱", "招標機關", "案號", "得標廠商", "統編", "組織型態", "地址", "電話", "決標金額", "總決標金額", "是否中小企業", "員工人數", "留下", "刷掉原因"]
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36", "Accept": "application/json"}
 
@@ -112,6 +113,21 @@ def read_csv(path):
         return [], []
     return (rows[0], rows[1:]) if rows else ([], [])
 
+def recent_of(o):
+    """一列的「近三件」→ list；舊檔沒有這欄就用那一列的最近一標當第一件"""
+    try:
+        lst = json.loads(o.get("近三件") or "")
+        if isinstance(lst, list) and lst: return [x for x in lst if isinstance(x, list) and len(x) >= 4]
+    except (ValueError, TypeError):
+        pass
+    return [[o.get("最近決標日") or "", o.get("標案名稱") or "", o.get("招標機關") or "", o.get("決標金額") or ""]] if o.get("最近決標日") else []
+
+def push_recent(o, a, amount):
+    lst = recent_of(o)
+    lst.append([a["date"] or "", a["tender"], a["agency"], str(amount or "")])
+    lst.sort(key=lambda x: x[0], reverse=True)
+    o["近三件"] = json.dumps(lst[:RECENT_KEEP], ensure_ascii=False)
+
 def merge_rows(prev_head, prev_rows, prev_cases, wins, today, cfg=CONFIG):
     """既有 pcc.csv ＋ 這次的得標廠商 → 新的列（統編 → dict）、案件集合。wins：[{tax, name, org, address, tel, amount, award}]"""
     by = {}
@@ -127,10 +143,12 @@ def merge_rows(prev_head, prev_rows, prev_cases, wins, today, cfg=CONFIG):
         cases.add(ck)
         o = by.get(w["tax"])
         if not o:
-            by[w["tax"]] = {"統編": w["tax"], "名稱": w["name"], "組織型態": w["org"], "地址": w["address"], "電話": w["tel"], "最近決標日": a["date"], "標案名稱": a["tender"], "招標機關": a["agency"], "決標金額": str(w["amount"] or ""), "得標件數": "1", "首次決標日": a["date"], "案號": a["case_no"], "成立日期": "", "資本額": ""}
+            by[w["tax"]] = {"統編": w["tax"], "名稱": w["name"], "組織型態": w["org"], "地址": w["address"], "電話": w["tel"], "最近決標日": a["date"], "標案名稱": a["tender"], "招標機關": a["agency"], "決標金額": str(w["amount"] or ""), "得標件數": "1", "首次決標日": a["date"], "案號": a["case_no"], "成立日期": "", "資本額": "", "近三件": ""}
+            push_recent(by[w["tax"]], a, w["amount"])
             added += 1
         else:
             o["得標件數"] = str(int(o.get("得標件數") or 1) + 1)
+            push_recent(o, a, w["amount"])   # 要在下面 update 之前：舊列沒有近三件的，先拿它原本那一標當第一件
             if a["date"] >= (o.get("最近決標日") or ""):
                 o.update({"名稱": w["name"] or o["名稱"], "地址": w["address"] or o["地址"], "電話": w["tel"] or o["電話"], "最近決標日": a["date"], "標案名稱": a["tender"], "招標機關": a["agency"], "決標金額": str(w["amount"] or ""), "案號": a["case_no"]})
             if a["date"] and (not o.get("首次決標日") or a["date"] < o["首次決標日"]): o["首次決標日"] = a["date"]

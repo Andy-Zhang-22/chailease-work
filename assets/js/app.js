@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261109-424';
+  const APP_VERSION = '20261109-425';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -5812,6 +5812,8 @@
     if (r.newAward) {
       const a = r.newAward;
       body.append(el('p', { className: 'muted award-line', textContent: `🏆 政府標案得標 ${awardDateLabel(a)}：${[a.agency, a.tender ? `「${a.tender}」` : ''].filter(Boolean).join('')}${a.amount ? `，決標 ${wanLabel(a.amount)}` : ''}${a.awards > 1 ? `（共 ${a.awards} 件）` : ''}` }));
+      // 近三件（版本 425；使用者：「能查到他歷史決標的案件有哪些嗎」→「近期三個標案就好」）：第一件就是上面那行，再列第二、三件
+      (a.recent || []).slice(1).forEach((x) => body.append(el('p', { className: 'muted award-prev', textContent: `　↳ ${awardDateLabel(x)}：${[x.agency, x.tender ? `「${x.tender}」` : ''].filter(Boolean).join('')}${x.amount ? `，決標 ${wanLabel(x.amount)}` : ''}` })));
     }
     // 後台挑名單時用網路查到的擴張訊號（版本 322）：那一句＋來源網址
     if (r.intel) {

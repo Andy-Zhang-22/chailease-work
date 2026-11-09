@@ -4,7 +4,8 @@
  * 使用者（2026/10/24）：「在現有的電推系統新增一個案源來源『政府標案得標廠商』」。剛標到政府案子＝接下來要付履約保證金、
  * 買料、買設備、墊工程款，週轉金與設備融資的需求就在這一兩個月；得標廠商多是營造、工程、資訊設備、物流，本來就在打的行業。
  * 資料由 GitHub Actions 每天抓前一天的決標公告放 leads/pcc/（tools/fetch-pcc.mjs，只留新北市、臺北市、公司登記／商業登記的得標廠商）：
- *   pcc.csv：統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額
+ *   pcc.csv：統編,名稱,組織型態,地址,電話,最近決標日,標案名稱,招標機關,決標金額,得標件數,首次決標日,案號,成立日期,資本額,近三件
+ *   近三件（版本 425；使用者：「能查到他歷史決標的案件有哪些嗎」→「近期三個標案就好」）：JSON [[日期, 標案名稱, 招標機關, 決標金額], …]，抓取程式一天一天累積、留最近三標
  *   一家公司一列（同一家得好幾標只留最近那一標，件數另外記；跨期同統編不重複列）。電話、地址是決標公告裡廠商自己填的。
  *   成立日期、資本額是 fill-founded.mjs 查商工登記填的。
  * 程式照「新設工廠」（factory.js）那一頁：篩選、加入名單、每日新名單揉合都同一套。
@@ -78,6 +79,14 @@
       : (city ? '不在劃分表上' : '無地址');
     return { key, label: b.label || key, kind: b.kind, city, district, b };
   }
+  /** 「近三件」那一格 → [{ ym, tender, agency, amount }]（最近的在前）；舊檔沒有這欄就是空陣列 */
+  function recentOf(o) {
+    let lst = [];
+    try { lst = JSON.parse(String(o['近三件'] || '')); } catch (e) { lst = []; }
+    if (!Array.isArray(lst)) return [];
+    return lst.filter((x) => Array.isArray(x) && x[0]).map((x) => ({ ym: parseYm(x[0]), tender: String(x[1] || '').trim(), agency: String(x[2] || '').trim(), amount: Number(String(x[3] || '').replace(/\D/g, '')) || 0 }))
+      .filter((x) => x.ym).sort((a, b) => ymFull(b.ym).localeCompare(ymFull(a.ym))).slice(0, 3);
+  }
   /** pcc.csv 一列 → 卡片資料 */
   function toRecord(o, today) {
     const r = {
@@ -91,6 +100,7 @@
       amount: Number(String(o['決標金額'] || '').replace(/\D/g, '')) || 0,   // 元；這家在這一標的決標金額
       awards: Number(o['得標件數']) || 1, firstYm: parseYm(o['首次決標日']), caseNo: String(o['案號'] || '').trim(),
       orgType: String(o['組織型態'] || '').trim(),
+      recent: recentOf(o),
     };
     r.years = r.founded ? yearsSince(r.founded, today) : null;
     r.regMonths = r.ym ? monthsSinceYm(r.ym, today) : null;
@@ -213,6 +223,8 @@
       r.tender ? el('span', { textContent: `📜 ${r.tender}`, title: '標案名稱（決標公告）' }) : '',
       r.agency ? el('span', { textContent: `🏛 ${r.agency}`, title: '招標機關' }) : '',
       r.amount ? el('span', { textContent: `💵 決標 ${money(r.amount)}`, title: '這家在這一標的決標金額' }) : '',
+      // 近三件（版本 425）：第一件就是上面那三格，第二、三件各一行
+      ...r.recent.slice(1).map((x) => el('span', { className: 'muted', textContent: `📜 ${ymLabel(x.ym)} ${[x.agency, x.tender ? `「${x.tender}」` : ''].filter(Boolean).join('')}${x.amount ? `，決標 ${money(x.amount)}` : ''}`, title: '之前得的標（最近三件）' })),
       r.capital ? el('span', { textContent: `💰 資本額 ${money(r.capital)}`, title: '資本總額，查商工登記來的' }) : el('span', { className: 'muted', textContent: '💰 資本額還沒查到' }),
       r.founded ? el('span', { textContent: `🎂 成立 ${r.founded.y}/${String(r.founded.m).padStart(2, '0')}（${r.years} 年）` }) : el('span', { className: 'muted', textContent: '🎂 成立日不明' }),
       r.ym ? el('span', { textContent: `🏆 ${ymLabel(r.ym)} 決標（${whenText(r)}）`, title: '決標公告的決標日期' }) : '',
