@@ -139,7 +139,7 @@
     const fresh = list.filter((r) => !mineOf(r, cm)).slice(0, 200);
     if (!fresh.length) return;
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => '')) : fresh.map(() => '');
-    const file = new File([toStandardCsv(fresh, dates)], `104徵才中-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
+    const file = new File([toStandardCsv(fresh, dates)], (global.uniqueSourceName || ((x) => x))(`104徵才中-${todayIso()}-${fresh.length}家.csv`), { type: 'text/csv' });
     await global.importLeadsFile(file);
   }
 

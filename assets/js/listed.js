@@ -436,7 +436,7 @@
     if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
     const from = fromDate();
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
-    const file = new File([toStandardCsv(fresh, dates)], `上市櫃投資公司-${todayIso()}-${fresh.length}家.csv`, { type: 'text/csv' });
+    const file = new File([toStandardCsv(fresh, dates)], (global.uniqueSourceName || ((x) => x))(`上市櫃投資公司-${todayIso()}-${fresh.length}家.csv`), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     const sorted = dates.filter(Boolean).sort();
     if (sorted.length) toast(`${fresh.length} 家投資公司排在 ${sorted[0].replace(/-/g, '/')}${sorted.length > 1 && sorted[sorted.length - 1] !== sorted[0] ? `～${sorted[sorted.length - 1].replace(/-/g, '/')}` : ''}`);

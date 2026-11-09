@@ -615,7 +615,7 @@
     if (!fresh.length) { toast('這些都已經在名單裡了'); return; }
     const from = fromDate();
     const dates = typeof global.planNewDates === 'function' ? global.planNewDates(fresh.map(() => from)) : fresh.map(() => from);
-    const file = new File([toStandardCsv(fresh, dates)], csvName(fresh.length), { type: 'text/csv' });
+    const file = new File([toStandardCsv(fresh, dates)], (global.uniqueSourceName || ((x) => x))(csvName(fresh.length)), { type: 'text/csv' });
     try { await global.importLeadsFile(file); } catch (err) { toast(`加入失敗：${err.message}`); }
     fresh.forEach((r) => typed.delete(keyOf(r)));
     openJustAdded(file.name, fresh.length === 1, { name: fresh[0]['公司名稱'], taxId: fresh[0]['統一編號'] });
