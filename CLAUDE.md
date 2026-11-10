@@ -93,6 +93,7 @@
 
 - 純靜態網站（GitHub Pages）。客戶名單存在使用者裝置的 IndexedDB，用 Google 雲端硬碟同步。
 - 公開資料由 `tools/fetch-*.mjs` 搭配 `.github/workflows/` 的排程抓，結果放在 `leads/`。
+- GitHub 的排程（cron）常被延後好幾小時（2026/11/10 每日新名單到 09:20 還沒跑）。使用者 2026/11/10「Ok」：Claude 這邊有一個每個上班日 06:35 的排程任務，查 Actions 今天跑了沒，沒跑就用 workflow_dispatch 手動跑（mode=write），跟排程做的一樣。
 - 開發環境連不到政府網站；要抓政府資料，到 Actions 上跑。
   - 外交部（駐外館處）、經濟部網站連 Actions 也擋，要請使用者下載檔案給你。
 - 新資料來源的做法：
