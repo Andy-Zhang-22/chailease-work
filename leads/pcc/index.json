@@ -1,18 +1,18 @@
 {
- "generatedAt": "2026-11-10T01:30:22.000Z",
+ "generatedAt": "2026-11-11T01:38:43.511Z",
  "source": "https://pcc-api.openfun.app（政府電子採購網決標公告）",
  "cities": [
   "新北市",
   "臺北市"
  ],
  "days": 180,
- "total": 2378,
- "withPhone": 2378,
- "latestDate": "2026-11-09",
+ "total": 2488,
+ "withPhone": 2488,
+ "latestDate": "2026-11-10",
  "files": [
   {
    "path": "pcc.csv",
-   "rows": 2378
+   "rows": 2488
   }
  ],
  "note": "佔位檔：抓取在使用者電腦跑（tools/fetch-pcc.py），推上來才有資料",
@@ -20,7 +20,7 @@
   "公司登記",
   "商業登記"
  ],
- "lastFetched": "20261109",
+ "lastFetched": "20261110",
  "apiDown": false,
  "dates": {
   "20261016": {
@@ -190,8 +190,16 @@
    "won": 585,
    "kept": 194,
    "api_down": false
+  },
+  "20261110": {
+   "notices": 2323,
+   "awards": 678,
+   "vendors": 1129,
+   "won": 692,
+   "kept": 241,
+   "api_down": false
   }
  },
- "foundedAt": "2026-11-07T01:41:53.766Z",
+ "foundedAt": "2026-11-11T01:38:43.511Z",
  "autoMerge": "2026-10-24 起 leads/pcc 的推送由 auto-merge-leads.yml 自動合進 main（版本 381）"
 }

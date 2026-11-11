@@ -144,3 +144,44 @@ test('fetch-industry 用 curl 下載（版本 404）：回傳的 Response 能讀
   await assert.rejects(r2.text(), /curl/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('fetch-industry 第四批（版本 426）：近 6 年純商辦的使照門牌（新北存查、臺北 XML）對稅籍檔的營業地址；分頁的卡片、訊號、備註', async () => {
+  const t = await tool();
+  const now = new Date(2026, 10, 11);
+  // 門牌鍵：里、鄰、樓層、之 X、括號拿掉，「三段」→「3段」、台→臺；「68號、70號」兩個都算
+  assert.deepEqual([...t.addressKeys('新北市三重區谷王里13鄰興德路47號')], ['三重區興德路47']);
+  assert.deepEqual([...t.addressKeys('台北市中山區南京東路3段133之1號12樓')], ['中山區南京東路3段133']);
+  assert.deepEqual([...t.addressKeys('臺北市信義區忠孝東路五段68號、70號')], ['信義區忠孝東路5段68', '信義區忠孝東路5段70']);
+  assert.deepEqual([...t.addressKeys('新北市土城區員林里中央路2段33巷123號(3樓)')], ['土城區中央路2段33巷123']);
+  assert.equal(t.addressKeys('新北市三峽區三峽市場內').size, 0, '沒有門牌就沒有鍵');
+  // 新北存查：使字、用途有辦公沒有住宅、近 72 個月、有門牌
+  const base = { license_number: '113土使字第00170號', use_of_buildings: 'G2辦公室', date_the_permit: '1130515', house_address: '新北市三重區谷王里13鄰興德路47號' };
+  assert.deepEqual(t.officeNtpc(base, { now }), { keys: new Set(['三重區興德路47']), ym: '202405', address: '新北市三重區興德路47號' }, '顯示的地址把里鄰拿掉');
+  assert.equal(t.officeNtpc({ ...base, use_of_buildings: 'G3店鋪、G2辦公室、H2集合住宅' }, { now }), null, '住商混合先不收');
+  assert.equal(t.officeNtpc({ ...base, use_of_buildings: 'G2辦公室、公有市場' }, { now }), null, '市場不收');
+  assert.equal(t.officeNtpc({ ...base, license_number: '113土建字第00001號' }, { now }), null, '建照（還在蓋）不收');
+  assert.equal(t.officeNtpc({ ...base, date_the_permit: '1080515' }, { now }), null, '超過 6 年不收');
+  assert.equal(t.officeNtpc({ ...base, house_address: '' }, { now }), null, '只有地段地號不收');
+  // 臺北 XML：新建、每層用途有辦公沒有住宅、不是市場；每個 <地址> 都算
+  const xml = ['<Datas>',
+    '<Data><發照日期>1130520</發照日期><建造類別>新建</建造類別><建築地點><地址>臺北市信義區忠孝東路五段68號</地址><地址>臺北市信義區忠孝東路五段70號</地址></建築地點><建築概要><樓層>地上1樓,用途:(G2)一般事務所</樓層></建築概要></Data>',
+    '<Data><發照日期>1130520</發照日期><建造類別>新建</建造類別><建築地點><地址>臺北市大安區和平東路一段1號</地址></建築地點><樓層>地上2樓,用途:(G2)辦公室 地上3樓,用途:(H2)集合住宅</樓層></Data>',
+    '<Data><發照日期>1130520</發照日期><建造類別>新建</建造類別><建築地點><地址>臺北市大安區和平東路一段3號</地址></建築地點><樓層>地上2樓,用途:(G2)辦公室,公有市場攤位</樓層></Data>',
+    '<Data><發照日期>1130520</發照日期><建造類別>增建</建造類別><建築地點><地址>臺北市大安區和平東路一段7號</地址></建築地點><樓層>(G2)辦公室</樓層></Data>',
+    '<Data><發照日期>1050520</發照日期><建造類別>新建</建造類別><建築地點><地址>臺北市大安區和平東路一段5號</地址></建築地點><樓層>(G2)辦公室</樓層></Data>',
+    '</Datas>'].join('\n');
+  const o = t.officeTpe(xml, { now });
+  assert.equal(o.n, 5); assert.equal(o.kept, 1, '住商混合、市場、增建、超過 6 年的不收');
+  assert.deepEqual([...o.by.keys()], ['信義區忠孝東路5段68', '信義區忠孝東路5段70']);
+  assert.deepEqual(t.officeOf(o.by, '台北市信義區忠孝東路5段70號8樓'), { ym: '202405', address: '臺北市信義區忠孝東路五段68號' }, '稅籍檔的寫法（台、5段、樓層）也對得到');
+  assert.equal(t.officeOf(o.by, '臺北市信義區忠孝東路五段72號'), null);
+  assert.equal(t.OFFICE.kind, '進駐新商辦'); assert.equal(t.OFFICE.months, 72);
+  // 分頁
+  const r = I.toRecord({ 統編: '56789015', 名稱: '壬顧問有限公司', 類別: '進駐新商辦', 地址: '新北市三重區興德路47號5樓', 資本額: '20000000', 首見年月: '202611', 建照年月: '202405', 建照用途: '辦公室', 建照造價: '', 建照種類: '進駐', 建照地址: '新北市三重區興德路47號' }, TODAY, '202610');
+  assert.deepEqual(r.permit, { ym: { y: 2024, m: 5 }, use: '辦公室', cost: 0, months: 31, stage: '進駐', address: '新北市三重區興德路47號' });
+  assert.equal(I.kindLabel('進駐新商辦'), '🏢 進駐新商辦');
+  assert.deepEqual(I.dailyFacts(r).signals, ['進駐新商辦', '剛出現在產業名單'], '每日新名單的訊號不帶地址');
+  assert.match(I.noteFor(r), /^產業名單：進駐新商辦，2024-05 使照 進駐新商辦（新北市三重區興德路47號），2026-11 新出現$/);
+  assert.match(I.cardFacts(r).info, /^進駐新商辦（2024\/05 使照 進駐新商辦（新北市三重區興德路47號））$/);
+  assert.match(I.toStandardCsv([r]), /進駐新商辦（新北市三重區興德路47號）/);
+});
