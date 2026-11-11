@@ -14,9 +14,10 @@ const ROWS=[
  ['02198779','大板交通股份有限公司','計程車客運業','新北市板橋區文化路1號','8000000','8000000','202610','100/01/12','股份有限公司','493120','計程車客運',''],
  ['28501234','鼎築營造有限公司','營造業','新北市新莊區思源路5號','20000000','','202610','105/03/01','有限公司','439000','其他專門營造業','','工地 2 處','202611','新工地'],
  ['56789012','己五金股份有限公司','新建廠房','新北市三重區中正北路9號','100000000','','202610','103/05/01','股份有限公司','259900','其他金屬製品製造','','','','','202609','廠房','12800000','建照','新北市三重區中正北路100號'],   // 版本 365：新北建照；367 加地址
+ ['56789015','壬顧問有限公司','進駐新商辦','新北市新莊區思源路88號5樓','20000000','','202610','110/02/01','有限公司','702000','其他管理顧問','','','','','202605','辦公室','','進駐','新北市新莊區思源路88號'],   // 版本 426：登記在近 6 年蓋好的商辦
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
-const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baseline:'202610',total:5,newTotal:1,newSiteTotal:1,withPhone:1,byKind:{汽車貨運業:1,小客車租賃業:1,遊覽車客運業:1,計程車客運業:1,營造業:1,新建廠房:1},files:[{path:'industry.csv',rows:4}]};
+const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baseline:'202610',total:6,newTotal:1,newSiteTotal:1,withPhone:1,byKind:{汽車貨運業:1,小客車租賃業:1,遊覽車客運業:1,計程車客運業:1,營造業:1,新建廠房:1,進駐新商辦:1},files:[{path:'industry.csv',rows:6}]};
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
@@ -31,10 +32,12 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  chk((await pg.$$eval('#subtabs .subtab',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()))).some(t=>t.startsWith('產業名單'))===false, '找名單底下沒有「產業名單」按鈕了（版本 327 收進合併頁）');
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForSelector('#industry-cards .card'); await pg.waitForTimeout(300);
  const sub=(await pg.textContent('#industry-sub')).replace(/\s+/g,' ');
- chk(/新北市 5 家/.test(sub) && /營造工地 1/.test(sub) && /起算 2026\/10/.test(sub), `標題：${sub}`);
+ chk(/新北市 6 家/.test(sub) && /營造工地 1/.test(sub) && /進駐新商辦 1/.test(sub) && /起算 2026\/10/.test(sub), `標題：${sub}`);
  // 預設：資本額 300～6,000 萬、我的分公司（新莊）→ 宇駿、鼎築、名祿；照資本額排
  let names=await pg.$$eval('#industry-cards .card .card-name',a=>a.map(x=>x.textContent.replace(/\s+/g,' ').trim()));
- chk(names.length===3 && /宇駿/.test(names[0]) && /鼎築/.test(names[1]) && /名祿/.test(names[2]), `預設篩選後照資本額排：${names.join(' | ')}`);
+ chk(names.length===4 && /宇駿/.test(names[0]) && /鼎築|壬顧問/.test(names[1]) && /鼎築|壬顧問/.test(names[2]) && /名祿/.test(names[3]), `預設篩選後照資本額排（壬顧問是版本 426 進駐新商辦那家）：${names.join(' | ')}`);
+ const co=(await pg.locator('#industry-cards .card:has-text("壬顧問")').textContent()).replace(/\s+/g,' ');
+ chk(/🏢 進駐新商辦/.test(co) && /🏢 2026\/05 使照：進駐新商辦（新北市新莊區思源路88號）/.test(co) && !/蓋在/.test(co), `進駐新商辦卡片（版本 426）：${co.slice(0,220)}`);
  const cs=(await pg.locator('#industry-cards .card:has-text("鼎築")').textContent()).replace(/\s+/g,' ');
  chk(/新工地/.test(cs) && /🏗 營造工地/.test(cs) && /🏗 工地 2 處/.test(cs) && /🆕 2026\/11 多了新工地/.test(cs) && !/剛出現/.test(cs), `營造業卡片：${cs.slice(0,220)}`);
  const ct=(await pg.locator('#industry-cards .card:has-text("名祿")').textContent()).replace(/\s+/g,' ');
@@ -61,7 +64,7 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await pg.locator('#industry-fKind .chip:has-text("新建廠房")').click(); await pg.waitForTimeout(200);
  // 合併頁：這一頁的公司進得去，訊號有「車輛業者」「營造業（有工地）、剛有新工地」
  const mix=await pg.evaluate(async()=>{ const m=await window.mixCandidates(); return m.filter(x=>!x.mine && x.facts.some(f=>f.key==='in')).map(x=>`${x.name}|${x.signals.join('、')}`); });
- chk(mix.length===4 && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)) && mix.some(x=>/己五金股份有限公司\|正在蓋廠房（造價 1,280 萬）/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
+ chk(mix.length===5 && mix.some(x=>/壬顧問有限公司\|進駐新商辦/.test(x)) && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)) && mix.some(x=>/己五金股份有限公司\|正在蓋廠房（造價 1,280 萬）/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
  // 營造業加進來：備註寫新工地
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForTimeout(300);
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#industry-cards .card')].find(x=>x.textContent.includes('鼎築')); c.querySelector('.industry-add-one').click(); });
