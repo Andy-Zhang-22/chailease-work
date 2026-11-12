@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-12T01:34:00.000Z",
+ "generatedAt": "2026-11-12T01:36:13.550Z",
  "source": "https://pcc-api.openfun.app（政府電子採購網決標公告）",
  "cities": [
   "新北市",
@@ -208,6 +208,6 @@
    "api_down": false
   }
  },
- "foundedAt": "2026-11-11T01:38:43.511Z",
+ "foundedAt": "2026-11-12T01:36:13.550Z",
  "autoMerge": "2026-10-24 起 leads/pcc 的推送由 auto-merge-leads.yml 自動合進 main（版本 381）"
 }
