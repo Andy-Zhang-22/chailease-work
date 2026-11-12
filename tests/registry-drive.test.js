@@ -84,3 +84,12 @@ test('防呆：查到的核准變更日期比名單上的舊（鏡像的舊快�
   assert.deepEqual(Object.keys(m.diffFields(r, newer)).sort(), ['address', 'regChanged']);
   assert.equal(m.staleRegistry({ company: '沒查過' }, old), false, '名單上沒有日期就沒得比，照常套用');
 });
+
+test('查的順序（版本 427）：最久沒查過商工登記的先、沒查過的最前；沒統編也沒名稱的不查', async () => {
+  const m = await import(path.join(ROOT, 'tools', 'registry-drive.mjs'));
+  const records = [{ id: 'a', taxId: '12345678' }, { id: 'b', company: '乙公司' }, { id: 'c', taxId: '87654321' }, { id: 'd' }, { id: 'e', company: '戊公司' }];
+  const states = new Map([['a', { regAt: 300 }], ['b', { regAt: 100 }], ['c', { regAt: 200 }]]);
+  assert.deepEqual(m.orderTargets(records, states).map((r) => r.id), ['e', 'b', 'c', 'a']);
+  assert.deepEqual(m.orderTargets(records, new Map()).map((r) => r.id), ['a', 'b', 'c', 'e']);
+});
+

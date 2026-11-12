@@ -34,6 +34,9 @@ const MODE = opt('mode', 'report') === 'write' ? 'write' : 'report';
 const LIMIT = Number(opt('limit', '0')) || 0;
 const FORCE_MIRROR = args.includes('--mirror');
 const DELAY = Number(opt('delay', '300')) || 300;
+// 時間預算（版本 427）：Google 的存取權杖一小時過期，11/10、11/11 查了 110、71 分鐘才寫回，雲端硬碟回 401。
+// 預設 45 分鐘內查得完多少算多少，最久沒查的先；剩下的明天接著查
+const BUDGET = Number(opt('budget', '45')) || 45;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const fetchLikeBrowser = (url, init = {}) => fetch(url, { ...init, headers: { ...(init.headers || {}), 'User-Agent': UA }, signal: init.signal || AbortSignal.timeout(45000) });
@@ -147,6 +150,12 @@ function applyResults(dump, results, { now, today, mergeRegChanges, regHistoryOf
 
 const SETUP = `還沒設定 Google 的存取（Actions 變數 GCP_WIF_PROVIDER＋GCP_SERVICE_ACCOUNT，或 Secrets 的 GDRIVE_SERVICE_ACCOUNT 都沒有），這次沒有查。設定步驟見 README「重點推廣名單：商工登記更新改在後台跑」。`;
 
+/** 要查的名單：有統編或名稱的，最久沒查過商工登記的排前面（沒查過＝0 最前）；時間預算到了停，明天從沒輪到的接著查 */
+function orderTargets(records, states) {
+  const regAtOf = (r) => Number(((states && states.get(r.id)) || {}).regAt || 0);
+  return records.filter((r) => r && r.id && (r.taxId || r.company)).sort((a, b) => regAtOf(a) - regAtOf(b));
+}
+
 async function main() {
   const summary = [];
   const out = (line) => { console.log(line); summary.push(line); };
@@ -166,12 +175,13 @@ async function main() {
   if (setting('registry-auto') === '0') out('※ 網站設定裡「每天自動更新」是關的；後台照查，但只在 write 模式才會寫回。');
   out(`同步檔：${records.length} 筆客戶（雲端最後修改 ${file.modifiedTime}），模式 ${MODE}${useMirror ? '，允許 g0v 鏡像' : ''}`);
 
-  const targets = records.filter((r) => r && r.id && (r.taxId || r.company));
+  const targets = orderTargets(records, states);
   const list = LIMIT ? targets.slice(0, LIMIT) : targets;
   const results = [];
   let fails = 0;
   const started = Date.now();
   for (let i = 0; i < list.length; i += 1) {
+    if (Date.now() - started > BUDGET * 60000) { out(`⏱ 時間預算 ${BUDGET} 分鐘到了：查了 ${i}／${list.length} 筆，其餘明天接著查（最久沒查的先）。`); break; }
     const rec = list[i];
     const view = viewOf(rec, states.get(rec.id));
     const res = await Registry.lookupCompany({ taxId: String(view.taxId || '').replace(/\D/g, ''), name: view.company }, { useMirror });
@@ -239,7 +249,7 @@ async function writeSummary(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
 }
 
-export { diffFields, classify, applyResults, viewOf, buildReport, staleRegistry, regDateMs, REGISTRY_FIELDS, CLOSED_RE };
+export { diffFields, classify, applyResults, viewOf, buildReport, staleRegistry, regDateMs, orderTargets, REGISTRY_FIELDS, CLOSED_RE };
 
 if (process.argv[1] && /registry-drive\.mjs$/.test(process.argv[1])) {
   main().catch((err) => { console.error(`✗ ${err.message}`); process.exit(1); });
