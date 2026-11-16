@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-13T01:43:18.631Z",
+ "generatedAt": "2026-11-16T00:41:33.000Z",
  "source": "https://pcc-api.openfun.app（政府電子採購網決標公告）",
  "cities": [
   "新北市",
@@ -20,7 +20,7 @@
   "公司登記",
   "商業登記"
  ],
- "lastFetched": "20261112",
+ "lastFetched": "20261115",
  "apiDown": false,
  "dates": {
   "20261016": {
@@ -213,6 +213,14 @@
    "vendors": 1227,
    "won": 783,
    "kept": 261,
+   "api_down": false
+  },
+  "20261115": {
+   "notices": 1,
+   "awards": 0,
+   "vendors": 0,
+   "won": 0,
+   "kept": 0,
    "api_down": false
   }
  },
