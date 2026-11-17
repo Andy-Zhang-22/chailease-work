@@ -201,10 +201,10 @@ test('fetch-industry 第五批（版本 433）：SBIR 核定名單只收有統�
   assert.equal(j.total, 1);
   assert.deepEqual(t.sbirCacheToMap(JSON.parse(JSON.stringify(j))).get('12345678'), { ym: '202603', amount: 1300000, title: 'B', n: 2 });
   assert.equal(t.sbirCacheToMap(null).size, 0);
-  assert.equal(t.SBIR.id, 26131); assert.equal(t.HEAD.slice(-3).join(','), '補助年月,補助金額,補助計畫');
+  assert.equal(t.SBIR.id, 26131); assert.equal(t.HEAD.slice(-4).join(','), '補助年月,補助金額,補助計畫,補助來源');
   // 分頁
   const r = I.toRecord({ 統編: '56789016', 名稱: '癸科技股份有限公司', 類別: '研發補助', 地址: '新北市新莊區', 資本額: '20000000', 首見年月: '202610', 補助年月: '202608', 補助金額: '1000000', 補助計畫: '手術器械 AI 視覺辨識' }, TODAY, '202610');
-  assert.deepEqual(r.sbir, { ym: { y: 2026, m: 8 }, amount: 1000000, title: '手術器械 AI 視覺辨識', months: 4 });
+  assert.deepEqual(r.sbir, { ym: { y: 2026, m: 8 }, amount: 1000000, title: '手術器械 AI 視覺辨識', prog: 'SBIR', months: 4 }, '補助來源空白＝SBIR（版本 435 以前的檔）');
   assert.equal(I.kindLabel('研發補助'), '🔬 研發補助');
   assert.deepEqual(I.dailyFacts(r).signals, ['剛拿到研發補助（補助 100 萬）'], '需求證據 D 層的訊號');
   assert.match(I.noteFor(r), /^產業名單：研發補助，2026-08 核定 SBIR 研發補助（手術器械 AI 視覺辨識，補助 100 萬）$/);
@@ -216,4 +216,34 @@ test('fetch-industry 第五批（版本 433）：SBIR 核定名單只收有統�
   assert.match(csv, /2026-08 核定 SBIR 研發補助/); assert.match(csv, /2025-01 核定 SBIR 研發補助（X，補助 80 萬）/);
   const none = I.toRecord({ 統編: '56789013', 名稱: '庚公司', 類別: '食品製造業', 首見年月: '202610' }, TODAY, '202610');
   assert.equal(none.sbir, null);
+});
+
+test('fetch-industry 第六批（版本 435）：臺北市產業發展獎勵補助沒統編，名稱對稅籍檔；領域有研發的算研發補助、其餘算創業補助；核定 24 個月內；分頁的卡片、訊號、備註', async () => {
+  const t = await tool();
+  const now = new Date(2026, 10, 17);
+  const base = { '獲補助年度': '115', '領域': '創業補助', '公司名稱': '　台灣甲乙（股）有限公司 ', '計畫名稱': ' 雲端報價平台  創業計畫 ', '登記地址-行政區': '內湖區', '核定日期': '1150320', '核定補助款-元': '1,000,000', '資本額-申請時': '5000000' };
+  assert.deepEqual(t.tpeGrantRow(base, { now }), { name: '臺灣甲乙(股)有限公司', district: '內湖區', ym: '202603', amount: 1000000, title: '雲端報價平台 創業計畫', prog: '臺北市創業補助', kind: '創業補助' }, '名稱全半形、去空白、台→臺；民國七碼核定日期；金額去逗號');
+  assert.equal(t.tpeGrantRow({ ...base, '領域': '主題式研發' }, { now }).kind, '研發補助'); assert.equal(t.tpeGrantRow({ ...base, '領域': '創新研發' }, { now }).prog, '臺北市創新研發');
+  assert.equal(t.tpeGrantRow({ ...base, '領域': '品牌建立補助' }, { now }).kind, '創業補助', '品牌、新創、育成都算創業補助');
+  assert.equal(t.tpeGrantRow({ ...base, '核定日期': '1131001' }, { now }), null, '超過 24 個月不收');
+  assert.equal(t.tpeGrantRow({ ...base, '核定日期': '2026/03/20' }, { now }), null, '核定日期不是民國七碼不收');
+  assert.equal(t.tpeGrantRow({ ...base, '公司名稱': '' }, { now }), null, '沒名稱不收');
+  assert.equal(t.nameKey(' 台北丙丁股份有限公司（籌備處） '), '臺北丙丁股份有限公司(籌備處)');
+  const by = new Map();
+  const a = t.tpeGrantRow(base, { now }); t.tpeGrantMerge(by, a); t.tpeGrantMerge(by, a);
+  t.tpeGrantMerge(by, { ...a, ym: '202609', amount: 2000000, title: 'B', prog: '臺北市創新研發', kind: '研發補助' });
+  assert.deepEqual({ ...by.get(a.name), keys: undefined }, { ...a, ym: '202609', amount: 3000000, title: 'B', prog: '臺北市創新研發', kind: '研發補助', n: 2, keys: undefined }, '同一筆只算一次；兩個計畫加總、留最新的領域與計畫名');
+  assert.equal(t.TPE_GRANT.id, 121519); assert.equal(t.TPE_GRANT.city, '臺北市');
+  const row = t.toRow({ taxId: '12345678', name: '甲', kinds: ['創業補助'], address: '臺北市內湖區', firstYm: '202611', sbir: { ym: '202603', amount: 1000000, title: '雲端報價平台', n: 1, prog: '臺北市創業補助' } });
+  assert.deepEqual(row.slice(20), ['202603', 1000000, '雲端報價平台', '臺北市創業補助']);
+  // 分頁
+  const r = I.toRecord({ 統編: '56789018', 名稱: '丑科技有限公司', 類別: '創業補助', 地址: '臺北市內湖區', 資本額: '5000000', 首見年月: '202610', 補助年月: '202603', 補助金額: '1000000', 補助計畫: '雲端報價平台', 補助來源: '臺北市創業補助' }, TODAY, '202610');
+  assert.deepEqual(r.sbir, { ym: { y: 2026, m: 3 }, amount: 1000000, title: '雲端報價平台', prog: '臺北市創業補助', months: 9 });
+  assert.equal(I.kindLabel('創業補助'), '🚀 創業補助');
+  assert.deepEqual(I.dailyFacts(r).signals, ['剛拿到創業補助（補助 100 萬）'], '需求證據 D 層的訊號（創業補助）');
+  assert.match(I.noteFor(r), /^產業名單：創業補助，2026-03 核定臺北市創業補助（雲端報價平台，補助 100 萬）$/);
+  assert.match(I.cardFacts(r).info, /^創業補助（2026\/03 核定臺北市創業補助（雲端報價平台，補助 100 萬））$/);
+  const rd = I.toRecord({ 統編: '56789019', 名稱: '寅科技有限公司', 類別: '研發補助', 地址: '臺北市大安區', 首見年月: '202610', 補助年月: '202605', 補助金額: '2000000', 補助計畫: 'AI 排程', 補助來源: '臺北市主題式研發' }, TODAY, '202610');
+  assert.deepEqual(I.dailyFacts(rd).signals, ['剛拿到研發補助（補助 200 萬）']);
+  assert.match(I.noteFor(rd), /2026-05 核定臺北市主題式研發（AI 排程，補助 200 萬）/);
 });

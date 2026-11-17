@@ -19,6 +19,7 @@
  * industry.csv：統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價,建照種類,建照地址
  *   （建照種類「進駐」＝第四批：這家登記在近 6 年蓋好的商辦，建照年月是那棟的使照年月、建照地址是大樓門牌）
  *   補助年月,補助金額,補助計畫（第五批，版本 433：SBIR 核定的年月、金額加總〔元〕、最新那個計畫名）
+ *   補助來源（第六批，版本 435：SBIR，或「臺北市＋領域」如臺北市創業補助）
  * 用法：node tools/fetch-industry.mjs [--out leads/industry] [--cities 新北市,臺北市] [--phones leads/trade/phones.csv] [--reset-baseline]
  */
 import fs from 'node:fs/promises';
@@ -95,7 +96,16 @@ const OFFICE_USE = /辦公|事務所|G2/; const OFFICE_RES = /住宅|住家|住�
  * 只收核准 24 個月內的；拿到補助＝接下來要花錢買設備、而且 SBIR 要自籌一半以上（缺的是錢，不是便宜的錢）。
  */
 export const SBIR = { id: 26131, kind: '研發補助', months: 24 };
-export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所', '建照年月', '建照用途', '建照造價', '建照種類', '建照地址', '補助年月', '補助金額', '補助計畫'];
+/*
+ * 第六批（版本 435）：臺北市產業發展獎勵補助核定名單（data.gov.tw 121519，臺北市產業發展局，一年更新一次，Big5）。使用者 11/17「做吧」。
+ *   原本要找的投資臺灣三大方案（三年新北 13 家）、新北地方型 SBIR、低碳化智慧化補助都沒有逐家的核定名單（探路見 README），這份是 data.gov.tw 目錄裡翻到的。
+ *   欄位：獲補助年度,領域,公司名稱,計畫名稱,負責人姓名,登記地址-行政區,核定日期（民國七碼）,…,核定補助款-元,…,資本額-申請時。沒統編 → 公司名稱對稅籍檔的營業人名稱（臺北市內；探路 159 家對到 151）。
+ *   領域有「研發」的算研發補助，其餘（創業補助、新創拔尖、品牌建立、創新育成…）算創業補助；補助來源寫「臺北市＋領域」。只收核定 24 個月內的，跟 SBIR 一樣放 sbir 欄位。
+ */
+export const TPE_GRANT = { id: 121519, url: 'https://data.taipei/api/dataset/3e78bffa-3fa3-46d5-a632-df99447de695/resource/014c6c34-efdb-4aab-9715-50711f14562e/download', city: '臺北市', months: 24, kinds: { rd: '研發補助', startup: '創業補助' } };
+/** 對名稱用：全半形、去空白、台→臺 */
+export const nameKey = (s) => halfWidth(s).replace(/\s+/g, '').replace(/台/g, '臺');
+export const HEAD = ['統編', '名稱', '類別', '地址', '資本額', '實收資本額', '首見年月', '設立日期', '組織別', '行業代號', '行業', '電話', '場所', '新場所年月', '新場所', '建照年月', '建照用途', '建照造價', '建照種類', '建照地址', '補助年月', '補助金額', '補助計畫', '補助來源'];
 const BRANCH_NAME = /分公司$/;
 const csvCell = (v) => { const t = String(v == null ? '' : v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 const num = (s) => Number(String(s || '').replace(/[^\d.]/g, '')) || 0;
@@ -286,6 +296,48 @@ export function sbirMerge(by, r) {
   have.keys.add(k); have.n += 1; have.amount += r.amount;
   if (r.ym > have.ym) { have.ym = r.ym; have.title = r.title; }
 }
+/** 臺北市獎勵補助一列 → { name, district, ym, amount, title, prog, kind }；沒名稱、核定日期不是民國七碼、超過 months 個月回 null */
+export function tpeGrantRow(o, { now = new Date(), months = TPE_GRANT.months } = {}) {
+  const name = nameKey(o['公司名稱']);
+  if (!name) return null;
+  const d = String(o['核定日期'] || '').replace(/\D/g, '');
+  if (!/^\d{7}$/.test(d)) return null;
+  const y = Number(d.slice(0, 3)) + 1911; const m = Number(d.slice(3, 5));
+  if (!(m >= 1 && m <= 12)) return null;
+  const age = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+  if (age < 0 || age > months) return null;
+  const field = halfWidth(o['領域'] || '').replace(/\s+/g, '');
+  return { name, district: halfWidth(o['登記地址-行政區'] || '').replace(/\s+/g, ''), ym: `${y}${String(m).padStart(2, '0')}`, amount: num(o['核定補助款-元']),
+    title: halfWidth(o['計畫名稱'] || '').replace(/\s+/g, ' ').slice(0, 40), prog: `臺北市${field || '獎勵補助'}`, kind: /研發/.test(field) ? TPE_GRANT.kinds.rd : TPE_GRANT.kinds.startup };
+}
+/** 同一家好幾筆：留最新核定的（領域、計畫名跟著），金額加總、算幾筆；同年月同金額當同一筆 */
+export function tpeGrantMerge(by, r) {
+  const have = by.get(r.name);
+  if (!have) { by.set(r.name, { ...r, n: 1, keys: new Set([`${r.ym}:${r.amount}`]) }); return; }
+  const k = `${r.ym}:${r.amount}`;
+  if (have.keys.has(k)) return;
+  have.keys.add(k); have.n += 1; have.amount += r.amount;
+  if (r.ym > have.ym) Object.assign(have, { ym: r.ym, title: r.title, prog: r.prog, kind: r.kind, district: r.district });
+}
+/** 臺北市獎勵補助：整份下載（Big5）→ 公司名稱 → { ym, amount, title, prog, kind, n } */
+async function fetchTpeGrant(now) {
+  console.log(`臺北市產業發展獎勵補助（${TPE_GRANT.id}）下載 ${TPE_GRANT.url}`);
+  const buf = await fetchRetry(TPE_GRANT.url, (r) => r.arrayBuffer(), 5 * 60000);
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { text = new TextDecoder('big5').decode(buf); }
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const head = parseLine(lines[0] || '').map((h) => h.trim());
+  if (!head.includes('公司名稱') || !head.includes('核定日期')) throw new Error(`表頭對不上：${head.join(',')}`);
+  const by = new Map(); let n = 0; let rows = 0;
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    rows++;
+    const cells = parseLine(lines[i]); const o = {}; head.forEach((h, k) => { o[h] = cells[k] || ''; });
+    const r = tpeGrantRow(o, { now }); if (r) { tpeGrantMerge(by, r); n++; }
+  }
+  console.log(`  ${rows.toLocaleString()} 列，核定 ${TPE_GRANT.months} 個月內 ${n.toLocaleString()} 列、${by.size.toLocaleString()} 家（之後對稅籍檔的營業人名稱）`);
+  return by;
+}
 /** data.gov.tw 資料集的全部 CSV 檔（網址、說明） */
 async function datasetFiles(id) {
   const r = await fetch(`https://data.gov.tw/api/v2/rest/dataset/${id}`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(60000) });
@@ -350,7 +402,7 @@ async function fetchPermits() {
   console.log(`  ${n.toLocaleString()} 列，最近 ${PERMIT.months} 個月、起造人像公司、不是純住宅的 ${kept.toLocaleString()} 張，起造人 ${by.size.toLocaleString()} 個名字（之後對稅籍檔留縣市內的）；近 ${OFFICE.months} 個月純商辦的使照 ${offices.toLocaleString()} 張、${officeBy.size.toLocaleString()} 個門牌`);
   return { by, officeBy };
 }
-export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : '', r.permit ? r.permit.ym : '', r.permit ? r.permit.use : '', r.permit ? r.permit.cost || '' : '', r.permit ? r.permit.stage || '建照' : '', r.permit ? r.permit.address || '' : '', r.sbir ? r.sbir.ym : '', r.sbir ? r.sbir.amount || '' : '', r.sbir ? r.sbir.title || '' : ''];
+export const toRow = (r) => [r.taxId, r.name, r.kinds.join('、'), r.address, r.capital || '', r.paid || '', r.firstYm, r.founded || '', r.org || '', r.indCode || '', r.industry || '', r.tel || '', r.sites && r.sites.length ? sitesText(r) : '', r.newSite ? r.newSite.ym : '', r.newSite ? r.newSite.what : '', r.permit ? r.permit.ym : '', r.permit ? r.permit.use : '', r.permit ? r.permit.cost || '' : '', r.permit ? r.permit.stage || '建照' : '', r.permit ? r.permit.address || '' : '', r.sbir ? r.sbir.ym : '', r.sbir ? r.sbir.amount || '' : '', r.sbir ? r.sbir.title || '' : '', r.sbir ? r.sbir.prog || 'SBIR' : ''];
 
 async function readSeen(file, keyOk = (k) => /^\d{8}$/.test(k)) {
   const m = new Map();
@@ -527,6 +579,12 @@ async function main() {
     console.log(`  SBIR 抓不到（${err && err.message ? err.message : err}），沿用 ${sbirCachedFrom.slice(0, 10)} 的快取 ${sbirBy.size.toLocaleString()} 家，其餘照常更新`);
   }
   let sbirHit = 0;
+  // 2e. 臺北市產業發展獎勵補助（版本 435）：沒統編，公司名稱對稅籍檔（臺北市內）；抓不到就這個月沒有這一類（下個月再來）
+  let tpeBy = new Map();
+  if (inCity(TPE_GRANT.city, CITIES)) {
+    try { tpeBy = await fetchTpeGrant(now); } catch (err) { console.log(`  臺北市獎勵補助抓不到（${err && err.message ? err.message : err}），這個月沒有這一類`); }
+  }
+  let tpeHit = 0;
 
   // 3. 稅籍：成立日期、組織別、行業
   console.log(`對稅籍檔 ${TAX_SOURCE}（串流）`);
@@ -545,7 +603,8 @@ async function main() {
     const pm = permitByName.size ? permitByName.get(halfWidth(cells[3])) : null;
     const of = officeBy.size && inCity(halfWidth(cells[0]), CITIES) ? officeOf(officeBy, cells[0]) : null;
     const sb = sbirBy.size ? sbirBy.get(tax) : null;
-    if (!r && !x && !pm && !of && !sb) continue;
+    const tg = tpeBy.size && !sb && inCity(halfWidth(cells[0]), [TPE_GRANT.city]) ? tpeBy.get(nameKey(cells[3])) : null;
+    if (!r && !x && !pm && !of && !sb && !tg) continue;
     const t = taxFields(cells);
     if (!t) continue;
     if (!r) {
@@ -559,7 +618,8 @@ async function main() {
     if (pm && !t.branch && !r.permit) { if (!r.kinds.includes(PERMIT.kind)) r.kinds.push(PERMIT.kind); r.permit = pm; permitHit++; }
     // 登記在近 6 年蓋好的商辦：這家自己是起造人（上一行）就不另標；分公司在建 r 那步已經跳過
     if (of && !r.permit) { if (!r.kinds.includes(OFFICE.kind)) r.kinds.push(OFFICE.kind); r.permit = { ym: of.ym, use: '辦公室', cost: 0, stage: '進駐', address: of.address }; officeHit++; }
-    if (sb && !r.sbir) { if (!r.kinds.includes(SBIR.kind)) r.kinds.push(SBIR.kind); r.sbir = { ym: sb.ym, amount: sb.amount, title: sb.title, n: sb.n }; sbirHit++; }   // 研發補助（版本 433）
+    if (sb && !r.sbir) { if (!r.kinds.includes(SBIR.kind)) r.kinds.push(SBIR.kind); r.sbir = { ym: sb.ym, amount: sb.amount, title: sb.title, n: sb.n, prog: 'SBIR' }; sbirHit++; }   // 研發補助（版本 433）
+    if (tg && !t.branch && !r.sbir) { if (!r.kinds.includes(tg.kind)) r.kinds.push(tg.kind); r.sbir = { ym: tg.ym, amount: tg.amount, title: tg.title, n: tg.n, prog: tg.prog }; tpeHit++; }   // 臺北市獎勵補助（版本 435）
     hit++;
     r.founded = t.founded; r.org = t.org; r.indCode = t.indCode; r.industry = t.industry;
   }
@@ -572,7 +632,7 @@ async function main() {
   const sitesSeen = updateSeen(prevSites, siteKeys, ym, prevIndex.siteBaseline);
   byTax.forEach((r) => { r.newSite = r.sites ? newSiteOf(r, sitesSeen.seen, sitesSeen.baseline) : null; });
   console.log(`場所 ${siteKeys.length.toLocaleString()} 處（起算月 ${sitesSeen.baseline}）；這個月新場所 ${sitesSeen.newIds.size.toLocaleString()} 處`);
-  console.log(`稅籍檔 ${tn.toLocaleString()} 列（出檔 ${fileDate || '?'}），對到 ${hit.toLocaleString()} 家；建照起造人對到 ${permitHit.toLocaleString()} 家；新商辦門牌 ${officeBy.size.toLocaleString()} 個對到 ${officeHit.toLocaleString()} 家；研發補助對到 ${sbirHit.toLocaleString()} 家`);
+  console.log(`稅籍檔 ${tn.toLocaleString()} 列（出檔 ${fileDate || '?'}），對到 ${hit.toLocaleString()} 家；建照起造人對到 ${permitHit.toLocaleString()} 家；新商辦門牌 ${officeBy.size.toLocaleString()} 個對到 ${officeHit.toLocaleString()} 家；研發補助對到 ${sbirHit.toLocaleString()} 家；臺北市獎勵補助 ${tpeBy.size.toLocaleString()} 家對到 ${tpeHit.toLocaleString()} 家`);
 
   // 5. 電話
   let phones = null;
@@ -591,8 +651,8 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'seen.csv'), `統編,首見年月\n${[...seen.entries()].sort().map(([k, v]) => `${k},${v}`).join('\n')}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'seen-sites.csv'), `場所,首見年月\n${[...sitesSeen.seen.entries()].sort().map(([k, v]) => `${csvCell(k)},${v}`).join('\n')}\n`, 'utf8');
   const index = {
-    generatedAt: new Date().toISOString(), source: [...[...KINDS.map((k) => k.id), FOOD.id, ENV.id, PERMIT.id, SBIR.id].map((id) => `https://data.gov.tw/dataset/${id}`), OFFICE.tpePage],
-    kinds: [...KINDS.map((k) => k.kind), FOOD.kind, ENV.factory, ENV.site, PERMIT.kind, OFFICE.kind, SBIR.kind], cities: CITIES, permitTotal: list.filter((r) => r.permit && r.permit.stage !== '進駐').length, officeTotal: list.filter((r) => r.permit && r.permit.stage === '進駐').length, sbirTotal: list.filter((r) => r.sbir).length,
+    generatedAt: new Date().toISOString(), source: [...[...KINDS.map((k) => k.id), FOOD.id, ENV.id, PERMIT.id, SBIR.id, TPE_GRANT.id].map((id) => `https://data.gov.tw/dataset/${id}`), OFFICE.tpePage],
+    kinds: [...KINDS.map((k) => k.kind), FOOD.kind, ENV.factory, ENV.site, PERMIT.kind, OFFICE.kind, SBIR.kind, TPE_GRANT.kinds.startup], cities: CITIES, permitTotal: list.filter((r) => r.permit && r.permit.stage !== '進駐').length, officeTotal: list.filter((r) => r.permit && r.permit.stage === '進駐').length, sbirTotal: list.filter((r) => r.sbir && r.sbir.prog === 'SBIR').length, tpeGrantTotal: list.filter((r) => r.sbir && r.sbir.prog !== 'SBIR').length,
     baseline, siteBaseline: sitesSeen.baseline, newSiteTotal: list.filter((r) => r.newSite).length, dataYm: ym, taxFileDate: fileDate, total: list.length, newTotal: list.filter((r) => r.isNew).length, newThisMonth: list.filter((r) => r.isNew && r.firstYm === ym).length,
     withPhone: list.filter((r) => r.tel).length, byKind, byDist: Object.fromEntries(Object.entries(byDist).sort((a, b) => b[1] - a[1])),
     files: [{ path: 'industry.csv', rows: list.length }],
