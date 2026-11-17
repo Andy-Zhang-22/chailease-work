@@ -28,10 +28,13 @@ const CCSV='﻿'+[CHEAD,...CROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const CINDEX={generatedAt:'2026-09-26T14:36:42.637Z',dataThrough:'2026/07/02',total:19541,kept:CROWS.length,files:[{path:'ntpc.csv',rows:CROWS.length}]};
 const BHEAD='統編,名稱,組織別,資本額,設立日期,地址,行業代號,行業,行業2,行業3,開發票,負責人,稅籍資本額,商業登記';
 const BROWS=[
- ['61111111','新莊好商行','獨資','12000000','2023/03/01','新北市新莊區中正路371號','471','雜貨','','','Y','王好人','12000000','Y'],
+ ['61111111','新莊好商行','獨資','12000000','2023/03/01','新北市新莊區中正路371號','4311','水電工程','','','Y','王好人','12000000','Y'],
  ['62222222','板橋企業社','合夥','1500000','2010/05/01','新北市板橋區文化路1號','472','五金','','','Y','李板橋','1500000','Y'],
- ['64444444','新設小商行','獨資','3000000','2024/01/01','新北市新莊區中正路2號','471','雜貨','','','N','','3000000','N'],
- ['63333333','只有稅籍商行','獨資','60000000','2018/08/01','新北市新莊區中正路1號','481','水電','','','N','','60000000','N'],
+ ['64444444','新設小商行','獨資','3000000','2024/01/01','新北市新莊區中正路2號','4311','水電工程','','','Y','','3000000','N'],
+ ['63333333','只有稅籍商行','獨資','60000000','2018/08/01','新北市新莊區中正路1號','4311','水電工程','','','Y','','60000000','N'],
+ // 版本 429：收現金的商行剔除——零售（471）的雜貨商行條件再好也不挑；不開發票的也不挑
+ ['65555555','新莊雜貨商行','獨資','12000000','2023/03/01','新北市新莊區中正路372號','471','雜貨零售','','','Y','陳雜貨','12000000','Y'],
+ ['66666666','免用發票商行','獨資','12000000','2023/03/01','新北市新莊區中正路373號','4311','水電工程','','','N','林免用','12000000','Y'],
 ];
 const BCSV='\uFEFF'+[BHEAD,...BROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
 const BINDEX={generatedAt:'2026-09-29T13:00:00.000Z',fileDate:'29-SEP-26',cities:['新北市'],minCapital:500000,total:3,byOrg:{'獨資':2,'合夥':1},byDist:{'新莊區':2,'板橋區':1},withOwner:2,taxOnly:1,files:[{path:'biz.csv',rows:3}]};
@@ -104,7 +107,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.some(f=>f.company==='新莊好商行') && fed.some(f=>f.company==='只有稅籍商行') && !fed.some(f=>/板橋企業社|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 8 年的只有稅籍商行前面；成立 10 年以上的會沉到最後（版本 345），所以它設 8 年）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：資本額 500 萬以上＋成立 5 年內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行落在第一級，寫在訪談內容');
  const bc=await pg.evaluate(async()=>(await window.Biz.dailyCandidates()).map(r=>r.name+'|'+r._why));
- chk(JSON.stringify(bc)===JSON.stringify(['新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行的順序只看資本額跟成立年（新莊好商行、只有稅籍商行已進名單）：${bc.join(' / ')}`);
+ chk(JSON.stringify(bc)===JSON.stringify(['新莊雜貨商行|符合：資本額 500 萬以上＋成立 5 年內','免用發票商行|符合：資本額 500 萬以上＋成立 5 年內','新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行那頁的順序只看資本額跟成立年、收現金的照樣列（新莊好商行、只有稅籍商行已進名單）：${bc.join(' / ')}`);
  chk(['禾泰精密工業有限公司','泓宇塑膠射出有限公司','巨鎰金屬製品有限公司'].every(n=>fed.some(f=>f.company===n)) && !fed.some(f=>f.company==='甲一精密有限公司'), `跟同業借的三家先、本期增資的甲一這輪沒輪到：${fed.map(f=>f.company).join('|')}`);
  chk(!fed.some(f=>f.company==='昱昌汽車貨運股份有限公司') && fed.filter(f=>/動保：/.test(f.notes)).length===3, `以前刪掉的昱昌不挑：${fed.map(f=>f.company).join('|')}`);
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
@@ -119,6 +122,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('#feedMore'); await pg.waitForTimeout(1500);
  const fed2=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.company));
  chk(fed2.length===10, `再補之後 10 家：${fed2.join('|')}`);
+ chk(!fed2.includes('新莊雜貨商行') && !fed2.includes('免用發票商行'), `版本 429：零售的、不開發票的商行條件再好也不挑：${fed2.join('|')}`);
  chk(fed2.includes('只有稅籍商行') && !fed2.includes('板橋企業社'), `再補的商行是只有稅籍商行（500 萬以上＋5 年以上），板橋企業社還沒輪到：${fed2.filter(x=>/商行|企業社/.test(x)).join('|')}`);
  chk(/符合：3 個月內到期、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='自家客戶有限公司'); return r?r.notesRaw:''; })) || !fed2.includes('自家客戶有限公司'), '中租自家的不算同業，排在後面補位');
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);

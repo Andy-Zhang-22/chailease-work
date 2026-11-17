@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261117-428';
+  const APP_VERSION = '20261117-429';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3394,6 +3394,8 @@
   const EXCLUDE_SIGNAL_RE = /^(營造業|本期擴張)/;
   // 每日新名單的資本額範圍（版本 428）：未達 300 萬是微企、5 億以上是大企部，都不打；不知道資本額的照留。商行另外用 capitalOk（200 萬）
   const feedCapitalOk = (capital) => !capital || (Number(capital) >= 3000000 && Number(capital) < 500000000);
+  // 商行收現金的行業（版本 429）：稅籍行業代號前兩碼
+  const CASH_CODE_RE = /^(47|48|56|96|64|55|93|90|52)/;
   // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
   const BUY_MIN = 3000000;
   const buyBig = (c) => (c.buy.amount || 0) >= BUY_MIN;
@@ -3769,7 +3771,7 @@
        * 剔除幾家記在 summary.excluded，後台印出來。
        */
       const poolReady = !!(window.Hire104 && window.Hire104.poolInfo && window.Hire104.poolInfo().n > 0);
-      const excluded = { old: 0, capital: 0, phone: 0, industry: 0, signal: 0, hiring: 0 };
+      const excluded = { old: 0, capital: 0, phone: 0, industry: 0, signal: 0, hiring: 0, cash: 0 };
       // 後台 research=yes 時上網查訊號會順便看到官網、徵才頁的電話（版本 322）：那時沒電話的先留著，查完再決定
       const researchOn = typeof window.backendResearch === 'function' && window.researchDaily !== false;
       let merged = mergeFeed(SRC).filter((c) => {
@@ -3792,6 +3794,10 @@
       bz = bz.filter((r) => capitalOk(r.capital));   // 商行也一樣：資本額要滿 200 萬（版本 362）
       // 商行也剔除沒電話的（版本 428）；成立 10 年以上的商行照舊排最後（商行那份本來就少，不剔）
       if (feedNeedPhone()) bz = bz.filter((r) => { const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; if (bf && bf.phone) return true; excluded.phone += 1; return false; });
+      // 商行剔除收現金的（版本 429；使用者 11/17：「商行的挑選邏輯能避免掉收現金的行業嗎」→「好」）：
+      // 不開統一發票的（免用＝每月 20 萬以下的小店；稅籍沒這欄的不算）、稅籍行業前兩碼是零售 47／48、餐飲 56、美容美髮洗衣 96、典當投資 64、住宿 55、娛樂 93、藝文表演 90、停車場 52。
+      // 商行那一頁照舊全部列，只有每日自動挑的這份剔除
+      bz = bz.filter((r) => { if (r.invoice === false || CASH_CODE_RE.test(String(r.code || ''))) { excluded.cash += 1; return false; } return true; });
       bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || fitB(b[0]) - fitB(a[0]) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || a[1] - b[1]).map(([r]) => r);
       const googleHits = new Map();   // 版本 428 起挑名單前不查 Google 地圖了；只剩上網查訊號時順便看到的電話（kind 'web'）會放進來
       const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
@@ -4058,7 +4064,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 300 萬或 5 億以上、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社照自己的規則（資本額跟成立年）另外挑。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 300 萬或 5 億以上、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社照自己的規則（資本額跟成立年）另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
