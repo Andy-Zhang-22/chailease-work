@@ -124,8 +124,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);
  chk(fed.every(f=>/^每日新名單-2026-10-05(-補1)?\.csv$/.test(f.source)), `來源名稱帶日期，再補的另外取名：${[...new Set(fed.map(f=>f.source))].join('|')}`);
  const ht=fed.find(f=>f.company==='禾泰精密工業有限公司'); chk(ht && /動保：新鑫/.test(ht.notes) && ht.founded==='2022', `動保的備註與成立年進來（只挑成立 5 年內）：${ht&&ht.notes} / ${ht&&ht.founded}`);
- const yi=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='乙二機械股份有限公司'); return r?{capital:r.capital,notes:r.notesRaw}:null; });
- chk(yi && yi.capital==='50,000' && /新公司清冊/.test(yi.notes), `登記清冊的資本額（仟元）、備註（再補那批的乙二）：${yi&&yi.capital} / ${yi&&yi.notes}`);
+ // 再補那批一定有登記清冊的（本期增資那層：丁四在新莊最前，乙二、丙三誰補上看商行那邊拿了幾家）；甲一有「本期擴張」訊號，版本 428 起剔除
+ const lead2=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>/補1/.test(r.source) && /新公司清冊/.test(r.notesRaw)); return r?{company:r.company,capital:r.capital,notes:r.notesRaw}:null; });
+ chk(lead2 && /^(乙二機械股份有限公司|丙三工程有限公司|丁四貿易有限公司)$/.test(lead2.company) && /^(50,000|20,000|10,000)$/.test(lead2.capital) && /新公司清冊/.test(lead2.notes), `登記清冊的資本額（仟元）、備註（再補那批）：${JSON.stringify(lead2)}`);
  chk((await pg.evaluate(()=>localStorage.getItem('daily-feed-on')))===TODAY, '記下今天挑過了');
  chk(await pg.locator('#importer').isHidden(), '靜默匯入，沒有打開匯入抽屜');
 
@@ -155,7 +156,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
  await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
- chk(cand.c.length===1 && cand.c[0]==='自家客戶有限公司' && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.l.length===1 && cand.l[0]==='甲一精密有限公司', `兩輪挑完：動保只剩跟中租借的自家客戶（以前刪掉的昱昌分頁也不列）、登記清冊剩甲一；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ chk(cand.c.length===1 && cand.c[0]==='自家客戶有限公司' && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.l.includes('甲一精密有限公司') && cand.l.length<=2 && !cand.l.includes('丁四貿易有限公司'), `兩輪挑完：動保只剩跟中租借的自家客戶（以前刪掉的昱昌分頁也不列）、登記清冊剩被剔除的甲一（本期擴張）；跟畫面篩選無關：${JSON.stringify(cand)}`);
  // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const dueNow=await pg.evaluate(()=>window.customerViews().filter(v=>v.nextDate==='2026-10-05'&&!v.blocked).length);
