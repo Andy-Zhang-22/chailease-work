@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261112-427';
+  const APP_VERSION = '20261117-428';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3372,9 +3372,8 @@
    */
   let feeding = false;
   const dailyFeedOn = () => registryPref('daily-feed-auto') !== '0';
-  /** 每日新名單只進有電話的（版本 318）；feed-need-phone＝'0' 關掉（測試用）。一天最多用 Google 地圖查 GATE_LOOKUPS 家 */
+  /** 每日新名單只進有電話的（版本 318）；feed-need-phone＝'0' 關掉（測試用）。版本 428 起沒電話的直接剔除，不再用 Google 地圖、Claude 找 */
   const feedNeedPhone = () => { try { return localStorage.getItem('feed-need-phone') !== '0'; } catch (e) { return true; } };
-  const GATE_LOOKUPS = 40;
   /*
    * 資本額門檻（版本 362；使用者：「有手機很好但同時資本額要滿足 200 萬再給我」）：每日新名單挑的時候，
    * 資本額要滿 200 萬，有沒有手機都一樣（手機只是排前面）。資本額查不到的（0）不擋——不知道不算不合格。
@@ -3382,71 +3381,22 @@
    */
   const CAP_FLOOR = 2000000;
   const capitalOk = (capital) => !capital || Number(capital) >= CAP_FLOOR;
-  const HUNT_LOOKUPS = 20;   // 第四關 Claude 找電話一天最多幾家（版本 352；一家約 US$0.09）
-  /** 把 need 家平分給幾個池子（各池子有 avail[i] 家可拿）：輪流一家一家拿，某池空了其他池補。回各池拿幾家。 */
-  /** 九個來源的配額比例（'feed-shares'，"5,4,4,4,4,4,4,4"；使用者：「六個來源的每日配額可以不平均」）；沒設或壞的回 null＝平分。
-   *  加了新設工廠（第七個）、產業名單（第八個）之前存的數字照樣能用：新設工廠跟剛開始請人、產業名單跟新設工廠同一個比例 */
-  // 沒設的預設（版本 355 使用者：「商行企業社的比例拉高可以」）：商行 2、其他 1（15 家裡商行約 3 家，以前平分約 2 家）
-  // 版本 408（10 月成效覆盤，使用者：「照你說的做」）：出進口廠商接通 83% 最高拉到 2；產業名單 38% 最低降到 0（每頁保底一家照舊）
-  const DEFAULT_SHARES = [1, 1, 3, 2, 1, 1, 1, 0, 1];   // 第九個：104 徵才中（版本 410）；商行 2→3（版本 421：38 家約到 6 家，是公司名單的兩倍多）
-  function feedShares() {
-    const raw = registryPref('feed-shares');
-    if (!raw) return DEFAULT_SHARES.slice();
-    const a = String(raw).split(',').map((x) => Math.max(0, Math.round(Number(x) || 0)));
-    if (a.length === 6) a.push(a[4]);
-    if (a.length === 7) a.push(a[6]);
-    if (a.length === 8) a.push(1);   // 版本 410 加了 104 徵才中：之前存的八個照用，第九個先算 1
-    return a.length === 9 && a.some((x) => x > 0) ? a : null;
-  }
-  /**
-   * 照比例分：先依比例算每頁該拿幾家（最大餘數法），哪一頁不夠的，缺的讓有比例的其他頁輪流補；比例 0 的頁最後才補位。
-   * 沒比例就平分（splitEvenly）。
+  /*
+   * 版本 428：減法＋需求證據（主管建議「改成減法試試」，使用者 11/17「照你說的改」）。
+   * 來源配額（feed-shares）、每頁保底、加分制（strongSignals／buyRank）全部拿掉：加分制的數據是 3 個訊號以上約訪 6.8%、1 個 6.3%，沒差。
+   * 需求證據由強到弱，順序照實際約訪率排（11/11 成效表）：
+   *   A 跟租賃同業借過 19% → B 剛得標 33%（6 家）→ C 一年內買設備 8% → D 剛增資、新廠／新工地／進駐新商辦、徵財務主管 → E 剛做進出口 8.6% → F 其他（只有徵才、剛開始請人、剛開電子發票、身分訊號）
    */
-  function splitByShares(avail, need, shares) {
-    if (!shares || shares.length !== avail.length) return splitEvenly(avail, need);
-    const sum = shares.reduce((a, b) => a + b, 0) || 1;
-    const exact = shares.map((s) => (Math.max(0, need) * s) / sum);
-    const target = exact.map(Math.floor);
-    let rest = Math.max(0, need) - target.reduce((a, b) => a + b, 0);
-    exact.map((x, i) => [x - target[i], i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => { if (rest > 0 && shares[i] > 0) { target[i] += 1; rest -= 1; } });
-    const take = target.map((t, i) => Math.min(t, avail[i]));
-    const fill = (allowZero) => {
-      let left = Math.max(0, need) - take.reduce((a, b) => a + b, 0);
-      while (left > 0) {
-        let got = false;
-        for (let i = 0; i < avail.length && left > 0; i++) { if ((allowZero || shares[i] > 0) && take[i] < avail[i]) { take[i] += 1; left -= 1; got = true; } }
-        if (!got) break;
-      }
-    };
-    fill(false); fill(true);
-    return take;
-  }
-  function splitEvenly(avail, need) {
-    const take = avail.map(() => 0);
-    let left = Math.max(0, need);
-    while (left > 0) {
-      let got = false;
-      for (let i = 0; i < avail.length && left > 0; i++) { if (take[i] < avail[i]) { take[i] += 1; left -= 1; got = true; } }
-      if (!got) break;
-    }
-    return take;
-  }
-  /**
-   * 五頁的候選依統編合成一家：各頁看到的訊號聯集（本期增資／擴張、剛做進出口、剛開始請人、剛開電子發票），
-   * 再用動保清冊補「最近買設備（6 個月內）」「跟同業借」——不管這家是從哪一頁進來的。
-   * 排法（版本 341 照企金業務的角度調過）：缺錢的訊號越多越前面（剛開始請人、剛開電子發票只是「有在動」，不算，只當最後的補位）
-   * → 動保半年內剛買設備的先（使用者：「代表他是有需求才買設備，可能會有周轉金需求」，版本 344）、6～12 個月前的次之、沒動保的後
-   * → 行業有設備廠房的先、貿易顧問類的後
-   * → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近 → 弱訊號 → 原本在各頁的名次。
-   */
-  // 版本 408：營造業、本期擴張（各 6 家打過 0 接通、一半禁止推廣）、跟同業借（接通 44%、禁止推廣 19%）不算明確訊號，排後面；訊號照樣記、照樣寫進備註
-  const WEAK_SIGNAL_RE = /^(剛開始請人|剛開電子發票|營造業|本期擴張|跟同業借)/;
-  const strongSignals = (c) => [...c.signals].filter((x) => !WEAK_SIGNAL_RE.test(x)).length;
+  const NEED_TIERS = [/^(跟同業借|利率不敏感)/, /^剛得標/, /^最近買設備/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管)/, /^剛做進出口/];
+  const needTier = (c) => { const sigs = [...c.signals]; for (let i = 0; i < NEED_TIERS.length; i += 1) if (sigs.some((x) => NEED_TIERS[i].test(x))) return i; return NEED_TIERS.length; };
+  const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
+  // 每日新名單剔除的訊號（版本 428）：營造業（有工地）、本期擴張打過的 12 家 0 接通、一半禁止推廣
+  const EXCLUDE_SIGNAL_RE = /^(營造業|本期擴張)/;
+  // 每日新名單的資本額範圍（版本 428）：未達 300 萬是微企、5 億以上是大企部，都不打；不知道資本額的照留。商行另外用 capitalOk（200 萬）
+  const feedCapitalOk = (capital) => !capital || (Number(capital) >= 3000000 && Number(capital) < 500000000);
   // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
   const BUY_MIN = 3000000;
   const buyBig = (c) => (c.buy.amount || 0) >= BUY_MIN;
-  // 金主是銀行的也挑，但要半年內的（版本 352 使用者：「銀行當金主的也可以挑給我，但就是要最近半年內有的」）：半年到一年的只有同業（租賃／融資）才算
-  const buyRank = (c) => (!buyBig(c) ? 2 : c.buy.grade <= 1 ? 0 : c.buy.grade === 2 && c.buy.peer ? 1 : 2);
   function mergeFeed(sources) {
     const byKey = new Map();
     sources.forEach((src) => {
@@ -3482,23 +3432,14 @@
       const lenders = tax && window.Chattel.lenderCountOf ? window.Chattel.lenderCountOf(tax) : 0;
       if (lenders >= 2) c.signals.add(`動保 ${lenders} 家金主`);
     });
-    // 成立 10 年以上的真的排最後（版本 345；使用者：「今天給我的名單為甚麼都是成立年非新公司」——以前只是第 7 順位的比較條件，有訊號的老公司照樣排前面）
-    // 有手機號碼的排前面（版本 347；使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）：排在訊號前面
-    // 規模符合（資本額 300～6,000 萬）且有手機的排在「有手機」前面（版本 374；使用者：「這幾天的名單確實都是給我有手機的名單，但好像規模都偏小」→「規模符合且有手機的排在有手機前面」）
-    const fit = (c) => Number(!!(c.capOk && c.mobile));
-    // 四個同時滿足的最前面（版本 377；使用者：「有手機、訊號多的且有買設備、規模符合的都先給我」）：
-    // 規模符合＋有手機＋一年內有買設備（擔保 300 萬以上；半年到一年的要同業金主，跟 buyRank 同一條）＋明確訊號兩個以上（買設備那個也算一個）
-    const top = (c) => Number(!!(c.capOk && c.mobile && buyRank(c) <= 1 && strongSignals(c) >= 2));
-    // 104 徵才中排第一層（版本 415；使用者 11/07：「有在徵才才是最低標的門檻」——還在請人才確定公司還在做生意）：
-    // 版本 413 原本排在四項都符合的後面。排序不是門檻（使用者定的），每頁保底一家、商行那份照舊，所以其他來源沒在 104 的還是會各有一家
-    const hire = (c) => Number([...c.signals].some((x) => /^104 徵才中/.test(x)));
-    // 徵財務主管的再排最前（版本 417；使用者：「徵才中有徵財務主管的優先挑給我打」）
-    const fin = (c) => Number([...c.signals].some((x) => /^104 徵財務主管/.test(x)));
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || fin(b) - fin(a) || hire(b) - hire(a) || top(b) - top(a) || fit(b) - fit(a) || Number(!!b.mobile) - Number(!!a.mobile) || strongSignals(b) - strongSignals(a) || buyRank(a) - buyRank(b) || a.indRank - b.indRank || a.ageRank - b.ageRank
-      || Number(!!b.capOk) - Number(!!a.capOk) || Number(!!b.phone) - Number(!!a.phone) || a.branchRank - b.branchRank || b.signals.size - a.signals.size || a.order - b.order);
+    /*
+     * 排序（版本 428）：成立 10 年以上最後（每日新名單會剔除，合併頁還看得到）→ 有手機的先（使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）
+     * → 需求證據 A～F → 離新莊近 → 原本在各頁的名次。以前的徵財務主管／104／規模＋手機＋買設備／訊號數那七層全拿掉。
+     */
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || Number(!!b.mobile) - Number(!!a.mobile) || needTier(a) - needTier(b) || a.branchRank - b.branchRank || a.order - b.order);
     return out;
   }
-  /** 每頁先保底一家（那一頁裡總排名最前面、還沒被挑的），剩下照總排名挑滿 n 家 */
+  /** 照總排名挑滿 n 家；srcKeys 給空陣列就是純照排名（版本 428 起每日新名單不保底，只有上網查訊號那條還用「明確訊號的先」） */
   function pickMerged(merged, n, srcKeys) {
     const out = [];
     const used = new Set();
@@ -3737,7 +3678,7 @@
     const keys = ['ch', 'le', 'tr', 'nh', 'ei', 'fa', 'in', 'pc', 'hi'];
     await refreshDeleted();
     return mergeFeed(keys.map((key, i) => ({ key, mod: mods[i], list: lists[i] })))
-      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4, buy: buyRank(c), strong: strongSignals(c) }));
+      .map((c) => ({ key: c.key, name: c.name, signals: [...c.signals], srcs: Object.keys(c.recs), indRank: c.indRank, mobile: !!c.mobile, capOk: !!c.capOk, old: c.ageRank === 4, tier: needTier(c), hiring: isHiring(c) }));
   };
   /**
    * opts.force：不管自動有沒有開、今天挑過沒，補滿今天的額度。
@@ -3820,7 +3761,26 @@
         // 104 徵才中（版本 410）：Mac 每週抓的候選池，跟其他八份一起揉、一樣保底一家；排最後＝同一家也在別份的話用那一份的資料匯入
         { key: 'hi', label: '104 徵才中', mod: window.Hire104, list: hiAll.filter((r) => notBuried(r.name, r.taxId)) },
       ];
-      let merged = mergeFeed(SRC).filter((c) => capitalOk(c.capital));   // 資本額門檻（版本 362）
+      /*
+       * 減法（版本 428；主管建議「改成減法試試，比如我不要成立時間太久的、資本額超過五億的」，使用者 11/17「照你說的改」）：這些不打，直接剔除——
+       *   成立 10 年以上；資本額未達 300 萬（微企）或 5 億以上（大企部）；沒電話（不再花錢用 Google 地圖、Claude 找：每天 60 次找到 0～1 家）；
+       *   「不是目標」刪過兩次的行業；營造業（有工地）、本期擴張；104 池子有資料時，沒在徵才「而且」沒任何需求證據的
+       *   （有跟同業借、剛得標這種證據的，徵不徵才都打）。已在名單、刪過、藏起來的各頁本來就不列。
+       * 剔除幾家記在 summary.excluded，後台印出來。
+       */
+      const poolReady = !!(window.Hire104 && window.Hire104.poolInfo && window.Hire104.poolInfo().n > 0);
+      const excluded = { old: 0, capital: 0, phone: 0, industry: 0, signal: 0, hiring: 0 };
+      // 後台 research=yes 時上網查訊號會順便看到官網、徵才頁的電話（版本 322）：那時沒電話的先留著，查完再決定
+      const researchOn = typeof window.backendResearch === 'function' && window.researchDaily !== false;
+      let merged = mergeFeed(SRC).filter((c) => {
+        if (c.ageRank === 4) { excluded.old += 1; return false; }
+        if (!feedCapitalOk(c.capital)) { excluded.capital += 1; return false; }
+        if (feedNeedPhone() && !c.phone && !researchOn) { excluded.phone += 1; return false; }
+        if (c.indRank === 2) { excluded.industry += 1; return false; }
+        if ([...c.signals].some((x) => EXCLUDE_SIGNAL_RE.test(x))) { excluded.signal += 1; return false; }
+        if (poolReady && !isHiring(c) && needTier(c) >= NEED_TIERS.length) { excluded.hiring += 1; return false; }
+        return true;
+      });
       const mergedKeys = new Set(merged.map((c) => c.key));
       const bizKey = (r) => String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, '');
       const bzSeen = new Set();
@@ -3830,17 +3790,11 @@
       const mobileB = (r) => !!((window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}).mobile;   // 有手機的先（版本 347）
       const fitB = (r) => { const f = (window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}; return Number(!!(f.capOk && f.mobile)); };   // 規模符合且有手機最前面（版本 374）
       bz = bz.filter((r) => capitalOk(r.capital));   // 商行也一樣：資本額要滿 200 萬（版本 362）
+      // 商行也剔除沒電話的（版本 428）；成立 10 年以上的商行照舊排最後（商行那份本來就少，不剔）
+      if (feedNeedPhone()) bz = bz.filter((r) => { const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; if (bf && bf.phone) return true; excluded.phone += 1; return false; });
       bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || fitB(b[0]) - fitB(a[0]) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || a[1] - b[1]).map(([r]) => r);
-      /*
-       * 只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
-       * 這是每日新名單唯一的門檻（合併頁、各分頁照舊都看得到）：沒電話的先用 Google 地圖查一次（名稱、地址都對得上才算），
-       * 查不到就跳過，換下一家補滿額度。跳過的不刪、不排除，下個月公開資料有電話了會再被挑到。
-       * 候選照排名只看前面夠用的一段（額度兩倍），一天最多查 GATE_LOOKUPS 家，不會把整份清冊查一遍；沒金鑰就只收公開資料有電話的。
-       */
-      let skippedNoPhone = 0;
-      const googleHits = new Map();   // 公司名稱 → Google 查到的那家，匯入後直接填（placesLookup 有快取，不會再付一次）
+      const googleHits = new Map();   // 版本 428 起挑名單前不查 Google 地圖了；只剩上網查訊號時順便看到的電話（kind 'web'）會放進來
       const addrOf = (c) => { for (const x of SRC) { const rec = c.recs[x.key]; if (rec && x.mod.cardFacts) { const f = x.mod.cardFacts(rec); if (f && f.address) return f.address; } } return ''; };
-      const enough = Math.max(need * 2, 4);
       /*
        * 網路查擴張訊號（版本 322；使用者：「挑出名單後，也在網路上搜尋到有擴張訊號的資訊再給我名單，這樣相對精準」）。
        * 使用者定的順序：1 挑名單 → 2 網路上確認擴張訊號 → 3 找電話 → 4 給他。所以這段在電話關卡「前面」。
@@ -3889,91 +3843,32 @@
         bz = bz.map((r, i) => [r, i]).sort((a, b) => Number(oldBiz(a[0])) - Number(oldBiz(b[0])) || Number(mobileB(b[0])) - Number(mobileB(a[0])) || Number(rulesOkB(b[0])) - Number(rulesOkB(a[0])) || Number(strongKey(bizKey(b[0]))) - Number(strongKey(bizKey(a[0]))) || score(bizKey(b[0])) - score(bizKey(a[0])) || a[1] - b[1]).map(([r]) => r);
         if (!research) research = { asked, withSignals: [...intel.values()].filter((v) => v.expansion).length, strong: [...intel.values()].filter((v) => v.expansion && (v.score || 0) >= 2).length };
       }
-      const gate = { tried: 0, found: 0, error: '' };   // 挑名單那關 Google 地圖查了幾家、查到幾家、第一個錯（版本 333；後台印）
-      const hunt = { tried: 0, found: 0 };   // 第三關 Claude 找電話（版本 352）：查了幾家、找到幾家
-      if (feedNeedPhone()) {
-        let budget = GATE_LOOKUPS;
-        /*
-         * 沒電話的定義（版本 352 使用者：「你有用過 Google 地圖、Claude api、名單來源裡都查過，都沒有才算」）：
-         * 1 名單來源（公開資料的電話表）→ 2 上網查訊號時順便看到的 → 3 Google 地圖 → 4 Claude 上網找電話（只有後台有，一天最多 HUNT_LOOKUPS 家）
-         * 四關都沒有才算沒電話、跳過。
-         */
-        const confirm = async (name, address, known, key) => {
-          if (known) return true;
-          // 2 → 3：上網查訊號時順便在官網、104 看到的電話，直接用（匯入後跟 Google 查到的一樣填進去，來源標「網路」）
-          const it = key ? intel.get(key) : null;
-          if (it && it.phone && window.Normalize.extractPhones(it.phone).length) { googleHits.set(name, { phone: it.phone, name, address: address || '', maps: '', website: (it.sources || [])[0] || '', kind: 'web' }); return true; }
-          if (placesKey() && budget > 0) {
-            budget -= 1; gate.tried += 1;
-            const m = String(address || '').match(/^(臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|.{2}縣)(.{1,3}?[區鄉鎮市])/);
-            try {
-              const { best } = await placesLookup({ company: name, address, city: m ? m[1] : '', district: m ? m[2] : '' });
-              if (best && best.level === 'sure') { googleHits.set(name, best); gate.found += 1; return true; }
-            } catch (err) {
-              console.error('挑名單前找電話', name, err);
-              if (!gate.error) gate.error = String(err && err.message ? err.message : err).slice(0, 80);
-              if (/金鑰|API|HTTP 4/.test(String(err && err.message))) budget = 0;
-            }
-          }
-          if (typeof window.backendPhoneHunt === 'function' && hunt.tried < HUNT_LOOKUPS) {
-            hunt.tried += 1;
-            const k = key || name;
-            try {
-              const got = (await window.backendPhoneHunt([{ key: k, name, taxId: /^\d{8}$/.test(String(k)) ? String(k) : '', address: address || '' }])) || {};
-              const p = got[k];
-              if (p && p.phone && window.Normalize.extractPhones(p.phone).length) { googleHits.set(name, { phone: p.phone, name, address: address || '', maps: '', website: p.source || '', kind: 'web' }); hunt.found += 1; return true; }
-            } catch (err) { console.error('挑名單前 Claude 找電話', err); }
-          }
-          return false;
-        };
-        const okMerged = [];
-        for (const c of merged) {
-          if (okMerged.length >= enough) break;
-          if (await confirm(c.name, addrOf(c), c.phone, c.key)) okMerged.push(c); else skippedNoPhone += 1;
-        }
-        const okBz = [];
-        for (const r of bz) {
-          if (okBz.length >= enough) break;
-          const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null;
-          if (await confirm(r.name, r.address || '', !!(bf && bf.phone), bizKey(r))) okBz.push(r); else skippedNoPhone += 1;
-        }
-        merged = okMerged; bz = okBz;
+      const gate = { tried: 0, found: 0, error: '' };   // 版本 428 起不查 Google 地圖；留欄位給後台報告
+      const hunt = { tried: 0, found: 0 };   // 版本 428 起不用 Claude 找電話；留欄位給後台報告
+      // 上網查過的：沒電話但官網／徵才頁看到電話的留下（匯入後填進去，來源標「網路」），其他沒電話的這時才剔除
+      if (feedNeedPhone() && researchOn) {
+        merged = merged.filter((c) => {
+          if (c.phone) return true;
+          const it = intel.get(c.key);
+          if (it && it.phone && window.Normalize.extractPhones(it.phone).length) { googleHits.set(c.name, { phone: it.phone, name: c.name, address: addrOf(c), maps: '', website: (it.sources || [])[0] || '', kind: 'web' }); return true; }
+          excluded.phone += 1; return false;
+        });
       }
-      /*
-       * 104 徵才中是必要條件（版本 419；使用者 11/07：「有在徵才才是最低標的門檻」→「改成必要條件」）：
-       * 揉合那份只從有「104 徵才中」訊號的裡面挑，其他來源不再各保底一家（版本 415 之前是排序）。
-       * 商行照自己的規則：池子只收公司，商行本來就不會在 104 池子裡，限了就一家都沒有。
-       * 池子還沒抓過（沒資料）才退回原本的排序，不然每天會一家都挑不到。
-       */
-      const poolReady = !!(window.Hire104 && window.Hire104.poolInfo && window.Hire104.poolInfo().n > 0);
-      let notHiring = 0; let hiringOnly = null;
-      if (poolReady) {
-        const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
-        hiringOnly = merged.filter(isHiring); const rest = merged.filter((c) => !isHiring(c));
-        notHiring = rest.length;
-        // 版本 422（使用者 11/09「好」）：有電話的 104 徵才中不夠額度時（11/09 只挑到 7／15），剩下的名額退回原本的排序補滿；徵才中的照樣先挑
-        merged = [...hiringOnly, ...rest];
-      }
-      // 額度：照原本六頁的比例算出商行那份，其餘給揉合的五頁；哪邊不夠另一邊補
-      const per = (k) => merged.filter((c) => c.recs[k]).length;
-      const take = splitByShares([per('ch'), per('le'), bz.length, per('tr'), per('nh'), per('ei'), per('fa'), per('in'), per('hi')], need, feedShares());
-      let bizTake = Math.min(bz.length, take[2]);
+      const skippedNoPhone = excluded.phone;   // 版本 428：沒電話的直接剔除，不再用 Google 地圖、Claude 找
+      // 額度（版本 428）：公司 2/3、商行 1/3（15 家＝10＋5；商行約訪率 13.9% 是公司名單的兩倍），哪邊不夠另一邊補；不再按來源配額、不保底
+      let bizTake = Math.min(bz.length, Math.round(need / 3));
       const mixTake = Math.min(merged.length, need - bizTake);
       bizTake = Math.min(bz.length, need - mixTake);
-      // 有上網查的話：明確訊號的先挑（每頁保底也只在這群裡算），不夠才用其他的補滿額度
+      // 有上網查的話：明確訊號的先挑，不夠才用其他的補滿額度；沒有就純照排名
       let picks;
       if (research) {
         const strongM = merged.filter((c) => strongKey(c.key));
-        picks = pickMerged(strongM, mixTake, SRC.map((x) => x.key));
+        picks = pickMerged(strongM, mixTake, []);
         if (picks.length < mixTake) { const used = new Set(picks.map((p) => p.c.key)); picks.push(...pickMerged(merged.filter((c) => !used.has(c.key)), mixTake - picks.length, [])); }
-      } else if (hiringOnly) {
-        // 104 徵才中的先挑（每頁保底也只在這群裡算），不夠額度才用其他的照排序補滿（補的不保底）
-        picks = pickMerged(hiringOnly, mixTake, SRC.map((x) => x.key));
-        if (picks.length < mixTake) { const used = new Set(picks.map((p) => p.c.key)); picks.push(...pickMerged(merged.filter((c) => !used.has(c.key)), mixTake - picks.length, [])); }
-      } else picks = pickMerged(merged, mixTake, SRC.map((x) => x.key));
+      } else picks = pickMerged(merged, mixTake, []);
       const pickB = bz.slice(0, bizTake);
       if (research) research.pickedStrong = picks.filter(({ c }) => strongKey(c.key)).length + pickB.filter((r) => strongKey(bizKey(r))).length;
-      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話（Google 地圖也查不到），今天沒補` : '六份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return { picked: 0, skippedNoPhone, have, quota: newQuota(), day }; }
+      if (!picks.length && !pickB.length) { registryPref('daily-feed-on', today); if (force || more || skippedNoPhone) toast(skippedNoPhone ? `候選的 ${skippedNoPhone} 家都沒電話，今天沒補` : '九份清冊裡能挑的都已經在名單裡了，沒有可以補的'); return { picked: 0, skippedNoPhone, excluded, have, quota: newQuota(), day }; }
       // 每家用哪一頁的資料匯入：保底挑到的用那一頁，其他照動保 → 登記清冊 → 出進口 → 請人 → 電子發票；「符合：」改寫成合併後的訊號
       const bySrc = new Map(SRC.map((x) => [x.key, []]));
       picks.forEach(({ c, via }) => {
@@ -4031,7 +3926,7 @@
       const multi = picks.filter(({ c }) => c.signals.size >= 2).length;
       const bySrcText = SRC.map((x) => (bySrc.get(x.key).length ? `${x.label} ${bySrc.get(x.key).length}` : '')).filter(Boolean).join('、');
       toast(`${more ? '再補了' : '今天挑了'} ${picked} 家（五頁揉合 ${picks.length} 家${multi ? `，其中 ${multi} 家同時有兩個以上訊號` : ''}${bySrcText ? `：${bySrcText}` : ''}${pickB.length ? `；商行／企業社 ${pickB.length} 家` : ''}），都排在${day === today ? '今天' : `下一個上班日 ${dateLabel(day)}`}${lost > 0 ? `；其中 ${lost} 家匯入時比對到已在名單上（同名），略過` : ''}${have > 0 && !more ? `；今天已有 ${have} 家排好，補到 ${newQuota()} 家` : ''}${skippedNoPhone ? `；沒電話的跳過 ${skippedNoPhone} 家` : ''}`);
-      const summary = { picked, got, lost, skippedNoPhone, notHiring, hiringPicked: hiringOnly ? picks.filter((p) => hiringOnly.includes(p.c)).length : null, day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
+      const summary = { picked, got, lost, skippedNoPhone, excluded, hiringPicked: poolReady ? picks.filter((p) => isHiring(p.c)).length : null, tiers: picks.map((p) => needTier(p.c)), day, have, quota: newQuota(), name, biz: pickB.length, research, gate, hunt,
         bySrc: Object.fromEntries(SRC.map((x) => [x.label, bySrc.get(x.key).length]).filter(([, n]) => n)) };
       if (awaitPhones) summary.phones = await phonesDone;
       return summary;
@@ -4157,33 +4052,13 @@
         el('span', { className: 'muted', textContent: '完全新的名單一天' }), quotaInput,
         el('span', { className: 'muted', textContent: '家（另外算，不佔主力的額度）' }),
       ]));
-      // 六個來源怎麼分（使用者：「六個來源的每日配額可以不平均」）：填比例，空白＝平分；照來源漏斗的成績調
-      {
-        const names = ['動產擔保', '登記清冊', '商行／企業社', '出進口廠商', '剛開始請人', '剛開電子發票', '新設工廠', '產業名單', '104 徵才中'];
-        const cur = registryPref('feed-shares') ? feedShares() : null;   // 沒設就留空白（空白＝預設商行 3、出進口 2、產業名單 0、其他 1；版本 355、408、421）
-        const inputs = names.map((n, i) => el('input', { type: 'number', min: '0', max: '100', className: 'cap-input share-input', placeholder: '－', value: cur ? String(cur[i]) : '', title: n }));
-        const hint = el('span', { className: 'muted share-hint' });
-        const refresh = () => {
-          const vals = inputs.map((x) => Math.max(0, Math.round(Number(x.value) || 0)));
-          const any = inputs.some((x) => x.value !== '') && vals.some((v) => v > 0);
-          const preview = splitByShares(Array(names.length).fill(999), quota, any ? vals : DEFAULT_SHARES);
-          hint.textContent = any ? `加起來 ${vals.reduce((a, b) => a + b, 0)}，${quota} 家照比例分：${preview.join('、')}` : `空白＝預設商行 3、出進口 2、產業名單 0、其他 1（${preview.join('、')}）`;
-        };
-        inputs.forEach((x) => { x.oninput = refresh; x.onchange = () => { const vals = inputs.map((y) => Math.max(0, Math.round(Number(y.value) || 0))); const any = inputs.some((y) => y.value !== '') && vals.some((v) => v > 0); registryPref('feed-shares', any ? vals.join(',') : ''); refresh(); }; });
-        refresh();
-        host.append(el('div', { className: 'card-actions cap-row share-row' }, [
-          el('span', { className: 'muted', textContent: '新名單九個來源的比例：' }),
-          ...names.flatMap((n, i) => [el('span', { className: 'muted share-name', textContent: n }), inputs[i]]),
-          hint,
-        ]));
-      }
       {
         const inds = window.notTargetIndustries();
-        if (inds.length) host.append(el('p', { className: 'muted', textContent: `「不是目標」兩次以上的行業，挑新名單時排後面（版本 364）：${inds.map(([i, n]) => `${i}（${n}）`).join('、')}` }));
+        if (inds.length) host.append(el('p', { className: 'muted', textContent: `「不是目標」兩次以上的行業，挑新名單時直接剔除（版本 428；364 起排後面）：${inds.map(([i, n]) => `${i}（${n}）`).join('、')}` }));
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動從登記清冊、動產擔保、商行／企業社、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標挑 ${quota} 家進名單（預設商行 3、出進口 2、產業名單 0、其他 1，或照上面的比例）。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法：商行／企業社以外的八頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標）揉在一起，同一家依統編合成一家，訊號加總算分——最近買設備（6 個月內）、跟同業借、本期增資、本期擴張、剛做進出口、剛開始請人、剛開電子發票、剛登記工廠、剛得標（3 個月內）、車輛業者／食品工廠／環保列管工廠／營造業、剛有新工地／新廠，每中一個加一分；排序先看規模符合＋有手機＋買設備＋訊號多（版本 374、377），（104 徵才中的排最前面、其中徵財務主管的更前，版本 415、417），再比最近買設備多近 → 成立 2～7 年 → 資本額 300～6,000 萬 → 有電話 → 分公司遠近。每頁先保底一家，剩下照總分挑。商行／企業社照自己的規則（資本額跟成立年）與比例另外挑。分公司由近到遠放寬。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 300 萬或 5 億以上、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社照自己的規則（資本額跟成立年）另外挑。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -7071,7 +6946,7 @@ export default {
     // 一天打得完幾家：在電腦上設好，手機打開要是同一個數字
     'registry-fields-rev', 'registry-drive-report', 'my-branch', 'my-unit', 'daily-cap', 'main-cap',
     // 新名單的額度、今天挑過了沒、要不要自動挑：手機電腦要一致，不然各挑一次
-    'new-quota', 'daily-feed-on', 'daily-feed-auto', 'feed-shares',
+    'new-quota', 'daily-feed-on', 'daily-feed-auto',
     // 後台每月用 Google 地圖幫「找不到電話」的再查一次的結果：各台裝置都要看得到
     'phone-back-google',
     // Google 地圖本月查了幾次（版本 349）：各台加總
@@ -9027,8 +8902,6 @@ export default {
     };
     // 加進來的新名單要排哪一天（照上限與新名單額度）；每日自動挑用的靜默匯入（不開匯入抽屜）
     window.planNewDates = planNewDates;
-    window.splitEvenly = splitEvenly;   // 測試用
-    window.splitByShares = splitByShares;
     window.planDailyCap = planDailyCap;   // 測試用
     window.importQuiet = (file) => importFiles([file]);
     $('#btnPick').onclick = () => $('#filePick').click();

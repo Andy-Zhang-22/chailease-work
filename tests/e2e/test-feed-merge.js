@@ -120,35 +120,32 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(pv.filter(x=>x.name==='乙二機械股份有限公司').length===1, '同一家只算一次');
  const ml=pv.find(x=>x.name==='名祿實業有限公司'); const jy=pv.find(x=>x.name==='甲一精密有限公司');
  chk(ml && ml.indRank===2 && jy && jy.indRank<2, `「不是目標」兩次以上的行業排到最後一級：名祿 indRank ${ml&&ml.indRank}、甲一 ${jy&&jy.indRank}`);
- // 版本 374：規模符合且有手機 → 有手機 → 其餘
+ // 版本 428（主管建議改減法，使用者「照你說的改」）：排序＝成立 10 年以上最後 → 有手機的先 → 需求證據（跟同業借 → 剛得標 → 買設備 → 增資／新廠 → 進出口 → 其他）→ 近；加分制、規模＋手機那幾層拿掉
+ const live=pv.filter(x=>!x.old);
+ const okOrder=live.every((x,i)=>i===0 || Number(live[i-1].mobile)>Number(x.mobile) || (live[i-1].mobile===x.mobile && live[i-1].tier<=x.tier));
+ chk(okOrder, `有手機的先、同手機照需求證據：${live.map(x=>x.name+'('+(x.mobile?'M':'-')+x.tier+')').join('|')}`);
  const ix=(n)=>pv.findIndex(x=>x.name===n);
- const lastFit=Math.max(...pv.map((x,i)=>!x.old&&x.capOk&&x.mobile?i:-1)), firstMobOnly=pv.findIndex(x=>!x.old&&x.mobile&&!x.capOk);   // 成立 10 年以上的本來就排最後，不算
- chk(ix('中資手機有限公司')>=0 && ix('兩百萬手機有限公司')>=0 && ix('中資手機有限公司')<ix('兩百萬手機有限公司'), `規模符合沒訊號的中資手機排在規模不符但訊號多的兩百萬手機前面：${ix('中資手機有限公司')} < ${ix('兩百萬手機有限公司')}`);
- chk(firstMobOnly<0 || lastFit<firstMobOnly, `規模符合且有手機的全部排在只有手機的前面：最後一個 ${lastFit}、第一個只有手機 ${firstMobOnly}`);
- // 版本 377：規模符合＋有手機＋一年內買設備＋訊號兩個以上的最前面
- const buy=pv.find(x=>x.name==='買設備兩訊號有限公司'), many=pv.find(x=>x.name==='多訊號無設備有限公司');
- chk(buy && many && buy.buy<=1 && buy.strong>=2 && many.buy>1 && many.strong>buy.strong, `資料如預期：買設備（buy ${buy&&buy.buy}、訊號 ${buy&&buy.strong}）、多訊號（buy ${many&&many.buy}、訊號 ${many&&many.strong}）`);
- chk(ix('買設備兩訊號有限公司')<ix('多訊號無設備有限公司'), `買設備＋兩訊號排在訊號更多但沒買設備的前面：${ix('買設備兩訊號有限公司')} < ${ix('多訊號無設備有限公司')}`);
- chk(ix('乙二機械股份有限公司')===0 && ix('買設備兩訊號有限公司')===1, `四個都滿足的全部在最前面：乙二 ${ix('乙二機械股份有限公司')}、買設備 ${ix('買設備兩訊號有限公司')}`);
- // 版本 413 排第二層、版本 415 改第一層：只有一個訊號、沒手機的「徵才中」排最前面
+ chk(ix('乙二機械股份有限公司')===0 && top.tier===0 && top.mobile, `乙二：有手機＋跟同業借＝最前：${ix('乙二機械股份有限公司')}`);
+ const many=pv.find(x=>x.name==='多訊號無設備有限公司'), buy=pv.find(x=>x.name==='買設備兩訊號有限公司');
+ chk(many && many.tier===3 && buy && buy.tier===0, `需求證據分層：多訊號無設備（增資＝D）${many&&many.tier}、買設備兩訊號（跟同業借＝A）${buy&&buy.tier}`);
+ // 104 徵才中：版本 428 起只是「活著」的證據，不再排第一層；有需求證據的在前面
  await pg.evaluate(async()=>{ const head='公司名稱,統編,分級,成立,資本額,電話,負責人,KEYMAN,產業別,下次聯絡日,最近聯絡日,訪談內容,地址,名單新增日期,國家';
    const row='徵才中有限公司,24908677,,2019,"20,000",02-2222-3333,,,機械製造業,__DAY__,,"104 徵才中：6 件（11/7 查）",新北市新莊區中正路107號,2026-11-07,';
    await window.Store.setSetting('hiring-pool-104', JSON.stringify({at:Date.now(),head,list:[{key:'24908677',name:'徵才中有限公司',count:6,row}]})); });
  const pv2=await pg.evaluate(()=>window.mergedFeedPreview()); const ix2=(n)=>pv2.findIndex(x=>x.name===n);
- // 版本 415：改排第一層（使用者：「有在徵才才是最低標的門檻」）——徵才中排在四項都符合的乙二、買設備前面
- chk(ix2('徵才中有限公司')===0 && ix2('乙二機械股份有限公司')===1 && ix2('買設備兩訊號有限公司')===2, `104 徵才中排第一層：徵才中 ${ix2('徵才中有限公司')}、乙二 ${ix2('乙二機械股份有限公司')}、買設備 ${ix2('買設備兩訊號有限公司')}`);
+ const hireRow=pv2.find(x=>x.name==='徵才中有限公司');
+ chk(hireRow && hireRow.hiring && hireRow.tier===5 && ix2('徵才中有限公司')>ix2('乙二機械股份有限公司') && ix2('徵才中有限公司')>ix2('多訊號無設備有限公司'), `只有徵才、沒需求證據的排在有證據的後面：徵才中 ${ix2('徵才中有限公司')}、乙二 ${ix2('乙二機械股份有限公司')}、多訊號 ${ix2('多訊號無設備有限公司')}`);
  await pg.evaluate(async()=>{ await window.Store.setSetting('hiring-pool-104',''); });
  await pg.click('#feedMore'); await pg.waitForTimeout(3000);
  const fed=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,notes:(r.notesRaw.match(/每日新名單，[^\n]*/)||[''])[0],head:r.notesRaw.split('\n')[0]})));
  const yi=fed.find(f=>f.company==='乙二機械股份有限公司');
  chk(yi && /符合：[^；]*本期增資/.test(yi.notes) && /剛做進出口/.test(yi.notes) && /最近買設備（2026\/08）/.test(yi.notes) && !/也在：|其他：|保底/.test(yi.notes), `訪談內容只寫合併後的訊號（也在、其他條件、保底不寫）：${yi&&yi.notes}`);
- // 保底不寫進訪談內容了：改看每家第一行是哪一頁的資料
- const g=[['動產擔保',/^動保：/],['登記清冊',/^新公司清冊/],['出進口廠商',/^出進口廠商登記/],['剛開始請人',/^健保新投保/],['剛開電子發票',/^電子發票 /]].filter(([,re])=>fed.some(f=>re.test(f.head))).map(([l])=>l);
- chk(g.length===5, `每頁至少保底一家：${g.join('、')}`);
+ // 版本 428：不保底、不按來源配額——公司那份就是揉合排名前面的；每家第一行是哪一頁的資料不限
+ chk(fed.length>=5 && fed[0] !== undefined, `挑進來 ${fed.length} 家：${fed.map(f=>f.company).join('、')}`);
  chk(fed.some(f=>/商行|企業社/.test(f.company)), `商行照自己的規則另外挑：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('、')}`);
  chk(fed.filter(f=>f.company==='乙二機械股份有限公司').length===1, '揉合後同一家只進來一次');
- // 版本 362：資本額要滿 200 萬才挑，有手機也一樣
- chk(!fed.some(f=>/^小資/.test(f.company)), `資本額 100 萬：有沒有手機都不挑：${fed.map(f=>f.company).join('、')}`);
+ // 版本 428：資本額未達 300 萬的剔除（以前 200 萬），有手機也一樣；兩百萬手機（250 萬）也不挑了
+ chk(!fed.some(f=>/^小資|^兩百萬手機/.test(f.company)), `資本額未達 300 萬：有沒有手機都不挑：${fed.map(f=>f.company).join('、')}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  await br.close(); srv.close();
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過'); process.exit(bad?1:0);
