@@ -241,7 +241,7 @@ def fin_map(fin):
     return m
 
 
-def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozenset(), fin=None):
+def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozenset(), fin=None, dup_counts=None):
     """104 抓到的公司 → 這次新進候選池的（list 已排好）＋統計。crawl：[{name, area, count}]；fia_rows：正規化名 → [稅籍列]；
     in_pool：池子裡已經有的統編（版本 411：池子跨週累積，同一家再抓到就跳過，舊的那筆照留）；
     fin：徵財務主管的公司（版本 417）：排最前面、備註多一行「徵財務主管：職稱」、list 多 fin；只在職缺搜尋出現、找公司沒抓到的也收（count 算 1）。"""
@@ -250,7 +250,7 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
     have = {norm(c.get('name')) for c in crawl}
     for x in fin or []:
         n = norm(x.get('name'))
-        if n and n not in have: have.add(n); crawl.append({'name': x.get('name'), 'area': x.get('area') or '', 'count': 1})
+        if n and n not in have: have.add(n); crawl.append({'name': x.get('name'), 'area': x.get('area') or '', 'count': 1, 'finOnly': True})   # 只在職缺搜尋出現：件數是湊的，不拿去更新歷程
     stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0, 'dup': 0, 'fin': 0}
     out, seen = [], set()
     for c in crawl:
@@ -264,7 +264,10 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
         if hit['tax'] in seen: continue
         seen.add(hit['tax'])
         stats['matched'] += 1
-        if hit['tax'] in in_pool: stats['dup'] += 1; continue
+        if hit['tax'] in in_pool:
+            stats['dup'] += 1
+            if dup_counts is not None and not c.get('finOnly'): dup_counts[hit['tax']] = int(c['count'])   # 版本 430：池子裡已有的，這週的件數拿去更新歷程
+            continue
         bare = re.sub(r'\s', '', hit['name'])   # Python 3.9：f-string 裡不能有反斜線
         keys = {f"tax:{hit['tax']}", f'name:{bare}'}
         if keys & existing or keys & buried: stats['already'] += 1; continue
@@ -288,6 +291,41 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
     stats['pool'] = len(lst)
     stats['target'] = sum(1 for x in out if x['target'])
     return lst, stats
+
+
+HIST_KEEP = 8   # 每家留最近幾週的件數
+
+def apply_hist(entries, counts, week, md):
+    """池子裡已有的這週又抓到（版本 430；使用者：「有什麼方法能讓我找到成長型的客戶」→「請開始做」）：
+    件數記成每週歷程 hist=[[週, 件數], …]（最多 HIST_KEEP 週）、count 更新成最新；
+    最新一週比歷程第一週多＝在擴編，備註多一行「徵才擴編：A→B 件」（網站拿它當需求證據）。回 (更新幾家, 擴編幾家)。"""
+    changed = grow = 0
+    for e in entries:
+        c = counts.get(e.get('key'))
+        if c is None: continue
+        hist = [list(h) for h in (e.get('hist') or []) if isinstance(h, (list, tuple)) and len(h) == 2]
+        if not hist: hist = [[e.get('week') or '', int(e.get('count') or 0)]]
+        if hist[-1][0] == week:
+            if hist[-1][1] == c: continue
+            hist[-1][1] = c
+        else:
+            hist.append([week, c])
+        hist = hist[-HIST_KEEP:]
+        e['hist'] = hist; e['count'] = c
+        first = hist[0][1]
+        cells = next(csv.reader([e.get('row') or '']), [])
+        if len(cells) == len(HEAD):
+            note = cells[HEAD.index('訪談內容')]
+            note = re.sub(r'104 徵才中：\d+ 件（[^）]*查）', f'104 徵才中：{c} 件（{md} 查）', note)
+            note = re.sub(r'\n?徵才擴編：[^\n]*', '', note)
+            if c > first and len(hist) >= 2:
+                lines = note.split('\n'); lines.insert(1, f'徵才擴編：{first}→{c} 件'); note = '\n'.join(lines)
+            cells[HEAD.index('訪談內容')] = note
+            e['row'] = csv_row(cells)
+        if c > first and len(hist) >= 2: e['grow'] = [first, c]; grow += 1
+        elif 'grow' in e: del e['grow']
+        changed += 1
+    return changed, grow
 
 
 # ---------- 讀檔 ----------
@@ -497,7 +535,7 @@ def cmd_write(a):
     fin = res.get('fin') or []
     if not crawl and not fin:
         print(f"一家都沒抓到{('（' + res.get('stopped') + '）') if res.get('stopped') else ''}；同步檔不動。"); return 1
-    today = datetime.date.today()
+    today = datetime.date.fromisoformat(os.environ['HIRE104_TODAY']) if os.environ.get('HIRE104_TODAY') else datetime.date.today()   # 測試用：假裝是哪一天
     wanted = set()
     for c in crawl:
         n = norm(c.get('name')); wanted.add(n); wanted.add(strip_branch(n))
@@ -519,11 +557,13 @@ def cmd_write(a):
     for x in fin:
         n = norm(x.get('name')); wanted.add(n); wanted.add(strip_branch(n))
     fia = read_fia(ensure_fia(a.fia), wanted) if fin else fia
-    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list), fin=fin)
+    dup_counts = {}
+    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list), fin=fin, dup_counts=dup_counts)
     stats.update({'areas': res.get('areas'), 'pages': res.get('pages'), 'overflow': res.get('overflow'), 'stopped': res.get('stopped') or ''})
     stats['finOld'] = apply_fin(old_list, fin)
     stats['finCrawl'] = len(fin)
-    if not lst and not stats['finOld']:
+    stats['histOld'], stats['grow'] = apply_hist(old_list, dup_counts, week_of(today), f'{today.month}/{today.day}')
+    if not lst and not stats['finOld'] and not stats['histOld']:
         print(f"抓了 {stats['crawled']} 家，可以新進候選池的 0 家（池子裡已有 {stats['dup']} 家）；同步檔不動。"); return 1
     merged = old_list + lst
     stats['total'] = len(merged)
@@ -532,7 +572,8 @@ def cmd_write(a):
     print(f"抓了 {stats['crawled']} 家（{stats['pages']} 頁，徵才中 {stats['hiring']}），對上統編 {stats['matched']}（同名不確定 {stats['ambiguous']}、查無 {stats['noTax']}）；"
           f"池子裡已有 {stats['dup']}、已在名單或刪過 {stats['already']}、資本額未滿 200 萬 {stats['lowCap']}、沒電話 {stats['noPhone']}；"
           f"新進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}），池子共 {stats['total']} 家{stop}。"
-          f"徵財務主管：職缺搜尋 {stats['finCrawl']} 家，新進池子的 {stats['fin']} 家、池子裡原有的補上 {stats['finOld']} 家。已寫回同步檔（備份在 {backup}）")
+          f"徵財務主管：職缺搜尋 {stats['finCrawl']} 家，新進池子的 {stats['fin']} 家、池子裡原有的補上 {stats['finOld']} 家。"
+          f"池子裡原有的更新件數 {stats['histOld']} 家（其中徵才擴編 {stats['grow']} 家）。已寫回同步檔（備份在 {backup}）")
     return 0
 
 

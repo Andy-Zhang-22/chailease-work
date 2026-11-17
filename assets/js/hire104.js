@@ -53,13 +53,18 @@
     const note = col('訪談內容');
     const m = /104 徵才中：(\d+) 件（([^）]*)查）/.exec(note);
     const fm = /徵財務主管：([^\n；]+)/.exec(note);
+    const gm = /徵才擴編：(\d+)→(\d+) 件/.exec(note);
     const year = Number(col('成立')) || 0;
+    // 徵才擴編（版本 430）：Mac 每週把件數記成 hist=[[週, 件數], …]，最新一週比第一週多＝在擴編；舊格式沒 hist 就看備註那行
+    const hist = Array.isArray(c.hist) ? c.hist.filter((h) => Array.isArray(h) && h.length === 2) : [];
+    const grow = hist.length >= 2 && Number(hist[hist.length - 1][1]) > Number(hist[0][1]) ? { from: Number(hist[0][1]), to: Number(hist[hist.length - 1][1]) } : gm ? { from: Number(gm[1]), to: Number(gm[2]) } : null;
     const r = {
       key: taxId, taxId, name: String(c.name || col('公司名稱')).trim(), tel: col('電話'), address: col('地址'), industry: col('產業別'),
       capital: (Number(col('資本額').replace(/\D/g, '')) || 0) * 1000,   // 仟元 → 元
       foundedYear: year, years: year ? new Date().getFullYear() - year : null,
       count: Number(c.count) || (m ? Number(m[1]) : 0), checked: m ? m[2].trim() : '',
       fin: String(c.fin || (fm ? fm[1] : '')).trim(),   // 徵財務主管的職稱（版本 417）
+      grow,
     };
     r.branch = branchOf(r.address);
     return r;
@@ -117,16 +122,16 @@
       .sort(dailyCompare);
   }
   function dailyFacts(r) {
-    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`, ...(r.fin ? [`104 徵財務主管（${r.fin}）`] : [])], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
+    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`, ...(r.fin ? [`104 徵財務主管（${r.fin}）`] : []), ...(r.grow ? [`徵才擴編（${r.grow.from}→${r.grow.to} 件）`] : [])], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
   }
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.fin ? `，徵財務主管：${r.fin}` : ''}`, ym: '', add: () => addToList([r]) };
+      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `，徵才擴編 ${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `，徵財務主管：${r.fin}` : ''}`, ym: '', add: () => addToList([r]) };
   }
   const factsOf = (taxId) => { const r = lookup(taxId); return r ? cardFacts(r) : null; };
 
   /* ---------------- 加入客戶名單 ---------------- */
-  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.fin ? `\n徵財務主管：${r.fin}` : ''}`;
+  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `\n徵才擴編：${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `\n徵財務主管：${r.fin}` : ''}`;
   function toStandardCsv(list, dates) {
     const today = todayIso();
     const lines = [HEAD.join(','), ...list.map((r, i) => [r.name, r.taxId, '', r.foundedYear || '', thousands(r.capital), r.tel, '', '', r.industry, (dates && dates[i]) || '', '',
