@@ -44,6 +44,12 @@ on:
         default: 'no'
         type: choice
         options: ['no', 'yes']
+      redo:
+        description: '重挑今天的新名單（版本 428）：把今天挑的、還沒打過的刪掉，照現在的邏輯重挑補滿；只在 write 模式有效'
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'yes']
       recheckmax:
         description: '主力客戶一次查幾家（配 recheck=yes；預設 260）'
         required: false
@@ -136,6 +142,7 @@ jobs:
           RECHECK_MAX: ${{ inputs.recheckmax || '260' }}
           RECHECK_MODEL: ${{ inputs.recheckmodel || 'opus' }}
           RESEARCH: ${{ inputs.research || 'no' }}
+          REDO: ${{ inputs.redo || 'no' }}
         run: node tools/feed-drive.mjs --mode "$MODE" --nophone "$NOPHONE" --recheck "$RECHECK" --model "$INTEL_MODEL" --compare "$COMPARE"
 
       - name: 颱風假有新的就存回 repo

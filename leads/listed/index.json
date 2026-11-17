@@ -1,9 +1,9 @@
 {
- "dailyAt": "2026-11-15T01:56:11.214Z",
- "newsAt": "2026-11-14",
- "newsCount": 8499,
+ "dailyAt": "2026-11-16T02:08:30.155Z",
+ "newsAt": "2026-11-15",
+ "newsCount": 8390,
  "revenueYm": "2026-10",
- "generatedAt": "2026-11-15T01:55:42.922Z",
+ "generatedAt": "2026-11-16T02:07:42.133Z",
  "total": 2368,
  "markets": {
   "上市": 1099,
@@ -28,17 +28,17 @@
   },
   {
    "path": "news.json",
-   "rows": 8499
+   "rows": 8390
   },
   {
    "path": "revenue.json",
-   "rows": 1989
+   "rows": 1990
   },
   {
    "path": "pledge.json",
-   "rows": 1980
+   "rows": 1983
   }
  ],
- "pledgeYm": "2026-09",
- "withPledge": 730
+ "pledgeYm": "2026-10",
+ "withPledge": 734
 }

@@ -66,6 +66,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
+ await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));   // 版本 428：沒 mock 的來源（新設工廠、產業名單、標案、上市櫃）不要載到本機真的清冊，不然有手機的真公司會排到假資料前面
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(LINDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:LCSV}));
  await ctx.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(CINDEX)}));
@@ -95,28 +96,20 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const fed=await pg.evaluate(async(t)=>{ const all=await window.Store.allRecords(); return all.filter(r=>/^每日新名單/.test(r.source)).map(r=>({company:r.company,source:r.source,nextDate:r.nextDate,notes:r.notesRaw.slice(0,60),capital:r.capital,founded:r.founded,addedDate:r.addedDate})); },TODAY);
  chk(fed.every(f=>f.addedDate===TODAY), `每日新名單的名單新增日期＝今天：${fed.map(f=>f.addedDate).join('|')}`);
  // 優先順序不是門檻：池子裡動產擔保 6 家、登記清冊 4 家全挑進來湊到 10；順序照優先順序
- chk(fed.length===5, `額度 5：六頁輪流拿，排最後的剛開電子發票這輪沒輪到（動產擔保、登記清冊、商行、出進口、剛開始請人各 1）：${fed.map(f=>f.company).join('|')}`);
+ // 版本 428（減法＋需求證據）：額度 5＝公司 3＋商行 2；公司那份照需求證據排，跟同業借的三家動保（禾泰、泓宇、巨鎰）先，本期增資（甲一）、剛做進出口（晨光）、只有請人／發票的這輪沒輪到
+ chk(fed.length===5, `額度 5：公司 3＋商行 2：${fed.map(f=>f.company).join('|')}`);
  const ec=await pg.evaluate(async()=>(await window.Einv.dailyCandidates()).map(r=>r.name+'|'+r._why));
  chk(ec.length===2 && /^新開發票有限公司\|符合：利率不敏感（剛開電子發票）、有電話、資本額 300～6,000 萬、我的分公司、成立 2～7 年、剛導入 3 個月內$/.test(ec[0]), `剛開電子發票的候選照優先順序、寫符合哪幾條：${ec.join(' / ')}`);
- chk(JSON.stringify(await pg.evaluate(()=>window.splitEvenly([9,9,9,9,9,9],25)))==='[5,4,4,4,4,4]', '六頁分 25：前面的多拿');
- chk(fed.some(f=>f.company==='名祿實業有限公司') && !fed.some(f=>f.company==='沒電話請人有限公司'), `剛開始請人挑 1 家、有電話且全符合的先：${fed.filter(f=>/請人|名祿/.test(f.company)).map(f=>f.company).join('|')}`);
- chk(/每日新名單，符合：剛開始請人(\n|$)/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='名祿實業有限公司').notesRaw)), '名祿：訪談內容只寫訊號（其他條件、保底不寫）');
- chk(fed.some(f=>f.company==='晨光貿易有限公司'), `出進口廠商挑 1 家、有電話且全符合的先：${fed.filter(f=>/貿易|出口/.test(f.company)).map(f=>f.company).join('|')}`);
- const cg=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='晨光貿易有限公司'); return r?{notes:r.notesRaw,phone:r.phoneRaw,founded:r.founded}:null; });
- chk(cg && /每日新名單，符合：剛做進出口(\n|$)/.test(cg.notes) && cg.phone==='02-2990-1234' && cg.founded==='2019', `晨光五條全符合、電話與成立年一起進來：${JSON.stringify(cg)}`);
- chk(fed.some(f=>f.company==='新莊好商行') && !fed.some(f=>/板橋企業社|只有稅籍商行|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 8 年的只有稅籍商行前面；成立 10 年以上的會沉到最後（版本 345），所以它設 8 年）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
+ chk(!fed.some(f=>/請人|名祿|晨光|發票/.test(f.company)), `不保底：只有請人、進出口、發票訊號的這輪沒輪到：${fed.map(f=>f.company).join('|')}`);
+ chk(fed.some(f=>f.company==='新莊好商行') && fed.some(f=>f.company==='只有稅籍商行') && !fed.some(f=>/板橋企業社|新設小商行/.test(f.company)), `商行／企業社挑 1 家：500 萬以上＋成立 5 年內的先（比資本額 6,000 萬但 8 年的只有稅籍商行前面；成立 10 年以上的會沉到最後（版本 345），所以它設 8 年）：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('|')}`);
  chk(/符合：資本額 500 萬以上＋成立 5 年內/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='新莊好商行').notesRaw)), '新莊好商行落在第一級，寫在訪談內容');
  const bc=await pg.evaluate(async()=>(await window.Biz.dailyCandidates()).map(r=>r.name+'|'+r._why));
- chk(JSON.stringify(bc)===JSON.stringify(['只有稅籍商行|符合：資本額 500 萬以上＋成立 5 年以上','新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行的順序只看資本額跟成立年：${bc.join(' / ')}`);
- const split=await pg.evaluate(()=>[window.splitEvenly([10,10,10],15), window.splitEvenly([10,1,10],15), window.splitEvenly([0,0,2],15), window.splitEvenly([3,3,3],20)]);
- chk(JSON.stringify(split)==='[[5,5,5],[7,1,7],[0,0,2],[3,3,3]]', `三頁平分、一頁不夠另外兩頁補：${JSON.stringify(split)}`);
- chk(fed.some(f=>f.company==='禾泰精密工業有限公司') && fed.some(f=>f.company==='甲一精密有限公司'), '全符合的先挑到');
- chk(!fed.some(f=>f.company==='昱昌汽車貨運股份有限公司') && fed.filter(f=>/動保：/.test(f.notes)).length===1, `以前刪掉的昱昌不挑，動產擔保還是補滿 1 家：${fed.map(f=>f.company).join('|')}`);
+ chk(JSON.stringify(bc)===JSON.stringify(['新設小商行|符合：資本額 200 萬以上＋成立 5 年內','板橋企業社|基準都不符，補位']), `商行的順序只看資本額跟成立年（新莊好商行、只有稅籍商行已進名單）：${bc.join(' / ')}`);
+ chk(['禾泰精密工業有限公司','泓宇塑膠射出有限公司','巨鎰金屬製品有限公司'].every(n=>fed.some(f=>f.company===n)) && !fed.some(f=>f.company==='甲一精密有限公司'), `跟同業借的三家先、本期增資的甲一這輪沒輪到：${fed.map(f=>f.company).join('|')}`);
+ chk(!fed.some(f=>f.company==='昱昌汽車貨運股份有限公司') && fed.filter(f=>/動保：/.test(f.notes)).length===3, `以前刪掉的昱昌不挑：${fed.map(f=>f.company).join('|')}`);
  const order=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name+'|'+r._why), l:l.map(r=>r['公司名稱']+'|'+r._why)}; });
  // 都在名單裡了會是空的；順序要用「藏起來」之前的資料驗：改用 window 上的比較函式不好抓，改看訪談內容寫的符合條件
  const why=Object.fromEntries(fed.map(f=>[f.company,f.notes]));
- chk(/每日新名單，符合：本期增資、本期擴張(\n|$)/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='甲一精密有限公司').notesRaw)), '甲一：訪談內容只寫訊號');
- chk(/0212345678/.test(JSON.stringify(await pg.evaluate(()=>window.customerViews().find(v=>v.company==='甲一精密有限公司').phones))), '甲一的電話從貿易署電話表自動填進來');
  chk(/每日新名單，符合：跟同業借（新鑫）(\n|$)/.test(await pg.evaluate(async()=>(await window.Store.allRecords()).find(r=>r.company==='禾泰精密工業有限公司').notesRaw)), '禾泰四條全符合');
  const peers=await pg.evaluate(()=>['28451237','22222223','99999999'].map((id)=>window.Chattel.peerLenderOf(id)));
  chk(JSON.stringify(peers)==='["新鑫","",""]', `利率不敏感：跟同業借的抓得到金主，跟中租借的、沒動保的不算：${JSON.stringify(peers)}`);
@@ -131,7 +124,9 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(fed.every(f=>f.nextDate===TODAY), `都排在今天：${[...new Set(fed.map(f=>f.nextDate))].join('|')}`);
  chk(fed.every(f=>/^每日新名單-2026-10-05(-補1)?\.csv$/.test(f.source)), `來源名稱帶日期，再補的另外取名：${[...new Set(fed.map(f=>f.source))].join('|')}`);
  const ht=fed.find(f=>f.company==='禾泰精密工業有限公司'); chk(ht && /動保：新鑫/.test(ht.notes) && ht.founded==='2022', `動保的備註與成立年進來（只挑成立 5 年內）：${ht&&ht.notes} / ${ht&&ht.founded}`);
- const jy=fed.find(f=>f.company==='甲一精密有限公司'); chk(jy && jy.capital==='30,000' && jy.founded==='2019' && /新公司清冊/.test(jy.notes), `登記清冊的資本額（仟元）、成立年、備註：${jy&&jy.capital} / ${jy&&jy.founded} / ${jy&&jy.notes}`);
+ // 再補那批一定有登記清冊的（本期增資那層：丁四在新莊最前，乙二、丙三誰補上看商行那邊拿了幾家）；甲一有「本期擴張」訊號，版本 428 起剔除
+ const lead2=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>/補1/.test(r.source) && /新公司清冊/.test(r.notesRaw)); return r?{company:r.company,capital:r.capital,notes:r.notesRaw}:null; });
+ chk(lead2 && /^(乙二機械股份有限公司|丙三工程有限公司|丁四貿易有限公司)$/.test(lead2.company) && /^(50,000|20,000|10,000)$/.test(lead2.capital) && /新公司清冊/.test(lead2.notes), `登記清冊的資本額（仟元）、備註（再補那批）：${JSON.stringify(lead2)}`);
  chk((await pg.evaluate(()=>localStorage.getItem('daily-feed-on')))===TODAY, '記下今天挑過了');
  chk(await pg.locator('#importer').isHidden(), '靜默匯入，沒有打開匯入抽屜');
 
@@ -161,7 +156,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
  await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
- chk(cand.c.length===3 && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.c.includes('老早過期有限公司') && cand.l.length===2, `動保挑了 2 家還剩 3（以前刪掉的昱昌分頁也不列了、成立年不明的老早過期還在），登記清冊還剩 2 家；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ chk(cand.c.length===1 && cand.c[0]==='自家客戶有限公司' && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.l.includes('甲一精密有限公司') && cand.l.length<=2 && !cand.l.includes('丁四貿易有限公司'), `兩輪挑完：動保只剩跟中租借的自家客戶（以前刪掉的昱昌分頁也不列）、登記清冊剩被剔除的甲一（本期擴張）；跟畫面篩選無關：${JSON.stringify(cand)}`);
  // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const dueNow=await pg.evaluate(()=>window.customerViews().filter(v=>v.nextDate==='2026-10-05'&&!v.blocked).length);

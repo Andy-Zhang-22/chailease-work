@@ -43,6 +43,7 @@ const RECHECK = opt('recheck', 'auto');
 const MODEL_NAME = (process.env.INTEL_MODEL || opt('model', 'sonnet')).toLowerCase() === 'opus' ? 'opus' : 'sonnet';
 const COMPARE = opt('compare', 'no') === 'yes' && MODE !== 'write';   // 比較模式一定不寫回
 const RESEARCH = (process.env.RESEARCH || opt('research', 'no')).toLowerCase() === 'yes';   // 每日新名單要不要上網查（版本 349 預設不查）
+const REDO = (process.env.REDO || opt('redo', 'no')).toLowerCase() === 'yes' && MODE === 'write';   // 重挑今天的（版本 428；使用者：「今天的電話也重挑給我」）：只在 write 模式
 const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '260')) || 260));   // 主力客戶一次查幾家（版本 348；版本 351 預設 260）
 // 主力客戶用哪個模型（版本 351；使用者選「做 2」：主力客戶改用 Opus）：預設 opus，跟每日新名單的 --model 分開
 const RECHECK_MODEL = (process.env.RECHECK_MODEL || opt('recheck-model', 'opus')).toLowerCase() === 'sonnet' ? 'sonnet' : 'opus';
@@ -153,7 +154,20 @@ async function main() {
 
     // 3. 挑今天的新名單（跟網站一模一樣的那條，照使用者的設定：自動挑關著就不挑、今天挑過就不重挑），等補電話跑完
     await page.evaluate((on) => { window.researchDaily = on; }, CLAUDE_ON && RESEARCH);
-    const res = await page.evaluate((more) => window.dailyFeed({ awaitPhones: true, more }), COMPARE);
+    // 3-0. 重挑（版本 428）：今天挑的、還沒打過的（沒結果、沒聯絡日）整批刪掉（不記墓碑，讓它們照新邏輯還有機會被挑回來），打過的留著；再用 force 補滿額度
+    if (REDO) {
+      const todayTw = taipeiDate().toISOString().slice(0, 10);
+      const rd = await page.evaluate(async (d) => {
+        const views = window.customerViews().filter((v) => String(v.source || '').startsWith(`每日新名單-${d}`));
+        const gone = views.filter((v) => (!v.outcome || v.outcome === 'new') && !v.lastDate && !v.dueDoneOn);
+        if (gone.length) await window.Store.deleteRecordsById(gone.map((v) => v.id));
+        return { total: views.length, gone: gone.length };
+      }, todayTw);
+      out(`重挑：今天挑的 ${rd.total} 家裡，沒打過的 ${rd.gone} 家刪掉，打過的 ${rd.total - rd.gone} 家留著；照現在的邏輯補滿`);
+      await page.reload(); await page.waitForFunction(() => typeof window.dailyFeed === 'function' && window.Store, null, { timeout: 60000 });
+      await page.evaluate((on) => { window.researchDaily = on; }, CLAUDE_ON && RESEARCH);
+    }
+    const res = await page.evaluate(({ more, force }) => window.dailyFeed({ awaitPhones: true, more, force }), { more: COMPARE, force: REDO });
     // 3b. 主力名單從公開資料補電話、補手機（版本 363）：清冊這裡都載好了，整份在後台跑，裝置不用每天下載清冊。只印家數。
     const pp = await page.evaluate(() => (window.publicPhones ? window.publicPhones('') : null)).catch(() => null);
     if (pp && (pp.found || pp.mobiles)) out(`公開資料補到電話：${pp.found} 家填了電話、${pp.mobiles} 家多了手機`);
@@ -172,7 +186,8 @@ async function main() {
       const src = Object.entries(res.bySrc || {}).map(([k, v]) => `${k} ${v}`).join('、');
       const ph = res.phones || {};
       line = `${today} 後台挑了 ${res.picked} 家（${src}${res.biz ? `；商行／企業社 ${res.biz}` : ''}${res.hiringPicked != null ? `；其中 104 徵才中 ${res.hiringPicked} 家` : ''}），排在 ${res.day}`
-        + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}${res.skippedNoPhone ? `；沒電話的跳過 ${res.skippedNoPhone} 家` : ''}`
+        + `${res.excluded ? `；剔除：成立 10 年以上 ${res.excluded.old}、資本額不合 ${res.excluded.capital}、沒電話 ${res.excluded.phone}、不是目標的行業 ${res.excluded.industry}、營造／擴張 ${res.excluded.signal}、沒徵才又沒證據 ${res.excluded.hiring}` : ''}`
+        + `${res.lost > 0 ? `；${res.lost} 家匯入時比對到已在名單上，略過` : ''}`
         + `${ph.trade ? `；出進口電話表對到 ${ph.trade.found}/${ph.trade.tried}` : ''}${ph.google ? `，Google 地圖找到 ${ph.google.found}/${ph.google.tried}` : ''}`
         + `${res.gate ? `；挑的時候 Google 地圖查了 ${res.gate.tried} 家、查到 ${res.gate.found} 家${res.gate.error ? `（第一個錯：${res.gate.error}）` : ''}` : ''}`
         + `${res.hunt && res.hunt.tried ? `；Claude 找電話查了 ${res.hunt.tried} 家、找到 ${res.hunt.found} 家` : ''}`

@@ -55,7 +55,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  // 第四關 Claude 找電話（版本 352）：名單來源、Google 都沒有的才問；這裡都回找不到，只記問了誰
  const hunted=[];
  await pg.exposeFunction('backendPhoneHunt', async(items)=>{ items.forEach(i=>hunted.push(`${i.name}|${i.taxId}`)); return {}; });
- await pg.exposeFunction('backendResearch', async(items)=>{ researched.push(items.map(i=>`${i.name}|${i.taxId}|${i.address}`)); const out={}; items.forEach(i=>{ out[i.key]= i.taxId==='22222222'?{expansion:true,score:2,summary:'104 正在徵 8 名作業員（2026/09）',sources:['https://www.104.com.tw/x'],phone:''}
+ await pg.exposeFunction('backendResearch', async(items)=>{ researched.push(items.map(i=>`${i.name}|${i.taxId}|${i.address}`)); const out={}; items.forEach(i=>{ out[i.key]= i.taxId==='22222222'?{expansion:true,score:2,summary:'104 正在徵 8 名作業員（2026/09）',sources:['https://www.104.com.tw/x'],phone:'02-2990-2222'}
    : i.taxId==='33333333'?{expansion:false,score:0,summary:'',sources:['https://example.com/c'],phone:'02-2299-3333'}
    : i.taxId==='44444444'?{expansion:true,score:3,summary:'（不該被問到）',sources:[],phone:'02-0000-4444'}
    : i.taxId==='99999991'?{expansion:true,score:2,summary:'官網：2026/09 新廠動工',sources:['https://example.com/m'],phone:''}:{expansion:false,score:0,summary:'',sources:[],phone:''}; }); return out; });
@@ -70,7 +70,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  const fedOne=await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單/.test(v.source)).map(v=>v.company));
  chk(one && one.picked===1 && fedOne.length===1 && fedOne[0]==='乙二機械股份有限公司', `額度 1：網路有擴張訊號的乙二排前面：${fedOne.join('|')}，摘要 ${JSON.stringify(one && one.research)}`);
  const flat=researched.flat();
- chk(flat.length===3 && flat.every(x=>/\|\d{8}\|新北市/.test(x)) && !flat.some(x=>/丁四/.test(x)), `先上網查（找電話之前）、一批一批查到夠為止、只查符合規則的三家（資本額 1.5 億的丁四不查）：${JSON.stringify(researched)}`);
+ chk(flat.length===2 && flat.every(x=>/\|\d{8}\|新北市/.test(x)) && !flat.some(x=>/丁四/.test(x)), `先上網查、一批一批查到夠為止（乙二有訊號又有電話就停）、只查符合規則的（資本額 1.5 億的丁四不查）：${JSON.stringify(researched)}`);
  chk(one && one.research && one.research.strong===1 && one.research.pickedStrong===1, `挑進來的那家有明確訊號：${JSON.stringify(one && one.research)}`);
  const noteB=await pg.evaluate(async()=>((await window.Store.allRecords()).find(r=>r.company==='乙二機械股份有限公司')||{}).notesRaw||'');
  chk(/網路：104 正在徵 8 名作業員（2026\/09）/.test(noteB), `訊號那句寫進訪談內容：${noteB}`);
@@ -87,7 +87,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991','02-2222-3333'),mk('
  // 自動挑關著（daily-feed-auto=0），後台用 force 叫：回摘要、等補電話跑完
  const res=await pg.evaluate(()=>window.dailyFeed({force:true,awaitPhones:true}));
  chk(res && res.picked===3 && res.skippedNoPhone===1 && res.day===TODAY && res.quota===3 && res.bySrc && res.bySrc['登記清冊']===3, `摘要：挑 3 家（丙三的電話是上網查到的；找電話那關會多看到額度兩倍，丁四沒電話算跳過 1 家，但它不符合規則本來就排最後）：${JSON.stringify(res)}`);
- chk(hunted.some(x=>/丁四/.test(x)) && !hunted.some(x=>/乙二|戊五/.test(x)) && res.hunt && res.hunt.tried>=1 && res.hunt.found===0, `名單來源、Google 都沒有的才問 Claude 找電話（丁四），Google 查到的不問：${hunted.join(' | ')}／${JSON.stringify(res.hunt)}`);
+ chk(hunted.length===0 && res.hunt && res.hunt.tried===0 && res.gate && res.gate.tried===0, `版本 428：挑名單前不再用 Claude、Google 地圖找電話：${hunted.join(' | ')}／${JSON.stringify(res.hunt)}／${JSON.stringify(res.gate)}`);
  chk(res && res.phones && res.phones.trade && typeof res.phones.trade.tried==='number' && res.phones.google && typeof res.phones.google.tried==='number', `補電話的結果一起回（awaitPhones）：${JSON.stringify(res && res.phones)}`);
  chk(res && res.research && res.research.asked===3 && res.research.withSignals===1, `網路查的筆數一起回：${JSON.stringify(res && res.research)}`);
  const fed=await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單/.test(v.source)).map(v=>v.company+'|'+v.phones.map(p=>String(p.digits||p.dial||p.display||'').replace(/\D/g,'')).join(',')).sort());

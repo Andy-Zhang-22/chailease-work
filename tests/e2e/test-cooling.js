@@ -44,17 +44,7 @@ const mk=(id,company,taxId)=>({id,source:'A.csv',company,aliases:[],taxId,grade:
  v=await pg.evaluate(()=>{ const x=window.customerViews().find(v=>v.company==='晨光貿易有限公司'); return {cold:x.cold}; });
  chk(!v.cold, `接通之後冷名單解除：${JSON.stringify(v)}`);
 
- // 六個來源的配額比例
- const sp=await pg.evaluate(()=>[window.splitByShares([99,99,99,99,99,99],25,[10,5,5,0,2,3]), window.splitByShares([2,9,9,9,9,9],25,[10,5,5,0,2,3]), window.splitByShares([9,9,9,9,9,9],25,null), window.splitByShares([1,1,1,1,1,1],25,[10,0,0,0,0,0])]);
- chk(JSON.stringify(sp)==='[[10,5,5,0,2,3],[2,7,7,0,4,5],[5,4,4,4,4,4],[1,1,1,1,1,1]]', `照比例分、不夠的讓給有比例的、比例 0 最後補位：${JSON.stringify(sp)}`);
- await pg.click('#btnMenu'); await pg.click('#menu [data-act="menu-more"]'); await pg.click('[data-act="day-load"]'); await pg.waitForSelector('#editorBody .share-input'); await pg.waitForTimeout(200);
- const shares=pg.locator('#editorBody .share-input');
- chk((await shares.count())===9 && /空白＝預設商行 3、出進口 2、產業名單 0、其他 1（3、2、7、5、2、2、2、0、2）/.test(await pg.textContent('#editorBody .share-hint')), `九格比例（版本 410 加 104 徵才中）、空白＝預設商行 3、其他 1（版本 355、421）：${await pg.textContent('#editorBody .share-hint')}`);
- for (const [i,val] of [[0,'10'],[1,'5'],[2,'5'],[3,'0'],[4,'2'],[5,'3'],[6,'0'],[7,'0'],[8,'0']]) { await shares.nth(i).fill(val); await shares.nth(i).dispatchEvent('change'); }
- await pg.waitForTimeout(200);
- chk(/加起來 25，25 家照比例分：10、5、5、0、2、3、0、0、0/.test(await pg.textContent('#editorBody .share-hint')) && (await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='10,5,5,0,2,3,0,0,0', `填了比例會存、提示算給你看：${await pg.textContent('#editorBody .share-hint')}`);
- await shares.nth(0).fill(''); await shares.nth(0).dispatchEvent('change'); await pg.waitForTimeout(100);
- chk((await pg.evaluate(()=>localStorage.getItem('feed-shares')))==='0,5,5,0,2,3,0,0,0', '一格空白當 0');
+ // 版本 428：來源配額（feed-shares）跟後台的九格比例拿掉了，挑名單改減法＋需求證據（見 test-feed-merge）
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);

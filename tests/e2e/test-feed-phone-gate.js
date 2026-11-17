@@ -1,6 +1,6 @@
-// 每日新名單只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）：
-// 沒電話的先用 Google 地圖查一次（名稱、地址都對得上才算），查不到就跳過換下一家；跳過的不刪、不排除。
-// 登記清冊三家都沒電話：甲在貿易署電話表、乙 Google 查得到、丙查不到 → 進甲、乙，丙跳過；Google 只查乙、丙，各一次。
+// 每日新名單只進有電話的（版本 318；使用者：「你給我的新名單有些沒電話，都會刪掉許多」）。
+// 版本 428（減法）：沒電話的直接剔除，挑名單前不再用 Google 地圖查（一天 40 家找到 0～1 家）；跳過的不刪、不排除。
+// 登記清冊三家都沒電話：甲在貿易署電話表、乙只有 Google 查得到、丙查不到 → 只進甲；乙、丙跳過，Google 一次都不查。
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
 const ROOT=require('path').resolve(__dirname,'../..'),T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'};
@@ -41,8 +41,8 @@ const SEED=[{id:'1',source:'A.csv',company:'主力客戶一有限公司',aliases
  await pg.evaluate(async(r)=>{ await window.Store.saveRecords(r); },SEED);
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(6000);
  const fed=await pg.evaluate(()=>window.customerViews().filter(v=>/^每日新名單/.test(v.source)).map(v=>v.company+'|'+v.phones.map(p=>String(p.digits||p.dial||p.display||'').replace(/\D/g,'')).join(',')).sort());
- chk(fed.length===2 && fed[0]==='乙二機械股份有限公司|0229902222' && fed[1]==='甲一精密有限公司|0212345678', `額度 3 只進有電話的 2 家，電話一起填好：${fed.join(' / ')}`);
- chk(!asked.some(x=>/甲一/.test(x)) && asked.filter(x=>/乙二/.test(x)).length===1 && asked.filter(x=>/丙三/.test(x)).length===1, `Google 只查沒電話的，各查一次（挑名單前查過的匯入後不再查）：${asked.join(' | ')}`);
+ chk(fed.length===1 && fed[0]==='甲一精密有限公司|0212345678', `額度 3 只進公開資料有電話的 1 家（貿易署電話表），電話一起填好：${fed.join(' / ')}`);
+ chk(asked.length===0, `版本 428：挑名單前不再用 Google 地圖找電話：${asked.join(' | ')}`);
  const tombs=await pg.evaluate(async()=>Object.keys((await window.Store.getTombstones()).companies||{}));
  chk(!tombs.some(k=>/33333333|丙三/.test(k)), '跳過的丙三沒被排除，下個月有電話了還會被挑到');
  const mix=await pg.evaluate(async()=>(await window.mixCandidates()).map(x=>x.name));
