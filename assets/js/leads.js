@@ -441,6 +441,8 @@
       : r.rk === 'up' ? el('span', { className: 'badge badge-up', textContent: r.reason })
         : r.rk === 'down' ? el('span', { className: 'badge badge-down', textContent: r.reason })
           : el('span', { className: 'badge', textContent: r.reason || '變更' });
+    const ups = upPeriodsOf(r['統一編號']);
+    const upsBadge = ups >= 2 ? el('span', { className: 'badge badge-up', textContent: `半年內增資 ${ups} 次`, title: '這半年的變更清冊裡增資過兩期以上：一直在拿錢投進去的成長型公司' }) : '';
     const name = el('span', { className: 'card-name' }, [r['統一編號']
       ? el('a', { href: global.Normalize.findbizUrl(r['統一編號'], r['公司名稱']), target: '_blank', rel: 'noopener', textContent: r['公司名稱'] })
       : document.createTextNode(r['公司名稱']), copyName(r['公司名稱'] || '')]);
@@ -456,7 +458,7 @@
           ? el('button', { className: 'btn btn-tiny', type: 'button', textContent: '放回來', onclick: () => { unhide(r); saveHidden(); render(); } })
           : el('button', { className: 'btn btn-tiny leads-hide', type: 'button', textContent: '這家不用了', onclick: () => { hide(r); saveHidden(); render(); toast('藏起來了，下個月清冊更新也不會再冒出來'); } })];
     return el('article', { className: `card leads-card${mine ? ' is-mine' : rksOf(r).has('up') ? ' is-up' : ''}${isHidden ? ' is-hidden' : ''}` }, [
-      el('div', { className: 'card-top' }, [name, reasonBadge, ...inds,
+      el('div', { className: 'card-top' }, [name, reasonBadge, upsBadge, ...inds,
         r.branch.key ? el('span', { className: `badge badge-branch${r.branch.kind === 'common' ? ' badge-branch-common' : ''}`, textContent: r.branch.key, title: r.branch.label }) : '',
         r.holding ? el('span', { className: 'badge badge-ind', textContent: '投資／控股類' }) : '',
         ...(hasPhone(r) ? phoneBadge(global.Trade.telOf(r['統一編號']), phoneKindsOf(r).has('M')) : []), mineBadge]),
@@ -846,11 +848,19 @@
    * 每日新名單揉合用（使用者：「除了商行那頁外其他五頁揉在一起，照總分挑但每分頁至少保底」）：
    * 這一家在這一頁看得到的訊號與排序要素，格式五頁一樣，app.js 的 dailyFeed 依統編合併成一家再算總分。
    */
+  /** 統編 → 這半年（index.json 留著的六期）增資過幾期（版本 432：成長型客戶，增資兩期以上＝一直在拿錢投進去；後台 fetch-leads 算好放在 index.capitalUp，手機不用載六期清冊） */
+  function upPeriodsOf(taxId) {
+    const t = String(taxId || '').replace(/\D/g, '');
+    const ps = index && index.capitalUp && index.capitalUp[t];
+    return Array.isArray(ps) ? ps.length : 0;
+  }
   function dailyFacts(r) {
     const now = r['期別'] === latestPeriod();
     const signals = [];
     if (now && r.rk === 'up') signals.push('本期增資');
     if (now && EXPAND_RE.test(r.reason || '')) signals.push('本期擴張');
+    const ups = upPeriodsOf(r['統一編號']);
+    if (ups >= 2) signals.push(`半年內增資 ${ups} 次`);
     return { key: String(r['統一編號'] || '').replace(/\D/g, '') || String(r['公司名稱'] || '').replace(/\s/g, ''), name: r['公司名稱'], signals,
       ageRank: ageRankOf(r), capOk: r.capital >= 3000000 && r.capital <= 60000000, phone: hasPhone(r), branchRank: branchRank(r),
       industry: (r.classes || []).map((c) => IND[c]).filter(Boolean).join('、'),
@@ -878,5 +888,5 @@
     const r = factIdx.get(String(taxId || '').replace(/\D/g, ''));
     return r ? cardFacts(r) : null;
   }
-  global.Leads = { show, dailyFacts, cardFacts, factsOf, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
+  global.Leads = { show, dailyFacts, cardFacts, factsOf, upPeriodsOf, dailyCandidates, DAILY_PRIORITY, toStandardCsv, parseDate, yearsSince, parseCsv, csvCell, AGE_YEARS };
 })(window);

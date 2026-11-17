@@ -17,7 +17,8 @@ const LROWS=[
  ['24908666','買設備兩訊號有限公司','新北市新莊區中正路106號','周六','20000000','110/08/14','115/08/24','增資','CB01010 機械設備製造業','新北市','change','11508'],
 ];
 const LCSV='﻿'+[LHEAD,...LROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
-const LINDEX={latest:'11508',generatedAt:'2026-09-26T17:00:00.000Z',periods:{'11508':{generatedAt:'2026-09-26T17:00:00.000Z',period:'11508',files:[{city:'新北市',type:'change',path:'11508/新北市-change.csv',rows:4,capitalUp:4}]}}};
+// 版本 432：index.json 帶歷期增資（乙二 11506、11508 兩期都增資＝半年內增資 2 次）
+const LINDEX={latest:'11508',generatedAt:'2026-09-26T17:00:00.000Z',periods:{'11508':{generatedAt:'2026-09-26T17:00:00.000Z',period:'11508',files:[{city:'新北市',type:'change',path:'11508/新北市-change.csv',rows:4,capitalUp:4}]}},capitalUp:{'22222222':['11506','11508']}};
 const CHEAD='案件類別,登記編號,客戶統編,客戶名稱,金主統編,金主名稱,契約起,契約迄,擔保金額,標的物所在地,標的物件數,登記核准日,註銷日,成立日期';
 const CROWS=[
  // 動保半年內剛買設備的算訊號、排前面（版本 344 使用者更正：有需求才買設備）
@@ -116,7 +117,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const pv=await pg.evaluate(()=>window.mergedFeedPreview());
  const top=pv[0];
  chk(top && top.name==='乙二機械股份有限公司', `同一家出現在四頁、訊號最多的排第一：${pv.slice(0,3).map(x=>x.name+'('+x.signals.length+')').join('、')}`);
- chk(top && ['本期增資','剛做進出口','剛開電子發票','最近買設備（2026/08）','跟同業借（和潤）'].every(x=>top.signals.includes(x)) && ['ch','le','tr','ei'].every(k=>top.srcs.includes(k)), `訊號加總：${top&&top.signals.join('、')}／來源 ${top&&top.srcs.join(',')}`);
+ chk(top && ['本期增資','半年內增資 2 次','剛做進出口','剛開電子發票','最近買設備（2026/08）','跟同業借（和潤）'].every(x=>top.signals.includes(x)) && ['ch','le','tr','ei'].every(k=>top.srcs.includes(k)), `訊號加總：${top&&top.signals.join('、')}／來源 ${top&&top.srcs.join(',')}`);
  chk(pv.filter(x=>x.name==='乙二機械股份有限公司').length===1, '同一家只算一次');
  const ml=pv.find(x=>x.name==='名祿實業有限公司'); const jy=pv.find(x=>x.name==='甲一精密有限公司');
  chk(ml && ml.indRank===2 && jy && jy.indRank<2, `「不是目標」兩次以上的行業排到最後一級：名祿 indRank ${ml&&ml.indRank}、甲一 ${jy&&jy.indRank}`);

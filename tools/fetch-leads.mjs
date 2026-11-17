@@ -22,6 +22,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { capitalUpIndex } from './capital-up.mjs';
 import os from 'node:os';
 
 const UA = 'asaaaa-list-updater/1.0 (+https://github.com/Andy-Zhang-22/asaaaa)';
@@ -260,8 +261,20 @@ if (args.includes('--prune')) {
     delete all.periods[k];
   }
   all.latest = Object.keys(all.periods).sort().pop() || null;
+  if (KIND !== 'bms') all.capitalUp = await capitalUpIndex(OUT, all.periods);
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(all, null, 1)}\n`, 'utf8');
-  console.log(`留 ${keep} 期，清掉 ${drop.length} 期${drop.length ? `：${drop.join('、')}` : ''}`);
+  console.log(`留 ${keep} 期，清掉 ${drop.length} 期${drop.length ? `：${drop.join('、')}` : ''}；增資兩期以上 ${Object.keys(all.capitalUp || {}).length} 家`);
+  process.exit(0);
+}
+
+/* ---------------- 只重算歷期增資（版本 432）：不抓新資料，讀 leads/ 現有的清冊重寫 index.json 的 capitalUp ---------------- */
+
+if (args.includes('--reindex')) {
+  let all;
+  try { all = JSON.parse(await fs.readFile(path.join(OUT, 'index.json'), 'utf8')); } catch (e) { console.log('沒有 index.json'); process.exit(1); }
+  all.capitalUp = await capitalUpIndex(OUT, all.periods);
+  await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(all, null, 1)}\n`, 'utf8');
+  console.log(`增資兩期以上 ${Object.keys(all.capitalUp).length} 家（${Object.keys(all.periods).sort().join('、')}）`);
   process.exit(0);
 }
 
@@ -328,7 +341,8 @@ if (!PROBE) {
   all.latest = Object.keys(all.periods).sort().pop();
   all.generatedAt = index.generatedAt;
   all.kind = KIND;
+  if (KIND !== 'bms') all.capitalUp = await capitalUpIndex(OUT, all.periods);
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(all, null, 1)}\n`, 'utf8');
-  console.log(`\n已寫入 ${OUT}/index.json，${index.files.length} 個檔案`);
+  console.log(`\n已寫入 ${OUT}/index.json，${index.files.length} 個檔案${all.capitalUp ? `，增資兩期以上 ${Object.keys(all.capitalUp).length} 家` : ''}`);
 }
 console.log('\n完成');
