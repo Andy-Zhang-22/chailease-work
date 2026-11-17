@@ -33,9 +33,9 @@ on:
         type: choice
         options: [auto, 'yes', 'no']
       recheck:
-        description: '主力客戶上網查擴張訊號：auto＝每月 1 日；yes＝這次查；no＝不查（一個月最多 120 家）'
+        description: '主力客戶上網查擴張訊號：no＝不查（版本 431 起預設；一次約 US$45，使用者沒在看）；auto＝每月 1 日；yes＝這次查'
         required: false
-        default: 'auto'
+        default: 'no'
         type: choice
         options: [auto, 'yes', 'no']
       research:
@@ -136,7 +136,7 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           MODE: ${{ inputs.mode || 'write' }}
           NOPHONE: ${{ inputs.nophone || 'auto' }}
-          RECHECK: ${{ inputs.recheck || 'auto' }}
+          RECHECK: ${{ inputs.recheck || 'no' }}
           INTEL_MODEL: ${{ inputs.model || 'sonnet' }}
           COMPARE: ${{ inputs.compare || 'no' }}
           RECHECK_MAX: ${{ inputs.recheckmax || '260' }}
