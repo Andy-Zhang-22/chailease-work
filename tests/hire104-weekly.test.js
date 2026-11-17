@@ -126,7 +126,7 @@ test('write：徵財務主管的排最前、備註多一行、只在職缺搜尋
   assert.strictEqual(pool.list.length, 3, '沒有新公司，池子家數不變');
 });
 
-test('write 第二次：池子跨週累積、同一家跳過、不設上限（版本 411）', async () => {
+test('write 第二次：池子跨週累積、同一家跳過、不設上限（版本 411）；同一家再抓到就更新件數歷程、變多就標徵才擴編（版本 430）', async () => {
   const fx = fixture();
   const syncP = path.join(fx.dir, 'sync.json');
   const r1 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
@@ -140,19 +140,25 @@ test('write 第二次：池子跨週累積、同一家跳過、不設上限（�
     { name: '丙三工程有限公司', area: '新北市板橋區', count: 1 },
     { name: '庚七有限公司', area: '新北市汐止區', count: 4 },
   ] }));
-  const r2 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  const r2 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], { ...fx.env, HIRE104_TODAY: '2030-01-14' });   // 假裝是下一週
   assert.strictEqual(r2.code, 0, r2.out);
   assert.match(r2.out, /池子裡已有 2/);
+  assert.match(r2.out, /池子裡原有的更新件數 2 家（其中徵才擴編 1 家）/);
   assert.match(r2.out, /新進候選池 1 家（300～6,000 萬 1），池子共 5 家/);
   const pool = JSON.parse(JSON.parse(fs.readFileSync(syncP, 'utf8')).settings['hiring-pool-104'].v);
   assert.deepStrictEqual(pool.list.map((x) => x.key), ['88888888', '33333333', '11111111', '22222222', '77777777'], '舊的照原順序留著，新的接在後面');
   assert.strictEqual(pool.list.filter((x) => x.key === '11111111').length, 1, '同一家不重複');
-  assert.strictEqual(pool.list.find((x) => x.key === '11111111').count, 2, '舊的那筆照留（職缺數不更新）');
+  const jia = pool.list.find((x) => x.key === '11111111');
+  assert.strictEqual(jia.count, 9, '版本 430：同一家再抓到，件數更新成最新');
+  assert.strictEqual(jia.hist.length, 2); assert.strictEqual(jia.hist[1][0], '2030-W03'); assert.deepStrictEqual(jia.grow, [2, 9]);
+  assert.match(jia.row, /104 徵才中：9 件（1\/14 查）/); assert.match(jia.row, /徵才擴編：2→9 件/);
+  const bing = pool.list.find((x) => x.key === '33333333');
+  assert.strictEqual(bing.count, 1); assert.ok(!bing.grow, '件數沒變多的不標擴編');
   assert.strictEqual(pool.stats.dup, 2);
   // 三家都已在池子裡 → 同步檔不動
   fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify({ at: Date.now(), list: [{ name: '甲一精密有限公司', area: '新北市新莊區', count: 9 }] }));
   const before = fs.readFileSync(syncP, 'utf8');
-  const r3 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
+  const r3 = await run(['--sync', syncP, 'write', '--fia', path.join(fx.dir, 'fia.csv')], { ...fx.env, HIRE104_TODAY: '2030-01-14' });   // 同一週、件數一樣 → 不動
   assert.strictEqual(r3.code, 1);
   assert.match(r3.out, /可以新進候選池的 0 家（池子裡已有 1 家）/);
   assert.strictEqual(fs.readFileSync(syncP, 'utf8'), before);
