@@ -99,7 +99,7 @@ test('fetch-industry 第三批：新北建照只收起造人像公司、不是�
   assert.deepEqual(t.permitRow({ ...base, proprietor: '己五金股份有限公司（代表人：王大明）' }, { now }).names, ['己五金股份有限公司'], '括號裡的代表人拿掉');
   assert.equal(t.permitUse(''), '新建物'); assert.equal(t.permitUse('倉庫'), '倉儲');
   assert.equal(t.PERMIT.id, 123639);
-  assert.equal(t.HEAD.slice(-5).join(','), '建照年月,建照用途,建照造價,建照種類,建照地址');
+  assert.equal(t.HEAD.slice(15, 20).join(','), '建照年月,建照用途,建照造價,建照種類,建照地址');   // 版本 433 後面再接補助三欄
   assert.equal(t.permitRow({ ...base, house_address: '新北市三重區中正北路100號' }, { now }).address, '新北市三重區中正北路100號', '有門牌用門牌');
   const r = I.toRecord({ 統編: '56789012', 名稱: '己五金股份有限公司', 類別: '新建廠房', 地址: '新北市三重區', 資本額: '20000000', 首見年月: '202610', 建照年月: '202609', 建照用途: '廠房', 建照造價: '12800000', 建照地址: '新北市三重區中正北路100號' }, TODAY, '202610');
   assert.deepEqual(r.permit, { ym: { y: 2026, m: 9 }, use: '廠房', cost: 12800000, months: 3, stage: '建照', address: '新北市三重區中正北路100號' });
@@ -184,4 +184,36 @@ test('fetch-industry 第四批（版本 426）：近 6 年純商辦的使照門�
   assert.match(I.noteFor(r), /^產業名單：進駐新商辦，2024-05 使照 進駐新商辦（新北市三重區興德路47號），2026-11 新出現$/);
   assert.match(I.cardFacts(r).info, /^進駐新商辦（2024\/05 使照 進駐新商辦（新北市三重區興德路47號））$/);
   assert.match(I.toStandardCsv([r]), /進駐新商辦（新北市三重區興德路47號）/);
+});
+
+test('fetch-industry 第五批（版本 433）：SBIR 核定名單只收有統編、核准 24 個月內的，統編補 0、重疊的檔去重、金額加總；快取存讀同形；分頁的卡片、訊號、備註、利率不敏感', async () => {
+  const t = await tool();
+  const now = new Date(2026, 10, 17);
+  const base = { '統一編號': '1234567', '獎補助對象': '甲科技股份有限公司', '核准日期': '20260817', '補助金額(元)': '1,000,000', '獎補助事項': ' 手術器械 AI 視覺辨識 ' };
+  assert.deepEqual(t.sbirRow(base, { now }), { taxId: '01234567', ym: '202608', amount: 1000000, title: '手術器械 AI 視覺辨識' }, '7 碼統編補 0、金額去逗號、計畫名去頭尾空白');
+  assert.equal(t.sbirRow({ ...base, '核准日期': '20231201' }, { now }), null, '超過 24 個月不收');
+  assert.equal(t.sbirRow({ ...base, '統一編號': '' }, { now }), null, '沒統編不收（舊年度的格式）');
+  assert.equal(t.sbirRow({ ...base, '核准日期': '115/08/17' }, { now }), null, '核准日期不是 8 碼不收');
+  const by = new Map();
+  [{ taxId: '12345678', ym: '202501', amount: 500000, title: 'A' }, { taxId: '12345678', ym: '202501', amount: 500000, title: 'A' }, { taxId: '12345678', ym: '202603', amount: 800000, title: 'B' }].forEach((r) => t.sbirMerge(by, r));
+  assert.deepEqual({ ...by.get('12345678'), keys: undefined }, { ym: '202603', amount: 1300000, title: 'B', n: 2, keys: undefined }, '114、115 兩個檔重疊的同一筆只算一次；兩個計畫加總、留最新的計畫名');
+  const j = t.sbirCacheOf(by, '2026-11-17T00:00:00.000Z');
+  assert.equal(j.total, 1);
+  assert.deepEqual(t.sbirCacheToMap(JSON.parse(JSON.stringify(j))).get('12345678'), { ym: '202603', amount: 1300000, title: 'B', n: 2 });
+  assert.equal(t.sbirCacheToMap(null).size, 0);
+  assert.equal(t.SBIR.id, 26131); assert.equal(t.HEAD.slice(-3).join(','), '補助年月,補助金額,補助計畫');
+  // 分頁
+  const r = I.toRecord({ 統編: '56789016', 名稱: '癸科技股份有限公司', 類別: '研發補助', 地址: '新北市新莊區', 資本額: '20000000', 首見年月: '202610', 補助年月: '202608', 補助金額: '1000000', 補助計畫: '手術器械 AI 視覺辨識' }, TODAY, '202610');
+  assert.deepEqual(r.sbir, { ym: { y: 2026, m: 8 }, amount: 1000000, title: '手術器械 AI 視覺辨識', months: 4 });
+  assert.equal(I.kindLabel('研發補助'), '🔬 研發補助');
+  assert.deepEqual(I.dailyFacts(r).signals, ['剛拿到研發補助（補助 100 萬）'], '需求證據 D 層的訊號');
+  assert.match(I.noteFor(r), /^產業名單：研發補助，2026-08 核定 SBIR 研發補助（手術器械 AI 視覺辨識，補助 100 萬）$/);
+  assert.match(I.cardFacts(r).info, /^研發補助（2026\/08 核定 SBIR 研發補助（手術器械 AI 視覺辨識，補助 100 萬））$/);
+  assert.equal(I.cardFacts(r).ym, '2026-08');
+  const old = I.toRecord({ 統編: '56789017', 名稱: '子科技有限公司', 類別: '研發補助', 首見年月: '202610', 補助年月: '202501', 補助金額: '800000', 補助計畫: 'X' }, TODAY, '202610');
+  assert.equal(old.sbir.months, 23);
+  const csv = I.toStandardCsv([r, old]);
+  assert.match(csv, /2026-08 核定 SBIR 研發補助/); assert.match(csv, /2025-01 核定 SBIR 研發補助（X，補助 80 萬）/);
+  const none = I.toRecord({ 統編: '56789013', 名稱: '庚公司', 類別: '食品製造業', 首見年月: '202610' }, TODAY, '202610');
+  assert.equal(none.sbir, null);
 });
