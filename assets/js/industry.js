@@ -533,8 +533,8 @@
    */
   function dailyFacts(r) {
     const signals = [...new Set(r.kinds.filter((k) => k !== '新建廠房' && k !== '正在蓋廠房' && k !== '進駐新商辦' && k !== '研發補助').map(groupSignal))];
-    if (r.sbir) signals.push(`剛拿到研發補助${r.sbir.amount ? `（補助 ${money(r.sbir.amount)}）` : ''}`);   // 需求證據 D 層（版本 433）
     if (r.permit) signals.push(r.permit.stage === '進駐' ? '進駐新商辦' : permitText(r));   // 「正在蓋廠房（造價 1,280 萬）」（版本 365）；進駐的訊號不帶地址（版本 426）
+    if (r.sbir) signals.push(`剛拿到研發補助${r.sbir.amount ? `（補助 ${money(r.sbir.amount)}）` : ''}`);   // 需求證據 D 層（版本 433；排在建照後面，版本 434）
     if (isFresh(r)) signals.push(r.kinds.some((k) => VEHICLE.test(k)) ? '剛做車輛業' : '剛出現在產業名單');
     if (isNewSite(r)) signals.push(`剛有${r.newSite.what}`);
     return { key: String(r.taxId || '').replace(/\D/g, '') || String(r.name || '').replace(/\s/g, ''), name: r.name, signals,
