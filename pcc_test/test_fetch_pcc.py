@@ -54,5 +54,15 @@ class T(unittest.TestCase):
         self.assertEqual(fp.outcome([bad, dict(bad, date="20261025")]), (fp.EXIT_ALL_DOWN, ["20261026", "20261025"]))
         self.assertEqual((fp.EXIT_OK, fp.EXIT_ALL_DOWN, fp.EXIT_PARTIAL), (0, 3, 4))   # pcc-daily.sh／.ps1 寫死這三個數字
 
+    def test_catchup(self):
+        # 版本 439：沒給日期時從上次抓到的隔天補到昨天，最多 7 天，至少昨天
+        ok = lambda: {"api_down": False}; bad = lambda: {"api_down": True}
+        self.assertEqual(fp.catchup_dates({}, "20261117"), ["20261117"])                                     # 第一次：只抓昨天
+        self.assertEqual(fp.catchup_dates({"dates": {"20261117": ok()}}, "20261117"), ["20261117"])          # 昨天抓過了：仍抓昨天一次（更正公告）
+        self.assertEqual(fp.catchup_dates({"dates": {"20261112": ok()}}, "20261117"), ["20261113", "20261114", "20261115", "20261116", "20261117"])   # 週末沒開：補 11/13 起
+        self.assertEqual(fp.catchup_dates({"dates": {"20261112": ok(), "20261115": bad()}}, "20261117"), ["20261113", "20261114", "20261115", "20261116", "20261117"])   # API 掛那天不算抓過
+        self.assertEqual(fp.catchup_dates({"dates": {"20261001": ok()}}, "20261117"), [f"202611{d:02d}" for d in range(11, 18)])   # 太久：只補最近 7 天
+        self.assertEqual(fp.catchup_dates({"dates": {"20261001": ok()}}, "20261117", 3), ["20261115", "20261116", "20261117"])
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

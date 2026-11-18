@@ -13,7 +13,9 @@
     投標廠商:投標廠商N:廠商代碼、廠商名稱、是否得標（是／否／None）、組織型態（公司登記／商業登記／其他／None）、廠商地址、廠商電話、決標金額、是否為中小企業、僱用員工總人數
 輸出：leads/pcc/pcc.csv（一家一列，跨期同統編不重複；同一家得好幾標留最近那一標，件數另外記）、cases.csv（去重用）、index.json；
       另外寫 pcc_test/result-YYYYMMDD.csv（當天得標廠商一家一列，給使用者看）。只印筆數與統計，不印公司名。
-用法：python3 tools/fetch-pcc.py [--date YYYYMMDD] [--days 1] [--out leads/pcc]
+用法：python3 tools/fetch-pcc.py [--date YYYYMMDD] [--days N|auto] [--out leads/pcc]
+  沒給 --date（每天排程）而 --days 是 auto（版本 439）：從 index.json 裡最後一次成功抓到的日期隔天，一路補到昨天，最多 catchup_days 天；
+  至少抓昨天一次（更正決標公告會再出現，cases.csv 去重）。週末 Mac 沒開、公司電腦週一只抓昨天，週五、週六的公告以前會漏（11/13、11/14 就漏了）。
 結束代碼（版本 398）：0＝每天都抓到；4＝有幾天 API 連不上、其他天照寫；3＝每天都連不上、什麼都沒寫。外層的 pcc-daily.sh／.ps1 靠這個決定推不推、記不記「今天抓過」。
 """
 import csv, io, json, os, re, sys, time, datetime, urllib.parse, urllib.request, urllib.error
@@ -34,6 +36,7 @@ CONFIG = {
     "request_gap_sec": 1.0,                            # 每次請求間隔
     "retries": 2,                                      # 失敗重試次數
     "keep_days": 180,                                  # pcc.csv 留最近幾天決標的公司
+    "catchup_days": 7,                                 # --days auto 時最多往回補幾天（一天約 10～15 分鐘）
     "base": "https://pcc-api.openfun.app",
 }
 HEAD = ["統編", "名稱", "組織型態", "地址", "電話", "最近決標日", "標案名稱", "招標機關", "決標金額", "得標件數", "首次決標日", "案號", "成立日期", "資本額", "近三件"]
@@ -188,6 +191,17 @@ def get_json(url, cfg=CONFIG, log=print):
 def taipei_yesterday():
     return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8) - datetime.timedelta(days=1)).strftime("%Y%m%d")
 
+def catchup_dates(index, yesterday, max_days=7):
+    """沒給日期時要抓哪幾天（版本 439）：index.json 的 dates 裡最後一次成功抓到的日期（api_down 的不算）隔天起，補到昨天；
+    最多 max_days 天（太久沒抓就只補最近幾天）；至少抓昨天。回 [YYYYMMDD, …] 由舊到新。"""
+    y = datetime.datetime.strptime(yesterday, "%Y%m%d").date()
+    ok = [k for k, v in ((index or {}).get("dates") or {}).items() if isinstance(v, dict) and not v.get("api_down") and re.fullmatch(r"\d{8}", str(k))]
+    start = y
+    if ok:
+        last = datetime.datetime.strptime(max(ok), "%Y%m%d").date()
+        start = min(y, max(last + datetime.timedelta(days=1), y - datetime.timedelta(days=max_days - 1)))
+    return [(start + datetime.timedelta(days=i)).strftime("%Y%m%d") for i in range((y - start).days + 1)]
+
 def fetch_day(date, cfg=CONFIG, log=print):
     """一天：決標公告 → 每案的明細 → 得標廠商（每家一列，含留不留）。回 (rows, stats)"""
     base = cfg["base"]
@@ -230,8 +244,8 @@ def fetch_day(date, cfg=CONFIG, log=print):
 def main():
     args = sys.argv[1:]
     opt = lambda n, d: (args[args.index(f"--{n}") + 1] if f"--{n}" in args and args.index(f"--{n}") + 1 < len(args) and not args[args.index(f"--{n}") + 1].startswith("--") else d)
-    date = (opt("date", "") or "").strip() or taipei_yesterday()
-    days = int(opt("days", "1") or 1)
+    date_arg = (opt("date", "") or "").strip()
+    days_arg = (opt("days", "auto") or "auto").strip().lower()
     out = opt("out", "leads/pcc")
     os.makedirs(out, exist_ok=True); os.makedirs("pcc_test", exist_ok=True)
     today = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")
@@ -242,10 +256,17 @@ def main():
         index = json.load(open(os.path.join(out, "index.json"), encoding="utf-8"))
     except Exception:
         index = {}
-    d0 = datetime.datetime.strptime(date, "%Y%m%d").date()
+    if not date_arg and days_arg == "auto":
+        dates = catchup_dates(index, taipei_yesterday(), CONFIG["catchup_days"])
+        if len(dates) > 1: print(f"上次抓到 {min(dates)} 的前一天，這次補 {len(dates)} 天：{dates[0]}～{dates[-1]}")
+    else:
+        date = date_arg or taipei_yesterday()
+        days = 1 if days_arg == "auto" else int(days_arg or 1)
+        d0 = datetime.datetime.strptime(date, "%Y%m%d").date()
+        dates = [(d0 - datetime.timedelta(days=i)).strftime("%Y%m%d") for i in range(days)]
+    date = max(dates)   # index 的 lastFetched、給使用者看的 result-日期.csv 用最新那天
     all_wins = []; day_stats = []
-    for i in range(days):
-        d = (d0 - datetime.timedelta(days=i)).strftime("%Y%m%d")
+    for d in dates:
         rows, st = fetch_day(d, CONFIG, print)
         day_stats.append(st)
         won = [r for r in rows if r["won"]]

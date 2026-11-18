@@ -131,6 +131,10 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  const firstPlainEvid=live.findIndex(x=>!x.mobile && x.tier<4), firstMobileNoEvid=live.findIndex(x=>x.mobile && x.tier>=4);
  chk(firstPlainEvid>=0 && firstMobileNoEvid>=0 && firstPlainEvid<firstMobileNoEvid, `有證據沒手機的排在沒證據有手機的前面：${firstPlainEvid} < ${firstMobileNoEvid}`);
  chk(okOrder, `需求證據先、同一層有手機的先：${live.map(x=>x.name+'('+(x.mobile?'M':'-')+x.tier+')').join('|')}`);
+ // 版本 438（使用者：「補助的門檻放寬到300萬以上吧」）：剛拿到補助的資本額 300 萬以上就算，其他公司照舊 1,000 萬；5 億以上、未達 300 萬的補助公司照樣不挑
+ const sz=await pg.evaluate(()=>{ const g=()=>new Set(['剛拿到研發補助（補助 80 萬）']), s=()=>new Set(['剛拿到創業補助（補助 50 萬）']), n=()=>new Set(['本期增資']);
+   return [{capital:5e6,signals:g()},{capital:3e6,signals:s()},{capital:2.5e6,signals:g()},{capital:5e6,signals:n()},{capital:1e7,signals:n()},{capital:6e8,signals:g()},{capital:0,signals:g()},{capital:1e6,signals:n(),loanMax:9e6}].map(window.feedSizeOk); });
+ chk(JSON.stringify(sz)==='[true,true,false,false,true,false,false,true]', `規模門檻：補助 500 萬／300 萬算、補助 250 萬不算、沒補助 500 萬不算、1,000 萬算、5 億以上不算、查不到不算、動保 900 萬算：${JSON.stringify(sz)}`);
  const ix=(n)=>pv.findIndex(x=>x.name===n);
  chk(ix('乙二機械股份有限公司')===0 && top.tier===0 && top.mobile, `乙二：有手機＋跟同業借＝最前：${ix('乙二機械股份有限公司')}`);
  const many=pv.find(x=>x.name==='多訊號無設備有限公司'), buy=pv.find(x=>x.name==='買設備兩訊號有限公司');

@@ -3,7 +3,9 @@
 # 版本 390 起多了「今天跑過就不重跑」（記在 ~/Library/Application Support/chailease-work/pcc-last.txt），
 # 所以可以交給 launchd 排成「登入／喚醒就跑」（tools/mac-schedule.sh install）；公司電腦（pcc-daily.ps1）同時跑也不會重複（cases.csv 去重）。
 # 版本 398：補好幾天時有一天 API 掛，成功的天照推（以前整批丟）；但這次不記「今天抓過」，排程半小時後會再試昨天。
-# 用法：bash tools/pcc-daily.sh                    （抓台灣的昨天；今天跑過就不重跑）
+# 版本 439：不給日期時從上次抓到的日期接著補到昨天（最多 7 天），週末沒開機漏掉的週一會自己補齊。
+# 版本 444：同一時間只跑一支（mkdir 鎖），排程撞到手動跑或自己上一次還沒跑完時直接跳過。
+# 用法：bash tools/pcc-daily.sh                    （補到昨天；今天跑過就不重跑）
 #       bash tools/pcc-daily.sh --force           （今天跑過也再跑一次）
 #       bash tools/pcc-daily.sh 20261023          （抓指定日期）
 #       bash tools/pcc-daily.sh 20261023 3        （從那天往回抓 3 天）
@@ -19,6 +21,14 @@ TODAY="$(date +%Y-%m-%d)"
 if [ "$FORCE" = 0 ] && [ -f "$STAMP" ] && [ "$(tr -d '[:space:]' < "$STAMP")" = "$TODAY" ]; then
   echo "今天抓過了（$TODAY），不重跑；要重跑加 --force"; exit 0
 fi
+# 版本 444：同一時間只跑一支。launchd 每半小時叫一次，一次抓要 17 分鐘、補好幾天會超過半小時，手動跑時也可能撞上排程；
+# 兩支同時抓會被 API 限流（HTTP 429，11/18 晚上撞過一次，當天明細缺一堆）。用 mkdir 當鎖，放超過 3 小時的當殘留清掉。
+LOCK="${TMPDIR:-/tmp}/chailease-pcc-daily.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +180 2>/dev/null)" ]; then rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null || { echo "另一次還在抓，這次先不跑"; exit 0; }
+  else echo "另一次還在抓，這次先不跑"; exit 0; fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 # 剛登入／剛喚醒時網路可能還沒接上：最多等 2 分鐘，連不到就這次先不算（下次喚醒或半小時後再試）
 for i in $(seq 1 12); do
   if curl -s -m 5 -o /dev/null https://github.com 2>/dev/null; then break; fi
@@ -29,7 +39,7 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 git pull --rebase --autostash -q origin "$BRANCH"
 # fetch-pcc.py 的結束代碼：0 每天都抓到；4 有幾天 API 掛、成功的天照寫；3 全掛、什麼都沒寫
 set +e
-python3 tools/fetch-pcc.py --date "${ARGS[0]:-}" --days "${ARGS[1]:-1}"
+python3 tools/fetch-pcc.py --date "${ARGS[0]:-}" --days "${ARGS[1]:-auto}"
 RC=$?
 set -e
 case "$RC" in

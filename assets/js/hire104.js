@@ -53,6 +53,7 @@
     const note = col('訪談內容');
     const m = /104 徵才中：(\d+) 件（([^）]*)查）/.exec(note);
     const fm = /徵財務主管：([^\n；]+)/.exec(note);
+    const am = /徵 AI 人才：([^\n；]+)/.exec(note);
     const gm = /徵才擴編：(\d+)→(\d+) 件/.exec(note);
     const year = Number(col('成立')) || 0;
     // 徵才擴編（版本 430）：Mac 每週把件數記成 hist=[[週, 件數], …]，最新一週比第一週多＝在擴編；舊格式沒 hist 就看備註那行
@@ -64,6 +65,7 @@
       foundedYear: year, years: year ? new Date().getFullYear() - year : null,
       count: Number(c.count) || (m ? Number(m[1]) : 0), checked: m ? m[2].trim() : '',
       fin: String(c.fin || (fm ? fm[1] : '')).trim(),   // 徵財務主管的職稱（版本 417）
+      ai: String(c.ai || (am ? am[1] : '')).trim(),   // 徵 AI 人才的職稱（版本 440；使用者：「想找這幾年有買 GPU 的客戶」→ 徵 AI 職缺當代理訊號，先只掛訊號不動排序）
       grow,
     };
     r.branch = branchOf(r.address);
@@ -122,16 +124,16 @@
       .sort(dailyCompare);
   }
   function dailyFacts(r) {
-    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`, ...(r.fin ? [`104 徵財務主管（${r.fin}）`] : []), ...(r.grow ? [`徵才擴編（${r.grow.from}→${r.grow.to} 件）`] : [])], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
+    return { key: r.taxId, name: r.name, signals: [`104 徵才中（${r.count} 件）`, ...(r.fin ? [`104 徵財務主管（${r.fin}）`] : []), ...(r.ai ? [`104 徵 AI 人才（${r.ai}）`] : []), ...(r.grow ? [`徵才擴編（${r.grow.from}→${r.grow.to} 件）`] : [])], ageRank: ageRankOf(r), capOk: capRank(r) === 0, phone: !!r.tel, branchRank: branchRank(r), industry: r.industry, mobile: isMobile(r.tel) };
   }
   function cardFacts(r) {
     return { name: r.name, taxId: r.taxId, address: r.address, capital: r.capital || 0, years: r.years, tel: r.tel, branchKey: r.branch.key,
-      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `，徵才擴編 ${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `，徵財務主管：${r.fin}` : ''}`, ym: '', add: () => addToList([r]) };
+      info: `104 徵才中 ${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `，徵才擴編 ${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `，徵財務主管：${r.fin}` : ''}${r.ai ? `，徵 AI 人才：${r.ai}` : ''}`, ym: '', add: () => addToList([r]) };
   }
   const factsOf = (taxId) => { const r = lookup(taxId); return r ? cardFacts(r) : null; };
 
   /* ---------------- 加入客戶名單 ---------------- */
-  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `\n徵才擴編：${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `\n徵財務主管：${r.fin}` : ''}`;
+  const noteFor = (r) => `104 徵才中：${r.count} 件${r.checked ? `（${r.checked}查）` : ''}${r.grow ? `\n徵才擴編：${r.grow.from}→${r.grow.to} 件` : ''}${r.fin ? `\n徵財務主管：${r.fin}` : ''}${r.ai ? `\n徵 AI 人才：${r.ai}` : ''}`;
   function toStandardCsv(list, dates) {
     const today = todayIso();
     const lines = [HEAD.join(','), ...list.map((r, i) => [r.name, r.taxId, '', r.foundedYear || '', thousands(r.capital), r.tel, '', '', r.industry, (dates && dates[i]) || '', '',
@@ -148,5 +150,52 @@
     await global.importLeadsFile(file);
   }
 
-  global.Hire104 = { ensureData, lookup, poolInfo, dailyCandidates, dailyFacts, cardFacts, factsOf, toStandardCsv, addToList, DAILY_PRIORITY, DAY };
+  /* ---------------- 沒電話的：後台讓 Claude 上網找（版本 442） ----------------
+   * Mac 每週把「合格但公開名單沒電話」的公司寫在設定 hiring-pool-104-nophone；後台清晨拿幾家（資本額 300～6,000 萬且新北先）
+   * 用 Claude＋網路搜尋找電話，找到的搬進池子（15 欄一列、備註記電話來源），沒找到的記今天查過不重查。
+   * 使用者 11/18：點數是每月送的 US$100、不另外儲值、別浪費 → 後台每天最多 HUNT104 家、每月估價到 HUNT104_USD 就停（花費記在設定 hunt104-usage）。 */
+  const NOPHONE_KEY = 'hiring-pool-104-nophone'; const USAGE_KEY = 'hunt104-usage';
+  const readSetting = async (key) => { try { const all = (await global.Store.getMeta('settings')) || {}; const v = all[key] && all[key].v; return v ? JSON.parse(v) : null; } catch (e) { return null; } };
+  async function huntBatch(n) {
+    const np = await readSetting(NOPHONE_KEY); if (!np || !Array.isArray(np.list)) return [];
+    const tried = np.tried || {};
+    const rank = (x) => (x.target && /^新北市/.test(String(x.city || x.addr || '')) ? 0 : x.target ? 1 : 2);
+    return np.list.filter((x) => x && x.key && !tried[x.key]).sort((a, b) => rank(a) - rank(b) || (Number(b.count) || 0) - (Number(a.count) || 0))
+      .slice(0, Math.max(0, Number(n) || 0)).map((x) => ({ key: x.key, name: x.name, taxId: x.key, address: x.addr || '' }));
+  }
+  const huntSpent = async (month) => { const u = await readSetting(USAGE_KEY); return u && u.month === month ? Number(u.usd) || 0 : 0; };
+  async function adoptHunted(results, { usd = 0, month = '' } = {}) {
+    const np = await readSetting(NOPHONE_KEY); if (!np || !Array.isArray(np.list)) return { found: 0, tried: 0 };
+    const pool = (await readSetting('hiring-pool-104')) || { head: HEAD.join(','), list: [] };
+    if (!Array.isArray(pool.list)) pool.list = [];
+    if ((pool.head || HEAD.join(',')) !== HEAD.join(',')) return { found: 0, tried: 0, badHead: true };
+    const today = todayIso(); const tried = np.tried || {}; const inPool = new Set(pool.list.map((e) => e.key));
+    let found = 0; let miss = 0; const keep = [];
+    for (const x of np.list) {
+      const r = results && results[x.key];
+      if (r === undefined) { keep.push(x); continue; }
+      if (r && r.phone) {
+        if (!inPool.has(x.key)) {
+          const who = String(r.who || '').trim(); let host = ''; try { host = new URL(r.source).hostname; } catch (e) { host = ''; }
+          const note = [`104 徵才中：${Number(x.count) || 1} 件（${x.day || ''} 查）`, x.fin ? `徵財務主管：${x.fin}` : '', x.ai ? `徵 AI 人才：${x.ai}` : '',
+            `電話：Claude 上網找到${who ? `（${who}）` : ''}${host ? ` ${host}` : ''}`, '每日新名單，符合：104 徵才中'].filter(Boolean).join('\n');
+          const row = [x.name, x.key, '', x.setup || '', x.cap ? Number(x.cap).toLocaleString() : '', r.phone, '', '', x.ind || '', DAY, '', note, x.addr || '', today, ''].map(csvCell).join(',');
+          const e = { key: x.key, name: x.name, src: '104 徵才中', count: Number(x.count) || 1, week: x.week || '', row, hunted: today };
+          if (x.fin) e.fin = x.fin;
+          if (x.ai) e.ai = x.ai;
+          pool.list.push(e); inPool.add(x.key);
+        }
+        found += 1;
+      } else { tried[x.key] = today; miss += 1; keep.push(x); }
+    }
+    pool.head = HEAD.join(','); pool.at = Date.now();
+    await global.Store.setSetting('hiring-pool-104', JSON.stringify(pool));
+    await global.Store.setSetting(NOPHONE_KEY, JSON.stringify({ at: Date.now(), list: keep, tried }));
+    const u = (await readSetting(USAGE_KEY)) || {}; const same = u.month === month;
+    await global.Store.setSetting(USAGE_KEY, JSON.stringify({ month, usd: Math.round(((same ? Number(u.usd) || 0 : 0) + (Number(usd) || 0)) * 100) / 100,
+      asked: (same ? Number(u.asked) || 0 : 0) + found + miss, found: (same ? Number(u.found) || 0 : 0) + found }));
+    return { found, tried: miss };
+  }
+
+  global.Hire104 = { ensureData, lookup, poolInfo, dailyCandidates, dailyFacts, cardFacts, factsOf, toStandardCsv, addToList, huntBatch, huntSpent, adoptHunted, DAILY_PRIORITY, DAY };
 })(window);

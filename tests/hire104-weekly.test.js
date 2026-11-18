@@ -73,12 +73,16 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   assert.strictEqual(r.code, 0, r.out);
   assert.match(r.out, /抓了 10 家/);
   assert.match(r.out, /新進候選池 4 家（300～6,000 萬 3），池子共 4 家/);
+  assert.match(r.out, /沒電話待找 1 家（資本額符合 1；這次新增 1）/, '版本 442：沒電話的丁四記下來給後台找');
   assert.doesNotMatch(r.out, /甲一|乙二|丙三/, '終端機不印公司名');
   const data = JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8'));
   assert.strictEqual(data.settings['feed-shares'].v, '1,1,2,1,1,1,1,1', '其他設定不動');
   assert.deepStrictEqual(data.logs, [{ uid: 'L1' }]);
   const pool = JSON.parse(data.settings['hiring-pool-104'].v);
   assert.ok(data.settings['hiring-pool-104'].at > 0 && pool.at === data.settings['hiring-pool-104'].at);
+  const np = JSON.parse(data.settings['hiring-pool-104-nophone'].v);
+  assert.deepStrictEqual(np.list.map((x) => [x.key, x.target, x.city, x.cap, x.setup]), [['44444444', true, '新北市', 8000, '2020']], '沒電話的記統編、資本額、縣市');
+  assert.deepStrictEqual(np.tried, {});
   assert.match(pool.week, /^\d{4}-W\d{2}$/);
   assert.deepStrictEqual(pool.list.map((x) => x.key), ['88888888', '33333333', '11111111', '22222222'],
     '目標資本額先、職缺多的先；乙二（9 億）排最後；丙三用縣市挑到新北那家；辛八是外商分公司');
@@ -115,6 +119,7 @@ test('write：徵財務主管的排最前、備註多一行、只在職缺搜尋
   assert.doesNotMatch(cells(pool.list[2].row)[11], /徵財務主管/);
   // 下週：甲一這次在職缺搜尋出現 → 池子裡原有的那筆補上職稱、備註加一行；沒新公司也要寫回
   res.list = []; res.fin = [{ name: '甲一精密有限公司', area: '新北市新莊區', title: '財務部主管' }];
+  res.ai = [{ name: '甲一精密有限公司', area: '新北市新莊區', title: 'AI 工程師' }, { name: '丙三工程有限公司', area: '新北市板橋區', title: '機器學習工程師' }];   // 版本 440：徵 AI 人才
   fs.writeFileSync(path.join(fx.work, 'result.json'), JSON.stringify(res));
   r = await run(['--sync', path.join(fx.dir, 'sync.json'), 'write', '--fia', path.join(fx.dir, 'fia.csv')], fx.env);
   assert.strictEqual(r.code, 0, r.out);
@@ -122,7 +127,10 @@ test('write：徵財務主管的排最前、備註多一行、只在職缺搜尋
   pool = JSON.parse(JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8')).settings['hiring-pool-104'].v);
   const jia = pool.list.find((x) => x.key === '11111111');
   assert.strictEqual(jia.fin, '財務部主管');
-  assert.match(cells(jia.row)[11], /^104 徵才中：2 件（[^）]*查）\n徵財務主管：財務部主管\n每日新名單，符合：104 徵才中$/);
+  assert.strictEqual(jia.ai, 'AI 工程師', '池子裡原有的補上徵 AI 人才');
+  assert.match(cells(jia.row)[11], /\n徵 AI 人才：AI 工程師/, '備註多一行');
+  assert.strictEqual(pool.list.find((x) => x.key === '33333333').ai, '機器學習工程師');
+  assert.match(cells(jia.row)[11], /^104 徵才中：2 件（[^）]*查）\n徵財務主管：財務部主管\n徵 AI 人才：AI 工程師\n每日新名單，符合：104 徵才中$/, '財務主管那行在前、AI 在後');
   assert.strictEqual(pool.list.length, 3, '沒有新公司，池子家數不變');
 });
 

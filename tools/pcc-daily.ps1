@@ -2,11 +2,12 @@
 # 跟 Mac 的 tools/pcc-daily.sh 做一樣的事，多了「今天跑過就不重跑」，所以可以排成「登入就跑」。
 # 版本 392 起照 Mac 版 390：剛登入網路還沒通就等（最多 2 分鐘）、標案 API 連不上就把 leads/pcc 還原、不寫記號、不推，當天之後再跑會重試。
 # 版本 398 照 Mac 版：補好幾天時有一天 API 掛，成功的天照推（以前整批丟）；但這次不記「今天抓過」，之後再跑會重試。
+# 版本 439：不給日期時從上次抓到的日期接著補到昨天（最多 7 天），週末漏掉的週一會自己補齊。
 # 用法（PowerShell）：  powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1
 #                      powershell -ExecutionPolicy Bypass -File tools\pcc-daily.ps1 -Date 20261023 -Days 3   （抓指定日期、往回幾天）
 #                      加 -Force 今天跑過也再跑一次
 # 第一次要先裝 Python 3 與 Git，git clone 這個 repo，第一次 push 會跳 GitHub 登入（Git Credential Manager）。設定步驟在 README「版本 389」。
-param([string]$Date = '', [int]$Days = 1, [switch]$Force)
+param([string]$Date = '', [string]$Days = 'auto', [switch]$Force)   # 版本 439：Days 預設 auto＝從上次抓到的日期補到昨天（最多 7 天）
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = 'utf-8'

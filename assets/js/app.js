@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261118-437';
+  const APP_VERSION = '20261118-444';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2794,7 +2794,7 @@
    */
   const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
   /** 備註裡的「104 徵才中：N 件」「104 徵才中（N 件）」→ { count }（版本 410：每週池經每日新名單或合併頁加進來的，沒有 Mac 寫的狀態） */
-  const hiringFromNotes = (rec) => { const t = String((rec && rec.notesRaw) || ''); const m = /104 徵才中[：（]\s*(\d+) 件/.exec(t); const f = /徵財務主管[：（]([^\n；）]+)/.exec(t); return m ? { count: Number(m[1]), at: 0, fromNotes: true, fin: f ? f[1].trim() : '' } : null; };
+  const hiringFromNotes = (rec) => { const t = String((rec && rec.notesRaw) || ''); const m = /104 徵才中[：（]\s*(\d+) 件/.exec(t); const f = /徵財務主管[：（]([^\n；）]+)/.exec(t); const g = /徵 AI 人才[：（]([^\n；）]+)/.exec(t); return m ? { count: Number(m[1]), at: 0, fromNotes: true, fin: f ? f[1].trim() : '', ai: g ? g[1].trim() : '' } : null; };
   const OPP_ORDER = ['renew', 'fresh'];
   /** 標案的決標日（Pcc.lookup 的 ym：y／m／d）→ 'YYYY-MM-DD'、'2026/10/27'；元 → '4,932 萬' */
   const awardIso = (a) => (a && a.ym && a.ym.d ? `${a.ym.y}-${String(a.ym.m).padStart(2, '0')}-${String(a.ym.d).padStart(2, '0')}` : '');
@@ -3387,7 +3387,8 @@
    * 需求證據由強到弱，順序照實際約訪率排（11/11 成效表）：
    *   A 跟租賃同業借過 19% → B 剛得標 33%（6 家）→ C 一年內買設備 8%、半年內增資兩次以上（版本 432）→ D 剛增資、新廠／新工地／進駐新商辦、徵財務主管、徵才擴編（版本 430：104 件數週週變多）、剛拿到 SBIR 研發補助（版本 433）、臺北市研發／創業補助（版本 435）→ E 剛做進出口 8.6% → F 其他（只有徵才、剛開始請人、剛開電子發票、身分訊號）
    */
-  const NEED_TIERS = [/^(跟同業借|利率不敏感)/, /^剛得標/, /^(最近買設備|半年內增資)/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管|徵才擴編|剛拿到(研發|創業)補助)/, /^剛做進出口/];
+  // 版本 442（使用者 11/18：「請幫我調整到第一層」）：剛拿到研發／創業補助從 D 層調到 A 層——還在拿補助的多半是新創，容易成為客戶，額度要趁小培養
+  const NEED_TIERS = [/^(跟同業借|利率不敏感|剛拿到(研發|創業)補助)/, /^剛得標/, /^(最近買設備|半年內增資)/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管|徵才擴編)/, /^剛做進出口/];
   const needTier = (c) => { const sigs = [...c.signals]; for (let i = 0; i < NEED_TIERS.length; i += 1) if (sigs.some((x) => NEED_TIERS[i].test(x))) return i; return NEED_TIERS.length; };
   const EVID_TIERS = 4;   // A～D 層算「有需求證據」（版本 437）；E 剛做進出口、F 其他不算
   const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
@@ -3399,10 +3400,19 @@
    *   資本額 1,000 萬以上、未達 5 億（5 億以上是大企部；微企單戶往來上限 700 萬，資本額幾百萬的借不到 800 萬）；
    *   或動保上跟別家（銀行、租賃）單件擔保 800 萬以上（直接證明借得到這個量級，資本額小、查不到都算）。
    * 資本額查不到又沒有這種動保的＝規模看不出來，不挑（版本 428 是照留）。商行／企業社一樣要資本額 1,000 萬以上。
+   * 例外（版本 438）：剛拿到研發／創業補助的，資本額 300 萬以上就算。
    * 只管每日自動挑的這份；各分頁、合併頁照舊全部列（排序不是門檻）。
    */
   const FEED_CAP_MIN = 10000000; const FEED_CAP_MAX = 500000000; const FEED_LOAN_MIN = 8000000;
-  const feedSizeOk = (c) => { const cap = Number(c.capital) || 0; if (cap >= FEED_CAP_MAX) return false; return cap >= FEED_CAP_MIN || (c.loanMax || 0) >= FEED_LOAN_MIN; };
+  // 版本 438（使用者 11/18：「補助的門檻放寬到300萬以上吧」）：剛拿到研發／創業補助的公司多半小（256 家裡 117 家未達 1,000 萬），資本額門檻放寬到 300 萬；其他公司照舊 1,000 萬
+  const FEED_GRANT_CAP_MIN = 3000000; const GRANT_SIGNAL_RE = /^剛拿到(研發|創業)補助/;
+  const feedSizeOk = (c) => {
+    const cap = Number(c.capital) || 0;
+    if (cap >= FEED_CAP_MAX) return false;
+    const grant = [...(c.signals || [])].some((x) => GRANT_SIGNAL_RE.test(x));
+    return cap >= (grant ? FEED_GRANT_CAP_MIN : FEED_CAP_MIN) || (c.loanMax || 0) >= FEED_LOAN_MIN;
+  };
+  window.feedSizeOk = feedSizeOk;   // 測試用
   // 商行收現金的行業（版本 429）：稅籍行業代號前兩碼
   const CASH_CODE_RE = /^(47|48|56|96|64|55|93|90|52)/;
   // 動保擔保金額太低的不算（版本 346；使用者刪動保名單的原因之一：「設備設定的金額太低」）：300 萬以下當沒動保
@@ -4078,7 +4088,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／研發補助／徵財務主管 → 剛做進出口 → 其他）→ 同一層有手機的先 → 離新莊近。有需求證據的公司夠的時候整份額度都給他們，不夠才分給商行（最多 1/3）。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制；剛拿到補助的放寬到 300 萬）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：需求證據（跟租賃同業借過、剛拿到研發／創業補助 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／徵財務主管 → 剛做進出口 → 其他）→ 同一層有手機的先 → 離新莊近。有需求證據的公司夠的時候整份額度都給他們，不夠才分給商行（最多 1/3）。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
@@ -4773,7 +4783,7 @@
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.intel && r.intel.expansion ? el('span', { className: 'badge badge-intel', textContent: '🌐 網路有擴張訊號', title: r.intel.summary }) : '',
-      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件${r.hiring.fin ? '・財務主管' : ''}`, title: `104 上目前有 ${r.hiring.count} 個職缺${r.hiring.fin ? `，含${r.hiring.fin}` : ''}（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
+      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件${r.hiring.fin ? '・財務主管' : ''}${r.hiring.ai ? '・AI 人才' : ''}`, title: `104 上目前有 ${r.hiring.count} 個職缺${r.hiring.fin ? `，含${r.hiring.fin}` : ''}（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));
