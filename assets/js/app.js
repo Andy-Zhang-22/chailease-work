@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261118-439';
+  const APP_VERSION = '20261118-440';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -2794,7 +2794,7 @@
    */
   const OPP_LABEL = { renew: '🔁 換約時機', fresh: '📈 有新變化' };
   /** 備註裡的「104 徵才中：N 件」「104 徵才中（N 件）」→ { count }（版本 410：每週池經每日新名單或合併頁加進來的，沒有 Mac 寫的狀態） */
-  const hiringFromNotes = (rec) => { const t = String((rec && rec.notesRaw) || ''); const m = /104 徵才中[：（]\s*(\d+) 件/.exec(t); const f = /徵財務主管[：（]([^\n；）]+)/.exec(t); return m ? { count: Number(m[1]), at: 0, fromNotes: true, fin: f ? f[1].trim() : '' } : null; };
+  const hiringFromNotes = (rec) => { const t = String((rec && rec.notesRaw) || ''); const m = /104 徵才中[：（]\s*(\d+) 件/.exec(t); const f = /徵財務主管[：（]([^\n；）]+)/.exec(t); const g = /徵 AI 人才[：（]([^\n；）]+)/.exec(t); return m ? { count: Number(m[1]), at: 0, fromNotes: true, fin: f ? f[1].trim() : '', ai: g ? g[1].trim() : '' } : null; };
   const OPP_ORDER = ['renew', 'fresh'];
   /** 標案的決標日（Pcc.lookup 的 ym：y／m／d）→ 'YYYY-MM-DD'、'2026/10/27'；元 → '4,932 萬' */
   const awardIso = (a) => (a && a.ym && a.ym.d ? `${a.ym.y}-${String(a.ym.m).padStart(2, '0')}-${String(a.ym.d).padStart(2, '0')}` : '');
@@ -4782,7 +4782,7 @@
       r.cold ? el('span', { className: 'badge badge-cold', textContent: `❄ 冷名單`, title: `連續未接 ${COLD_AFTER} 次以上，${dateLabel(r.cold)} 自動移出每日名單；打通一次就解除` }) : '',
       r.visitKind === 'yes' ? el('span', { className: 'badge badge-visited', textContent: '已拜訪' }) : '',
       r.intel && r.intel.expansion ? el('span', { className: 'badge badge-intel', textContent: '🌐 網路有擴張訊號', title: r.intel.summary }) : '',
-      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件${r.hiring.fin ? '・財務主管' : ''}`, title: `104 上目前有 ${r.hiring.count} 個職缺${r.hiring.fin ? `，含${r.hiring.fin}` : ''}（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
+      r.hiring && r.hiring.count ? el('span', { className: 'badge badge-opp badge-hiring', textContent: `104 徵才 ${r.hiring.count} 件${r.hiring.fin ? '・財務主管' : ''}${r.hiring.ai ? '・AI 人才' : ''}`, title: `104 上目前有 ${r.hiring.count} 個職缺${r.hiring.fin ? `，含${r.hiring.fin}` : ''}（${dateLabel(new Date(r.hiring.at).toISOString().slice(0, 10))} 查）` }) : '',
       r.groupSize > 1 ? el('span', { className: 'badge badge-group', textContent: `同老闆 ${r.groupSize} 家` }) : '',
     ].filter(Boolean);
     if (tags.length) node.append(el('div', { className: 'card-tags' }, tags));

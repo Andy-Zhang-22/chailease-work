@@ -56,7 +56,7 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
      {key:'30000005',name:'戊五被刪有限公司',src:'104 徵才中',count:9,row:rows[3]},
      {key:'30000003',name:'寅三實業有限公司',src:'104 徵才中',count:4,row:rows[4]},
      {key:'30000004',name:'卯四科技有限公司',src:'104 徵才中',count:2,fin:'財務經理',row:rows[5]},   // 版本 417：徵財務主管的
-     {key:'30000006',name:'辰六精機有限公司',src:'104 徵才中',count:6,hist:[['2026-W43',2],['2026-W44',6]],row:rows[6]}]}));   // 版本 430：件數週週變多＝徵才擴編
+     {key:'30000006',name:'辰六精機有限公司',src:'104 徵才中',count:6,hist:[['2026-W43',2],['2026-W44',6]],ai:'機器學習工程師',row:rows[6]}]}));   // 版本 430：件數週週變多＝徵才擴編；版本 440：徵 AI 人才的
  },{head:HEAD,rows:[row('甲一精密有限公司','20000011','02-2222-3333'),row('子一電子有限公司','30000001','02-2666-7777'),row('丑二工業有限公司','30000002','02-2888-9999'),
    row('戊五被刪有限公司','30000005','02-2555-0000'),row('寅三實業有限公司','30000003','02-2444-5555'),row('卯四科技有限公司','30000004','02-2777-8888'),row('辰六精機有限公司','30000006','02-2111-2222')]});
  await pg.evaluate(()=>localStorage.setItem('leads-filters-open','1'));   // 合併頁的篩選攤開，籤才看得到
@@ -80,6 +80,8 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  const mixCards=await pg.$$eval('#paneMix .card', a=>a.map(x=>x.textContent.replace(/\s+/g,' ')));
  chk(mixCards.length===5 && mixCards.some(t=>/子一電子有限公司/.test(t) && /104 徵才中 7 件/.test(t)) && mixCards.some(t=>/甲一精密有限公司/.test(t) && /已在名單/.test(t)), `只看 104 徵才中 5 家、卡片寫職缺數、甲一標已在名單：${mixCards.length}`);
  chk(mixCards.some(t=>/卯四科技有限公司/.test(t) && /徵財務主管：財務經理/.test(t)), '合併頁卡片寫徵財務主管的職稱');
+ // 版本 440：徵 AI 人才只掛訊號、備註多一行，不動排序
+ chk(pn('辰六精機有限公司').signals.includes('104 徵 AI 人才（機器學習工程師）') && mixCards.some(t=>/辰六精機有限公司/.test(t) && /徵 AI 人才：機器學習工程師/.test(t)), `徵 AI 人才帶訊號、合併頁卡片寫職稱：${pn('辰六精機有限公司').signals.join('、')}`);
  // 從合併頁加入：備註帶 104 徵才中、卡片標 104 徵才 N 件
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#paneMix .card')].find(x=>x.textContent.includes('子一電子有限公司')); const b=c.querySelector('button.mix-add, .btn-primary'); if (b) b.click(); }); await pg.waitForTimeout(1500);
  const zi=await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(x=>x.company==='子一電子有限公司'); return r?{notes:r.notesRaw,source:r.source,phone:r.phoneRaw}:null; });
