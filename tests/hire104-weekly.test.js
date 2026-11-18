@@ -126,7 +126,7 @@ test('write：徵財務主管的排最前、備註多一行、只在職缺搜尋
   assert.strictEqual(jia.ai, 'AI 工程師', '池子裡原有的補上徵 AI 人才');
   assert.match(cells(jia.row)[11], /\n徵 AI 人才：AI 工程師/, '備註多一行');
   assert.strictEqual(pool.list.find((x) => x.key === '33333333').ai, '機器學習工程師');
-  assert.match(cells(jia.row)[11], /^104 徵才中：2 件（[^）]*查）\n徵 AI 人才：AI 工程師\n徵財務主管：財務部主管\n每日新名單，符合：104 徵才中$/);   // 版本 440 起多「徵 AI 人才」那行
+  assert.match(cells(jia.row)[11], /^104 徵才中：2 件（[^）]*查）\n徵財務主管：財務部主管\n徵 AI 人才：AI 工程師\n每日新名單，符合：104 徵才中$/, '財務主管那行在前、AI 在後');
   assert.strictEqual(pool.list.length, 3, '沒有新公司，池子家數不變');
 });
 
