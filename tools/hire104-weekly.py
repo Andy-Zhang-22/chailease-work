@@ -53,6 +53,7 @@ PIDFILE = os.path.join(WORK, 'receiver.pid')
 FIA_DIR = os.path.join(WORK, 'fia')
 FIA_URL = 'https://eip.fia.gov.tw/data/BGMOPEN1.zip'   # 財政部全國營業（稅籍）登記，data.gov.tw 9400；repo 的 fetch-biz.mjs 也用這份
 POOL_KEY = 'hiring-pool-104'
+NOPHONE_KEY = 'hiring-pool-104-nophone'   # 沒電話的合格公司（版本 442）：{ list: [{key, name, addr, cap, setup, ind, count, fin, ai, week, day, target, city}], tried: {統編: 查過沒找到的日期} }
 ORIGIN = 'https://www.104.com.tw'
 PORT = int(os.environ.get('HIRE104_PORT', '8765'))
 GAP_MS = 2000
@@ -261,7 +262,7 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
         n = norm(x.get('name'))
         if n and n not in have: have.add(n); crawl.append({'name': x.get('name'), 'area': x.get('area') or '', 'count': 1, 'finOnly': True})   # 只在職缺搜尋出現：件數是湊的，不拿去更新歷程
     stats = {'crawled': len(crawl), 'hiring': 0, 'matched': 0, 'ambiguous': 0, 'noTax': 0, 'already': 0, 'lowCap': 0, 'noPhone': 0, 'dup': 0, 'fin': 0, 'ai': 0}
-    out, seen = [], set()
+    out, seen, nophone = [], set(), []
     for c in crawl:
         if int(c.get('count') or 0) <= 0: continue
         stats['hiring'] += 1
@@ -283,7 +284,12 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
         cap = hit['cap']
         if cap and cap < CAP_FLOOR: stats['lowCap'] += 1; continue
         tel = phones.get(hit['tax'], '')
-        if not tel: stats['noPhone'] += 1; continue   # 每日新名單只進有電話的（版本 318）
+        if not tel:   # 每日新名單只進有電話的（版本 318）；版本 442 起沒電話的另外記下來，後台每天讓 Claude 上網找幾家
+            stats['noPhone'] += 1
+            nophone.append({'key': hit['tax'], 'name': hit['name'], 'addr': hit['addr'], 'cap': cap, 'setup': year_of(hit['setup']), 'ind': hit['ind'], 'count': int(c['count']),
+                            'fin': fm.get(n) or fm.get(strip_branch(n)) or '', 'ai': am.get(n) or am.get(strip_branch(n)) or '', 'week': week_of(today), 'day': f'{today.month}/{today.day}',
+                            'target': CAP_LO <= cap <= CAP_HI, 'city': hit['city']})
+            continue
         title = fm.get(n) or fm.get(strip_branch(n)) or ''
         out.append({'hit': hit, 'count': int(c['count']), 'tel': tel, 'target': CAP_LO <= cap <= CAP_HI, 'fin': title, 'ai': am.get(n) or am.get(strip_branch(n)) or ''})
     out.sort(key=lambda x: (not x['fin'], not x['target'], -x['count'], x['hit']['name']))
@@ -300,7 +306,7 @@ def build_pool(crawl, fia_rows, phones, existing, buried, today, in_pool=frozens
         lst.append(e)
     stats['pool'] = len(lst)
     stats['target'] = sum(1 for x in out if x['target'])
-    return lst, stats
+    return lst, stats, nophone
 
 
 HIST_KEEP = 8   # 每家留最近幾週的件數
@@ -580,13 +586,26 @@ def cmd_write(a):
         n = norm(x.get('name')); wanted.add(n); wanted.add(strip_branch(n))
     fia = read_fia(ensure_fia(a.fia), wanted) if (fin or ai) else fia
     dup_counts = {}
-    lst, stats = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list), fin=fin, dup_counts=dup_counts, ai=ai)
+    lst, stats, nophone = build_pool(crawl, fia, phones, existing, buried, today, in_pool=frozenset(x['key'] for x in old_list), fin=fin, dup_counts=dup_counts, ai=ai)
     stats.update({'areas': res.get('areas'), 'pages': res.get('pages'), 'overflow': res.get('overflow'), 'stopped': res.get('stopped') or ''})
     stats['finOld'] = apply_fin(old_list, fin)
     stats['finCrawl'] = len(fin)
     stats['aiOld'] = apply_ai(old_list, ai)
     stats['aiCrawl'] = len(ai)
     stats['histOld'], stats['grow'] = apply_hist(old_list, dup_counts, week_of(today), f'{today.month}/{today.day}')
+    # 沒電話的合格公司（版本 442；使用者：「找電話應該不用花太多點數吧」→ 點數每月送 US$100、不儲值、別浪費）：
+    # 記進設定 hiring-pool-104-nophone，後台每天拿幾家（資本額符合且新北先）讓 Claude 上網找，找到的搬進池子、沒找到的記著不重查。
+    oldnp = h104.setting_json(data, NOPHONE_KEY) or {}
+    np_list = [x for x in (oldnp.get('list') or []) if isinstance(x, dict) and x.get('key')]
+    tried = oldnp.get('tried') if isinstance(oldnp.get('tried'), dict) else {}
+    pool_keys = {x['key'] for x in old_list} | {x['key'] for x in lst}
+    np_keys = {x['key'] for x in np_list}
+    np_list = [x for x in np_list if x['key'] not in pool_keys]   # 後來從別處有電話進了池子的，不用再找
+    added_np = [x for x in nophone if x['key'] not in np_keys and x['key'] not in pool_keys and x['key'] not in tried]
+    np_list += added_np
+    stats['nophoneNew'] = len(added_np); stats['nophoneTotal'] = len(np_list); stats['nophoneTarget'] = sum(1 for x in np_list if x.get('target'))
+    if added_np or len(np_list) != len(oldnp.get('list') or []):
+        save_setting(spath, data, NOPHONE_KEY, {'list': np_list, 'tried': tried})
     if not lst and not stats['finOld'] and not stats['histOld'] and not stats['aiOld']:
         print(f"抓了 {stats['crawled']} 家，可以新進候選池的 0 家（池子裡已有 {stats['dup']} 家）；同步檔不動。"); return 1
     merged = old_list + lst
@@ -598,7 +617,8 @@ def cmd_write(a):
           f"新進候選池 {stats['pool']} 家（300～6,000 萬 {stats['target']}），池子共 {stats['total']} 家{stop}。"
           f"徵財務主管：職缺搜尋 {stats['finCrawl']} 家，新進池子的 {stats['fin']} 家、池子裡原有的補上 {stats['finOld']} 家。"
           f"池子裡原有的更新件數 {stats['histOld']} 家（其中徵才擴編 {stats['grow']} 家）。"
-          f"徵 AI 人才：職缺搜尋 {stats['aiCrawl']} 家，新進池子的 {stats['ai']} 家、池子裡原有的補上 {stats['aiOld']} 家。已寫回同步檔（備份在 {backup}）")
+          f"徵 AI 人才：職缺搜尋 {stats['aiCrawl']} 家，新進池子的 {stats['ai']} 家、池子裡原有的補上 {stats['aiOld']} 家。"
+          f"沒電話待找 {stats['nophoneTotal']} 家（資本額符合 {stats['nophoneTarget']}；這次新增 {stats['nophoneNew']}）。已寫回同步檔（備份在 {backup}）")
     return 0
 
 
@@ -612,7 +632,9 @@ def cmd_status(a):
     wk = collections.Counter(x.get('week') or '（11/05 首批）' for x in (pool.get('list') or []))
     lst = pool.get('list') or []
     print(f"候選池：{len(lst)} 家（最近 {pool.get('week')}，{pool.get('day')} 寫的，那次抓了 {s.get('crawled')} 家、新進 {s.get('pool')} 家）；各週：{dict(sorted(wk.items()))}；"
-          f"徵財務主管 {sum(1 for x in lst if x.get('fin'))} 家、徵 AI 人才 {sum(1 for x in lst if x.get('ai'))} 家")
+          f"徵財務主管 {sum(1 for x in lst if x.get('fin'))} 家、徵 AI 人才 {sum(1 for x in lst if x.get('ai'))} 家、後台找到電話的 {sum(1 for x in lst if x.get('hunted'))} 家")
+    np = h104.setting_json(data, NOPHONE_KEY) or {}
+    print(f"沒電話待找：{len(np.get('list') or [])} 家（資本額符合 {sum(1 for x in (np.get('list') or []) if x.get('target'))}）；查過沒找到 {len(np.get('tried') or {})} 家")
     return 0
 
 

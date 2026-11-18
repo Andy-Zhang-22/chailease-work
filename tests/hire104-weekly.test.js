@@ -73,12 +73,16 @@ test('write：對稅籍檔補統編、排除與門檻、有電話才收、排序
   assert.strictEqual(r.code, 0, r.out);
   assert.match(r.out, /抓了 10 家/);
   assert.match(r.out, /新進候選池 4 家（300～6,000 萬 3），池子共 4 家/);
+  assert.match(r.out, /沒電話待找 1 家（資本額符合 1；這次新增 1）/, '版本 442：沒電話的丁四記下來給後台找');
   assert.doesNotMatch(r.out, /甲一|乙二|丙三/, '終端機不印公司名');
   const data = JSON.parse(fs.readFileSync(path.join(fx.dir, 'sync.json'), 'utf8'));
   assert.strictEqual(data.settings['feed-shares'].v, '1,1,2,1,1,1,1,1', '其他設定不動');
   assert.deepStrictEqual(data.logs, [{ uid: 'L1' }]);
   const pool = JSON.parse(data.settings['hiring-pool-104'].v);
   assert.ok(data.settings['hiring-pool-104'].at > 0 && pool.at === data.settings['hiring-pool-104'].at);
+  const np = JSON.parse(data.settings['hiring-pool-104-nophone'].v);
+  assert.deepStrictEqual(np.list.map((x) => [x.key, x.target, x.city, x.cap, x.setup]), [['44444444', true, '新北市', 8000, '2020']], '沒電話的記統編、資本額、縣市');
+  assert.deepStrictEqual(np.tried, {});
   assert.match(pool.week, /^\d{4}-W\d{2}$/);
   assert.deepStrictEqual(pool.list.map((x) => x.key), ['88888888', '33333333', '11111111', '22222222'],
     '目標資本額先、職缺多的先；乙二（9 億）排最後；丙三用縣市挑到新北那家；辛八是外商分公司');

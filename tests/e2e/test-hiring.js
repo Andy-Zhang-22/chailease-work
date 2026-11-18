@@ -111,6 +111,17 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  const df2=await pg.evaluate(()=>window.dailyFeed({more:true,awaitPhones:false})); await pg.waitForTimeout(1200);
  names=await pg.evaluate(async()=>(await window.Store.allRecords()).map(r=>r.company));
  chk(df2 && df2.picked===2 && df2.hiringPicked===2 && names.includes('寅三實業有限公司') && names.includes('辰六精機有限公司'), `徵才中的接著進來：${JSON.stringify({picked:df2&&df2.picked,hiringPicked:df2&&df2.hiringPicked,bySrc:df2&&df2.bySrc})}`);
+ // 版本 442：沒電話的——後台拿去找電話（huntBatch 新北且資本額符合先）、找到的搬進池子帶電話與來源、沒找到的記查過、記這個月花費
+ const ad=await pg.evaluate(async()=>{
+   await window.Store.setSetting('hiring-pool-104-nophone', JSON.stringify({at:Date.now(),list:[
+     {key:'30000008',name:'午八工業有限公司',addr:'台北市中山區民生東路8號',cap:5000,setup:'2018',ind:'製造',count:9,week:'2026-W44',day:'10/26',target:true,city:'臺北市'},
+     {key:'30000007',name:'巳七實業有限公司',addr:'新北市新莊區中正路7號',cap:8000,setup:'2020',ind:'批發',count:3,week:'2026-W44',day:'10/26',target:true,city:'新北市'}],tried:{}}));
+   const batch=await window.Hire104.huntBatch(5);
+   const r=await window.Hire104.adoptHunted({'30000007':{phone:'02-2999-0000',kind:'landline',source:'https://example.com/contact',who:'官網'},'30000008':null},{usd:0.12,month:'2026-10'});
+   await window.Hire104.ensureData(); const p=window.Hire104.lookup('30000007'); const all=await window.Store.getMeta('settings'); const np=JSON.parse(all['hiring-pool-104-nophone'].v);
+   return {batch:batch.map(x=>x.key), r, tel:p&&p.tel, count:p&&p.count, left:np.list.map(x=>x.key), tried:Object.keys(np.tried), spent:await window.Hire104.huntSpent('2026-10'), spentOther:await window.Hire104.huntSpent('2026-11')}; });
+ chk(ad.batch.join()==='30000007,30000008' && ad.r.found===1 && ad.r.tried===1 && ad.tel==='02-2999-0000' && ad.count===3 && ad.left.join()==='30000008' && ad.tried.join()==='30000008' && ad.spent===0.12 && ad.spentOther===0,
+   `沒電話的：新北先、找到的搬進池子帶電話、沒找到的記查過、花費記在當月：${JSON.stringify(ad)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();

@@ -16,7 +16,7 @@
  * report 模式：整套照跑，但送去雲端硬碟的「上傳」都被攔下來假裝成功，什麼都不會寫回（只看筆數對不對）。
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
- * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes]
+ * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes] [--hunt104 30] [--hunt104-usd 50]
  *   --research yes：每日新名單候選上網查擴張訊號（版本 349 起預設不查）。--model：查訊號用哪個模型（版本 335，預設 sonnet）。--recheck-max：主力客戶一次查幾家（預設 120；版本 348 使用者要把到期的點數用掉）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
  *   只能配 report（不寫回），拿來看另一個模型在同一批候選上查到幾家訊號。
  *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
@@ -46,6 +46,9 @@ const RESEARCH = (process.env.RESEARCH || opt('research', 'no')).toLowerCase() =
 const REDO = (process.env.REDO || opt('redo', 'no')).toLowerCase() === 'yes' && MODE === 'write';   // 重挑今天的（版本 428；使用者：「今天的電話也重挑給我」）：只在 write 模式
 const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '260')) || 260));   // 主力客戶一次查幾家（版本 348；版本 351 預設 260）
 // 主力客戶用哪個模型（版本 351；使用者選「做 2」：主力客戶改用 Opus）：預設 opus，跟每日新名單的 --model 分開
+// 104 池子裡沒電話的，每天讓 Claude 找幾家（版本 442；0＝關）；這段每月估價到上限就停（使用者 11/18：點數每月送 US$100、不儲值、別浪費）
+const HUNT104 = Math.max(0, Math.min(200, Number(process.env.HUNT104 || opt('hunt104', '30')) || 0));
+const HUNT104_USD = Math.max(0, Number(process.env.HUNT104_USD || opt('hunt104-usd', '50')) || 0);
 const RECHECK_MODEL = (process.env.RECHECK_MODEL || opt('recheck-model', 'opus')).toLowerCase() === 'sonnet' ? 'sonnet' : 'opus';
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
 const ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
@@ -253,13 +256,31 @@ async function main() {
     }
 
     if (huntStats.asked) out(`Claude 找電話約 US$${estimateUsd(huntStats.usage, MODEL_NAME).toFixed(2)}（${huntStats.asked} 家：搜尋 ${huntStats.usage.searches} 次）`);
+    // 4c-2. 104 池子裡沒電話的（版本 442）：Mac 每週記在設定 hiring-pool-104-nophone；這裡每天拿 HUNT104 家（資本額符合且新北先、查過的不重查）
+    // 讓 Claude 上網找，找到的搬進池子（網站的 Hire104.adoptHunted），沒找到的記查過；每月估價累計到 HUNT104_USD 就停。只在 write 模式跑（report 不花錢）。
+    let hunt104Note = '';
+    if (CLAUDE_ON && MODE === 'write' && HUNT104 > 0) {
+      const month = taipeiDate().toISOString().slice(0, 7);
+      const spent = await page.evaluate((m) => (window.Hire104 && window.Hire104.huntSpent ? window.Hire104.huntSpent(m) : 0), month);
+      if (spent >= HUNT104_USD) out(`104 池子找電話：本月已約 US$${Number(spent).toFixed(2)}，到上限 US$${HUNT104_USD}，今天不查`);
+      else {
+        const batch = await page.evaluate((n) => (window.Hire104 && window.Hire104.huntBatch ? window.Hire104.huntBatch(n) : []), HUNT104);
+        if (batch.length) {
+          const r = await findPhones(batch, { apiKey: ANTHROPIC_KEY, model: MODEL_NAME, maxSearches: 3, log: (m) => console.log(`  ${m}`) });
+          const usd = estimateUsd(r.usage, MODEL_NAME);
+          const ad = await page.evaluate(({ results, usd, month }) => window.Hire104.adoptHunted(results, { usd, month }), { results: r.results, usd, month });
+          hunt104Note = `104 找電話 ${r.asked} 家找到 ${ad.found} 家 US$${usd.toFixed(2)}`;
+          out(`104 池子找電話：查了 ${r.asked} 家、找到 ${ad.found} 家（搬進池子）、沒找到 ${ad.tried} 家（記著不重查）；約 US$${usd.toFixed(2)}，本月累計約 US$${(Number(spent) + usd).toFixed(2)}／上限 ${HUNT104_USD}`);
+        } else out('104 池子找電話：沒有待找的（或都查過了）');
+      }
+    }
     // 4d. Google 地圖本月查了幾次（版本 349）
     const gm = await page.evaluate(() => (window.googleMonth ? window.googleMonth() : null));
     if (gm && gm.n) out(`Google 地圖本月查了 ${gm.n}／1,000 次（免費額度）`);
 
     // 5. 寫回：把這次的結果留一句在同步檔的設定（網站名單最上面那條「今天的新名單」下面會顯示，三天內的才顯示），釘住雲端目前的版本，再同步一次
     if (MODE === 'write') {
-      const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}${costNote ? `；${costNote}` : ''}`;
+      const stamp = `${taipeiDate().toISOString().slice(5, 16).replace('T', ' ')} ${line.replace(/^\d{4}-\d{2}-\d{2} /, '')}${costNote ? `；${costNote}` : ''}${hunt104Note ? `；${hunt104Note}` : ''}`;
       await page.evaluate((s) => window.Store.setSetting('feed-drive-summary', s), stamp);
       await page.evaluate((d) => window.Store.setSetting('feed-backend-last', d), today);   // 只有後台會寫：網站三天內看到就不自己挑（版本 331）
       const pinned = await pinCurrentRevision(token, file.id);
