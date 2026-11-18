@@ -3,7 +3,8 @@
 # 版本 390 起多了「今天跑過就不重跑」（記在 ~/Library/Application Support/chailease-work/pcc-last.txt），
 # 所以可以交給 launchd 排成「登入／喚醒就跑」（tools/mac-schedule.sh install）；公司電腦（pcc-daily.ps1）同時跑也不會重複（cases.csv 去重）。
 # 版本 398：補好幾天時有一天 API 掛，成功的天照推（以前整批丟）；但這次不記「今天抓過」，排程半小時後會再試昨天。
-# 用法：bash tools/pcc-daily.sh                    （抓台灣的昨天；今天跑過就不重跑）
+# 版本 439：不給日期時從上次抓到的日期接著補到昨天（最多 7 天），週末沒開機漏掉的週一會自己補齊。
+# 用法：bash tools/pcc-daily.sh                    （補到昨天；今天跑過就不重跑）
 #       bash tools/pcc-daily.sh --force           （今天跑過也再跑一次）
 #       bash tools/pcc-daily.sh 20261023          （抓指定日期）
 #       bash tools/pcc-daily.sh 20261023 3        （從那天往回抓 3 天）
@@ -29,7 +30,7 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 git pull --rebase --autostash -q origin "$BRANCH"
 # fetch-pcc.py 的結束代碼：0 每天都抓到；4 有幾天 API 掛、成功的天照寫；3 全掛、什麼都沒寫
 set +e
-python3 tools/fetch-pcc.py --date "${ARGS[0]:-}" --days "${ARGS[1]:-1}"
+python3 tools/fetch-pcc.py --date "${ARGS[0]:-}" --days "${ARGS[1]:-auto}"
 RC=$?
 set -e
 case "$RC" in
