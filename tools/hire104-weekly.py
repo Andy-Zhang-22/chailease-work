@@ -353,7 +353,8 @@ def apply_title(entries, items, field, label):
             note = cells[HEAD.index('訪談內容')]
             note = re.sub(r'\n?' + re.escape(label) + r'：[^\n]*', '', note)
             lines = note.split('\n')
-            lines.insert(1, f'{label}：{title}')
+            at = 1 + (1 if label == '徵 AI 人才' and len(lines) > 1 and lines[1].startswith('徵財務主管') else 0)   # 財務主管那行在前、AI 在後，跟新進的一樣
+            lines.insert(at, f'{label}：{title}')
             cells[HEAD.index('訪談內容')] = '\n'.join(lines)
             e['row'] = csv_row(cells)
         n += 1
