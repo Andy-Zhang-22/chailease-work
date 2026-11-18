@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-18T01:41:05.839Z",
+ "generatedAt": "2026-11-18T15:48:06.000Z",
  "source": "https://pcc-api.openfun.app（政府電子採購網決標公告）",
  "cities": [
   "新北市",
@@ -234,9 +234,9 @@
   "20261117": {
    "notices": 2667,
    "awards": 650,
-   "vendors": 1106,
-   "won": 694,
-   "kept": 200,
+   "vendors": 930,
+   "won": 582,
+   "kept": 170,
    "api_down": false
   }
  },
