@@ -90,6 +90,8 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await ctx.addInitScript(`{ const real=Date; window.__now=new real('${TODAY}T09:00:00').getTime();
    class D extends real { constructor(...a){ if(!a.length) super(window.__now); else super(...a); } static now(){ return window.__now; } }
    Date=D; }`);
+ // 沒 mock 的公開名單（標案、產業、新設工廠…）一律 404：不然 repo 裡真的名單會混進來（版本 437：有證據的公司夠就不挑商行，結果要看假資料才穩）
+ await ctx.route('**/leads/**',r=>r.fulfill({status:404,body:''}));
  await ctx.route('**/leads/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(LINDEX)}));
  await ctx.route('**/leads/11508/*',r=>r.fulfill({status:200,contentType:'text/csv',body:LCSV}));
  await ctx.route('**/leads/chattel/index.json*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(CINDEX)}));
@@ -123,10 +125,12 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(pv.filter(x=>x.name==='乙二機械股份有限公司').length===1, '同一家只算一次');
  const ml=pv.find(x=>x.name==='名祿實業有限公司'); const jy=pv.find(x=>x.name==='甲一精密有限公司');
  chk(ml && ml.indRank===2 && jy && jy.indRank<2, `「不是目標」兩次以上的行業排到最後一級：名祿 indRank ${ml&&ml.indRank}、甲一 ${jy&&jy.indRank}`);
- // 版本 428（主管建議改減法，使用者「照你說的改」）：排序＝成立 10 年以上最後 → 有手機的先 → 需求證據（跟同業借 → 剛得標 → 買設備 → 增資／新廠 → 進出口 → 其他）→ 近；加分制、規模＋手機那幾層拿掉
+ // 版本 437（使用者 11/18「好」：證據優先、手機其次）：排序＝成立 10 年以上最後 → 需求證據（跟同業借 → 剛得標 → 買設備 → 增資／新廠 → 進出口 → 其他）→ 同一層有手機的先 → 近；版本 428 是有手機的先
  const live=pv.filter(x=>!x.old);
- const okOrder=live.every((x,i)=>i===0 || Number(live[i-1].mobile)>Number(x.mobile) || (live[i-1].mobile===x.mobile && live[i-1].tier<=x.tier));
- chk(okOrder, `有手機的先、同手機照需求證據：${live.map(x=>x.name+'('+(x.mobile?'M':'-')+x.tier+')').join('|')}`);
+ const okOrder=live.every((x,i)=>i===0 || live[i-1].tier<x.tier || (live[i-1].tier===x.tier && Number(live[i-1].mobile)>=Number(x.mobile)));
+ const firstPlainEvid=live.findIndex(x=>!x.mobile && x.tier<4), firstMobileNoEvid=live.findIndex(x=>x.mobile && x.tier>=4);
+ chk(firstPlainEvid>=0 && firstMobileNoEvid>=0 && firstPlainEvid<firstMobileNoEvid, `有證據沒手機的排在沒證據有手機的前面：${firstPlainEvid} < ${firstMobileNoEvid}`);
+ chk(okOrder, `需求證據先、同一層有手機的先：${live.map(x=>x.name+'('+(x.mobile?'M':'-')+x.tier+')').join('|')}`);
  const ix=(n)=>pv.findIndex(x=>x.name===n);
  chk(ix('乙二機械股份有限公司')===0 && top.tier===0 && top.mobile, `乙二：有手機＋跟同業借＝最前：${ix('乙二機械股份有限公司')}`);
  const many=pv.find(x=>x.name==='多訊號無設備有限公司'), buy=pv.find(x=>x.name==='買設備兩訊號有限公司');
@@ -145,7 +149,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  chk(yi && /符合：[^；]*本期增資/.test(yi.notes) && /剛做進出口/.test(yi.notes) && /最近買設備（2026\/08）/.test(yi.notes) && !/也在：|其他：|保底/.test(yi.notes), `訪談內容只寫合併後的訊號（也在、其他條件、保底不寫）：${yi&&yi.notes}`);
  // 版本 428：不保底、不按來源配額——公司那份就是揉合排名前面的；每家第一行是哪一頁的資料不限
  chk(fed.length>=5 && fed[0] !== undefined, `挑進來 ${fed.length} 家：${fed.map(f=>f.company).join('、')}`);
- chk(fed.some(f=>/商行|企業社/.test(f.company)), `商行照自己的規則另外挑：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('、')}`);
+ chk(fed.some(f=>/商行|企業社/.test(f.company)), `有證據的公司不夠整份額度時，商行照自己的規則另外挑：${fed.filter(f=>/商行|企業社/.test(f.company)).map(f=>f.company).join('、')}`);
  chk(fed.filter(f=>f.company==='乙二機械股份有限公司').length===1, '揉合後同一家只進來一次');
  // 版本 436：資本額未達 1,000 萬的剔除（版本 428 是 300 萬），有手機也一樣；八百萬手機（800 萬）、兩百萬手機（250 萬）都不挑
  chk(!fed.some(f=>/^小資|^兩百萬手機|^八百萬手機/.test(f.company)), `資本額未達 1,000 萬：有沒有手機都不挑：${fed.map(f=>f.company).join('、')}`);

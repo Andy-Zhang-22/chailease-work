@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261118-436';
+  const APP_VERSION = '20261118-437';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3389,6 +3389,7 @@
    */
   const NEED_TIERS = [/^(跟同業借|利率不敏感)/, /^剛得標/, /^(最近買設備|半年內增資)/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管|徵才擴編|剛拿到(研發|創業)補助)/, /^剛做進出口/];
   const needTier = (c) => { const sigs = [...c.signals]; for (let i = 0; i < NEED_TIERS.length; i += 1) if (sigs.some((x) => NEED_TIERS[i].test(x))) return i; return NEED_TIERS.length; };
+  const EVID_TIERS = 4;   // A～D 層算「有需求證據」（版本 437）；E 剛做進出口、F 其他不算
   const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
   // 每日新名單剔除的訊號（版本 428）：營造業（有工地）、本期擴張打過的 12 家 0 接通、一半禁止推廣
   const EXCLUDE_SIGNAL_RE = /^(營造業|本期擴張)/;
@@ -3445,10 +3446,11 @@
       if (lenders >= 2) c.signals.add(`動保 ${lenders} 家金主`);
     });
     /*
-     * 排序（版本 428）：成立 10 年以上最後（每日新名單會剔除，合併頁還看得到）→ 有手機的先（使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）
-     * → 需求證據 A～F → 離新莊近 → 原本在各頁的名次。以前的徵財務主管／104／規模＋手機＋買設備／訊號數那七層全拿掉。
+     * 排序（版本 437）：成立 10 年以上最後（每日新名單會剔除，合併頁還看得到）→ 需求證據 A～F → 同一層有手機的先 → 離新莊近 → 原本在各頁的名次。
+     * 版本 428 是「有手機的先 → 需求證據」（使用者：「比較有幫助的反而是有手機的名單，可以直接對到老闆」）；結果有證據沒手機的排在沒證據有手機的後面：
+     * 合格的 2,170 家裡有證據（A～D 層）的約 300 家只有 46 家有手機，其餘幾個月都輪不到。使用者 11/18「這麼多訊號還找不出我要的客戶目標嗎？」→ 建議證據優先、手機其次 →「好」。
      */
-    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || Number(!!b.mobile) - Number(!!a.mobile) || needTier(a) - needTier(b) || a.branchRank - b.branchRank || a.order - b.order);
+    out.sort((a, b) => Number(a.ageRank === 4) - Number(b.ageRank === 4) || needTier(a) - needTier(b) || Number(!!b.mobile) - Number(!!a.mobile) || a.branchRank - b.branchRank || a.order - b.order);
     return out;
   }
   /** 照總排名挑滿 n 家；srcKeys 給空陣列就是純照排名（版本 428 起每日新名單不保底，只有上網查訊號那條還用「明確訊號的先」） */
@@ -3872,7 +3874,9 @@
       }
       const skippedNoPhone = excluded.phone;   // 版本 428：沒電話的直接剔除，不再用 Google 地圖、Claude 找
       // 額度（版本 428）：公司 2/3、商行 1/3（15 家＝10＋5；商行約訪率 13.9% 是公司名單的兩倍），哪邊不夠另一邊補；不再按來源配額、不保底
-      let bizTake = Math.min(bz.length, Math.round(need / 3));
+      // 版本 437：有需求證據（A～D 層）的公司先拿——還夠整份額度時商行不佔名額，不夠的部分才照舊分給商行（最多 1/3）與其他公司
+      const evid = merged.filter((c) => needTier(c) < EVID_TIERS).length;
+      let bizTake = Math.min(bz.length, Math.round(need / 3), Math.max(0, need - evid));
       const mixTake = Math.min(merged.length, need - bizTake);
       bizTake = Math.min(bz.length, need - mixTake);
       // 有上網查的話：明確訊號的先挑，不夠才用其他的補滿額度；沒有就純照排名
@@ -4074,7 +4078,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／研發補助／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／研發補助／徵財務主管 → 剛做進出口 → 其他）→ 同一層有手機的先 → 離新莊近。有需求證據的公司夠的時候整份額度都給他們，不夠才分給商行（最多 1/3）。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);
