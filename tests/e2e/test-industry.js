@@ -7,17 +7,17 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  fs.readFile(f,(e,b)=>{if(e){rs.writeHead(404);return rs.end();}rs.writeHead(200,{'Content-Type':T[path.extname(f)]||'application/octet-stream'});rs.end(b);});}).listen(9623);
 const TODAY='2026-12-05';
 const q=(v)=>/[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
-const HEAD='統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價,建照種類,建照地址';
+const HEAD='統編,名稱,類別,地址,資本額,實收資本額,首見年月,設立日期,組織別,行業代號,行業,電話,場所,新場所年月,新場所,建照年月,建照用途,建照造價,建照種類,建照地址,補助年月,補助金額,補助計畫,補助來源';
 const ROWS=[
  ['54867253','名祿運通有限公司','汽車貨運業、小客車租賃業','新北市新莊區中正路100號','12000000','12000000','202611','108/09/03','有限公司','494099','其他汽車貨運','02-2960-0000'],
  ['24908600','宇駿遊覽有限公司','遊覽車客運業','新北市新莊區新泰路1號','30000000','30000000','202610','104/08/14','有限公司','493200','遊覽車客運',''],
  ['02198779','大板交通股份有限公司','計程車客運業','新北市板橋區文化路1號','8000000','8000000','202610','100/01/12','股份有限公司','493120','計程車客運',''],
  ['28501234','鼎築營造有限公司','營造業','新北市新莊區思源路5號','20000000','','202610','105/03/01','有限公司','439000','其他專門營造業','','工地 2 處','202611','新工地'],
- ['56789012','己五金股份有限公司','新建廠房','新北市三重區中正北路9號','100000000','','202610','103/05/01','股份有限公司','259900','其他金屬製品製造','','','','','202609','廠房','12800000','建照','新北市三重區中正北路100號'],   // 版本 365：新北建照；367 加地址
- ['56789015','壬顧問有限公司','進駐新商辦','新北市新莊區思源路88號5樓','20000000','','202610','110/02/01','有限公司','702000','其他管理顧問','','','','','202605','辦公室','','進駐','新北市新莊區思源路88號'],   // 版本 426：登記在近 6 年蓋好的商辦
+ ['56789012','己五金股份有限公司','新建廠房、研發補助','新北市三重區中正北路9號','100000000','','202610','103/05/01','股份有限公司','259900','其他金屬製品製造','','','','','202609','廠房','12800000','建照','新北市三重區中正北路100號','202606','800000','模具 AI 檢測','SBIR'],   // 版本 365：新北建照；367 加地址；433 加 SBIR 研發補助；435 加補助來源
+ ['56789015','壬顧問有限公司','進駐新商辦、創業補助','新北市新莊區思源路88號5樓','20000000','','202610','110/02/01','有限公司','702000','其他管理顧問','','','','','202605','辦公室','','進駐','新北市新莊區思源路88號','202603','1000000','雲端報價平台','臺北市創業補助'],   // 版本 426：登記在近 6 年蓋好的商辦；435 加臺北市創業補助
 ];
 const CSV='﻿'+[HEAD,...ROWS.map(r=>r.map(q).join(','))].join('\n')+'\n';
-const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baseline:'202610',total:6,newTotal:1,newSiteTotal:1,withPhone:1,byKind:{汽車貨運業:1,小客車租賃業:1,遊覽車客運業:1,計程車客運業:1,營造業:1,新建廠房:1,進駐新商辦:1},files:[{path:'industry.csv',rows:6}]};
+const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baseline:'202610',total:6,newTotal:1,newSiteTotal:1,withPhone:1,byKind:{汽車貨運業:1,小客車租賃業:1,遊覽車客運業:1,計程車客運業:1,營造業:1,新建廠房:1,進駐新商辦:1,研發補助:1,創業補助:1},files:[{path:'industry.csv',rows:6}]};
 (async()=>{
  let bad=0; const chk=(ok,m)=>{ if(!ok)bad++; console.log(`${ok?'PASS':'FAIL'} ${m}`); };
  const br=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined});
@@ -38,6 +38,7 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  chk(names.length===4 && /宇駿/.test(names[0]) && /鼎築|壬顧問/.test(names[1]) && /鼎築|壬顧問/.test(names[2]) && /名祿/.test(names[3]), `預設篩選後照資本額排（壬顧問是版本 426 進駐新商辦那家）：${names.join(' | ')}`);
  const co=(await pg.locator('#industry-cards .card:has-text("壬顧問")').textContent()).replace(/\s+/g,' ');
  chk(/🏢 進駐新商辦/.test(co) && /🏢 2026\/05 使照：進駐新商辦（新北市新莊區思源路88號）/.test(co) && !/蓋在/.test(co), `進駐新商辦卡片（版本 426）：${co.slice(0,220)}`);
+ chk(/🚀 創業補助/.test(co) && /🔬 2026\/03 核定臺北市創業補助（雲端報價平台，補助 100 萬）/.test(co), `臺北市創業補助那行（版本 435）：${co.slice(0,300)}`);
  const cs=(await pg.locator('#industry-cards .card:has-text("鼎築")').textContent()).replace(/\s+/g,' ');
  chk(/新工地/.test(cs) && /🏗 營造工地/.test(cs) && /🏗 工地 2 處/.test(cs) && /🆕 2026\/11 多了新工地/.test(cs) && !/剛出現/.test(cs), `營造業卡片：${cs.slice(0,220)}`);
  const ct=(await pg.locator('#industry-cards .card:has-text("名祿")').textContent()).replace(/\s+/g,' ');
@@ -61,10 +62,11 @@ const INDEX={generatedAt:'2026-12-01T20:00:00.000Z',cities:['新北市'],baselin
  await pg.fill('#industry-capMin',''); await pg.fill('#industry-capMax',''); await pg.locator('#industry-fKind .chip:has-text("新建廠房")').click(); await pg.waitForTimeout(300);
  const cp=(await pg.locator('#industry-cards .card:has-text("己五金")').textContent()).replace(/\s+/g,' ');
  chk(/🏗 新建廠房/.test(cp) && /🏗 2026\/09 建照：正在蓋廠房（造價 1,280 萬），蓋在 新北市三重區中正北路100號/.test(cp), `建照卡片：${cp.slice(0,220)}`);
+ chk(/🔬 研發補助/.test(cp) && /🔬 2026\/06 核定 SBIR 研發補助（模具 AI 檢測，補助 80 萬）/.test(cp), `SBIR 那行（版本 433）：${cp.slice(0,260)}`);
  await pg.locator('#industry-fKind .chip:has-text("新建廠房")').click(); await pg.waitForTimeout(200);
  // 合併頁：這一頁的公司進得去，訊號有「車輛業者」「營造業（有工地）、剛有新工地」
  const mix=await pg.evaluate(async()=>{ const m=await window.mixCandidates(); return m.filter(x=>!x.mine && x.facts.some(f=>f.key==='in')).map(x=>`${x.name}|${x.signals.join('、')}`); });
- chk(mix.length===5 && mix.some(x=>/壬顧問有限公司\|進駐新商辦/.test(x)) && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)) && mix.some(x=>/己五金股份有限公司\|正在蓋廠房（造價 1,280 萬）/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
+ chk(mix.length===5 && mix.some(x=>/壬顧問有限公司\|進駐新商辦/.test(x)) && mix.some(x=>/宇駿遊覽有限公司\|車輛業者/.test(x)) && mix.some(x=>/大板交通/.test(x)) && mix.some(x=>/鼎築營造有限公司\|.*營造業（有工地）.*剛有新工地/.test(x)) && mix.some(x=>/己五金股份有限公司\|正在蓋廠房（造價 1,280 萬）、剛拿到研發補助（補助 80 萬）/.test(x)), `合併頁有產業名單（名祿加進名單了，標已在名單）：${mix.join(' / ')}`);
  // 營造業加進來：備註寫新工地
  await pg.evaluate(()=>window.switchTab('industry')); await pg.waitForTimeout(300);
  await pg.evaluate(()=>{ const c=[...document.querySelectorAll('#industry-cards .card')].find(x=>x.textContent.includes('鼎築')); c.querySelector('.industry-add-one').click(); });

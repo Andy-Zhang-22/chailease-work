@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261118-433';
+  const APP_VERSION = '20261118-436';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -3385,15 +3385,15 @@
    * 版本 428：減法＋需求證據（主管建議「改成減法試試」，使用者 11/17「照你說的改」）。
    * 來源配額（feed-shares）、每頁保底、加分制（strongSignals／buyRank）全部拿掉：加分制的數據是 3 個訊號以上約訪 6.8%、1 個 6.3%，沒差。
    * 需求證據由強到弱，順序照實際約訪率排（11/11 成效表）：
-   *   A 跟租賃同業借過 19% → B 剛得標 33%（6 家）→ C 一年內買設備 8%、半年內增資兩次以上（版本 432）→ D 剛增資、新廠／新工地／進駐新商辦、徵財務主管、徵才擴編（版本 430：104 件數週週變多）→ E 剛做進出口 8.6% → F 其他（只有徵才、剛開始請人、剛開電子發票、身分訊號）
+   *   A 跟租賃同業借過 19% → B 剛得標 33%（6 家）→ C 一年內買設備 8%、半年內增資兩次以上（版本 432）→ D 剛增資、新廠／新工地／進駐新商辦、徵財務主管、徵才擴編（版本 430：104 件數週週變多）、剛拿到 SBIR 研發補助（版本 433）、臺北市研發／創業補助（版本 435）→ E 剛做進出口 8.6% → F 其他（只有徵才、剛開始請人、剛開電子發票、身分訊號）
    */
-  const NEED_TIERS = [/^(跟同業借|利率不敏感)/, /^剛得標/, /^(最近買設備|半年內增資)/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管|徵才擴編)/, /^剛做進出口/];
+  const NEED_TIERS = [/^(跟同業借|利率不敏感)/, /^剛得標/, /^(最近買設備|半年內增資)/, /^(本期增資|剛有新|進駐新商辦|正在蓋|辦公室剛蓋好|廠房剛蓋好|新建物剛蓋好|104 徵財務主管|徵才擴編|剛拿到(研發|創業)補助)/, /^剛做進出口/];
   const needTier = (c) => { const sigs = [...c.signals]; for (let i = 0; i < NEED_TIERS.length; i += 1) if (sigs.some((x) => NEED_TIERS[i].test(x))) return i; return NEED_TIERS.length; };
   const isHiring = (c) => [...c.signals].some((x) => /^104 徵才中/.test(x));
   // 每日新名單剔除的訊號（版本 428）：營造業（有工地）、本期擴張打過的 12 家 0 接通、一半禁止推廣
   const EXCLUDE_SIGNAL_RE = /^(營造業|本期擴張)/;
   /*
-   * 每日新名單的規模門檻（版本 433；使用者 11/18：「你自動挑選的名單都是小企業居多」「我基本上要找可以貸放的額度是800-3000萬的客戶」「請以這樣的基準給我相對應的客戶名單」）：
+   * 每日新名單的規模門檻（版本 436；使用者 11/18：「你自動挑選的名單都是小企業居多」「我基本上要找可以貸放的額度是800-3000萬的客戶」「請以這樣的基準給我相對應的客戶名單」）：
    * 公開資料沒有「可貸額度」，用兩個看得到的代替——
    *   資本額 1,000 萬以上、未達 5 億（5 億以上是大企部；微企單戶往來上限 700 萬，資本額幾百萬的借不到 800 萬）；
    *   或動保上跟別家（銀行、租賃）單件擔保 800 萬以上（直接證明借得到這個量級，資本額小、查不到都算）。
@@ -3436,7 +3436,7 @@
       c.buy = tax && window.Chattel.recentBuyOf ? window.Chattel.recentBuyOf(tax) : { grade: 3 };
       // 半年內剛買設備＝有需求才買，可能有週轉金需求（版本 344 使用者更正）：算訊號、排前面；6～12 個月前的只靠 buyRank 排次之
       if (c.buy.grade <= 1 && buyBig(c)) c.signals.add(`最近買設備（${c.buy.ym}）`);
-      // 版本 433：跟別家借過最大的一件擔保金額（中租自己的不算）＝借得到的量級
+      // 版本 436：跟別家借過最大的一件擔保金額（中租自己的不算）＝借得到的量級
       c.loanMax = tax && window.Chattel.casesOf ? window.Chattel.casesOf(tax).reduce((m, x) => (x.family !== 'chailease' && (x.amount || 0) > m ? x.amount : m), 0) : 0;
       const peer = tax && window.Chattel.peerLenderOf ? window.Chattel.peerLenderOf(tax) : '';
       if (peer) c.signals.add(`跟同業借（${peer}）`);
@@ -3612,7 +3612,7 @@
     try { tombs = (await window.Store.getTombstones()).companies || {}; } catch (e) { tombs = {}; }
     const buried = (company, taxId) => window.Normalize.companyKeys({ company, taxId }).some((k) => tombs[k] !== undefined && !tombs[k].lifted);
     const SRC = Object.keys(mods).map((key, i) => ({ key, label: labels[key], mod: mods[key], list: lists[i].filter((r) => { const f = mods[key].dailyFacts ? mods[key].dailyFacts(r) : null; return f && !buried(f.name, /^\d{8}$/.test(f.key) ? f.key : ''); }) }));
-    const merged = mergeFeed(SRC).filter((c) => feedSizeOk(c) && c.phone).slice(0, want);   // 版本 433：跟每日新名單同一個規模門檻，不會挑的不用去 104 查
+    const merged = mergeFeed(SRC).filter((c) => feedSizeOk(c) && c.phone).slice(0, want);   // 版本 436：跟每日新名單同一個規模門檻，不會挑的不用去 104 查
     const bzAll = await window.Biz.dailyCandidates().catch(() => []);
     const bz = bzAll.filter((r) => { const f = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; return f && f.phone && Number(r.capital) >= FEED_CAP_MIN && Number(r.capital) < FEED_CAP_MAX && !buried(r.name, r.taxId); }).slice(0, Math.ceil(want / 4));
     let head = '';
@@ -3775,7 +3775,7 @@
       ];
       /*
        * 減法（版本 428；主管建議「改成減法試試，比如我不要成立時間太久的、資本額超過五億的」，使用者 11/17「照你說的改」）：這些不打，直接剔除——
-       *   成立 10 年以上；規模不合（版本 433：資本額未達 1,000 萬或 5 億以上，除非動保上跟別家單件擔保 800 萬以上；查不到資本額的也剔）；沒電話（不再花錢用 Google 地圖、Claude 找：每天 60 次找到 0～1 家）；
+       *   成立 10 年以上；規模不合（版本 436：資本額未達 1,000 萬或 5 億以上，除非動保上跟別家單件擔保 800 萬以上；查不到資本額的也剔）；沒電話（不再花錢用 Google 地圖、Claude 找：每天 60 次找到 0～1 家）；
        *   「不是目標」刪過兩次的行業；營造業（有工地）、本期擴張；104 池子有資料時，沒在徵才「而且」沒任何需求證據的
        *   （有跟同業借、剛得標這種證據的，徵不徵才都打）。已在名單、刪過、藏起來的各頁本來就不列。
        * 剔除幾家記在 summary.excluded，後台印出來。
@@ -3801,7 +3801,7 @@
       const oldBiz = (r) => Number(r.years) >= 10;
       const mobileB = (r) => !!((window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}).mobile;   // 有手機的先（版本 347）
       const fitB = (r) => { const f = (window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null) || {}; return Number(!!(f.capOk && f.mobile)); };   // 規模符合且有手機最前面（版本 374）
-      bz = bz.filter((r) => { if (Number(r.capital) >= FEED_CAP_MIN && Number(r.capital) < FEED_CAP_MAX) return true; excluded.capital += 1; return false; });   // 商行也一樣：資本額 1,000 萬以上（版本 433；原本 200 萬，版本 362）
+      bz = bz.filter((r) => { if (Number(r.capital) >= FEED_CAP_MIN && Number(r.capital) < FEED_CAP_MAX) return true; excluded.capital += 1; return false; });   // 商行也一樣：資本額 1,000 萬以上（版本 436；原本 200 萬，版本 362）
       // 商行也剔除沒電話的（版本 428）；成立 10 年以上的商行照舊排最後（商行那份本來就少，不剔）
       if (feedNeedPhone()) bz = bz.filter((r) => { const bf = window.Biz.dailyFacts ? window.Biz.dailyFacts(r) : null; if (bf && bf.phone) return true; excluded.phone += 1; return false; });
       // 商行剔除收現金的（版本 429；使用者 11/17：「商行的挑選邏輯能避免掉收現金的行業嗎」→「好」）：
@@ -4074,7 +4074,7 @@
         const parts = [...delByOrigin.entries()].filter(([, d]) => d.target).map(([o, d]) => `${o} ${d.target} 家`);
         if (parts.length) host.append(el('p', { className: 'muted', textContent: `最近 90 天刪掉時選「不是目標」的：${parts.join('、')}。只是提醒，不影響排序（版本 356 拿掉排後面那條）。` }));
       }
-      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
+      host.append(el('label', { className: 'cap-auto' }, [autoBox, ` 每個上班日自動挑 ${quota} 家進名單：公司約 2/3、商行／企業社約 1/3，哪邊不夠另一邊補。連續未接 ${COOL_AFTER} 次、記錄時沒填日期的自動排到 ${COOL_DAYS} 天後，${COLD_AFTER} 次移到冷名單。挑法（版本 428，減法）：九頁（登記清冊、動產擔保、出進口廠商、剛開始請人、剛開電子發票、新設工廠、產業名單、政府標案得標、104 徵才中）揉在一起，同一家依統編合成一家；先剔除——成立 10 年以上、資本額未達 1,000 萬或 5 億以上（要找貸放 800～3,000 萬的客戶；動保上跟別家單件擔保 800 萬以上的不受資本額限制）、沒電話、「不是目標」刪過兩次的行業、營造業（有工地）／本期擴張、沒在徵才又沒任何需求證據的；剩下的照順序取：有手機的先 → 需求證據（跟租賃同業借過 → 剛得標 → 一年內買設備 → 剛增資／新廠／新工地／進駐新商辦／研發補助／徵財務主管 → 剛做進出口 → 其他）→ 離新莊近。商行／企業社一樣要資本額 1,000 萬以上，照自己的順序另外挑，不開統一發票的、零售／餐飲／美容美髮／典當／住宿／娛樂這些收現金的行業剔除。名單裡有的、藏起來的不挑`, feedNow]));
       if (feedBackendActive()) host.append(el('p', { className: 'muted', textContent: `後台每天清晨 05:00 挑（最近 ${dateLabel(registryPref('feed-backend-last'))}），這台不會自己挑；「再補」照用。` }));
 
       const mainOf = (d) => (counts.get(d) || 0) - (freshCounts.get(d) || 0);

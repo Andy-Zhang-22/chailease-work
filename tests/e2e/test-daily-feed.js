@@ -19,7 +19,7 @@ const CHEAD='案件類別,登記編號,客戶統編,客戶名稱,金主統編,�
 const CROWS=[
  ['附條件買賣登記','112新經動字第004821號','28451237','禾泰精密工業有限公司','20000001','新鑫股份有限公司','2023/10/15','2026/10/14','12000000','新北市新莊區五權一路12號','3','2023/10/20','','111/10/01'],
  ['動產抵押登記','111新經動字第006913號','53217846','昱昌汽車貨運股份有限公司','20000002','和潤企業股份有限公司','2022/11/12','2026/11/12','8600000','新北市五股區五權路88號','2','2022/11/20','','112/03/05'],
- // 版本 433：泓宇、巨鎰的擔保金額調到 800 萬以上（查不到資本額的要靠動保金額過規模門檻）；老早過期 300 萬＝不挑
+ // 版本 436：泓宇、巨鎰的擔保金額調到 800 萬以上（查不到資本額的要靠動保金額過規模門檻）；老早過期 300 萬＝不挑
  ['動產抵押登記','110新經動字第007355號','80126745','泓宇塑膠射出有限公司','20000003','合迪股份有限公司','2021/11/28','2026/11/28','9500000','新北市泰山區中港西路301巷','4','2021/12/01','','112/01/01'],
  ['動產抵押登記','113新經動字第001204號','16938054','巨鎰金屬製品有限公司','20000004','裕融企業股份有限公司','2024/02/15','2027/02/15','8800000','新北市新莊區化成路500號','1','2024/02/20','','113/01/01'],
  ['動產抵押登記','109新經動字第000100號','11111112','老早過期有限公司','20000002','和潤企業股份有限公司','2017/01/01','2020/01/01','3000000','新北市三重區重新路1號','1','2017/01/05','',''],
@@ -123,7 +123,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.click('#feedMore'); await pg.waitForTimeout(1500);
  const fed2=await pg.evaluate(async()=>(await window.Store.allRecords()).filter(r=>/^每日新名單/.test(r.source)).map(r=>r.company));
  chk(fed2.length===10, `再補之後 10 家：${fed2.join('|')}`);
- chk(!fed2.includes('老早過期有限公司') && fed2.includes('泓宇塑膠射出有限公司'), `版本 433（要找貸放 800～3,000 萬的客戶）：查不到資本額的，動保跟別家單件擔保 800 萬以上才挑（泓宇 950 萬挑、老早過期 300 萬不挑）：${fed2.join('|')}`);
+ chk(!fed2.includes('老早過期有限公司') && fed2.includes('泓宇塑膠射出有限公司'), `版本 436（要找貸放 800～3,000 萬的客戶）：查不到資本額的，動保跟別家單件擔保 800 萬以上才挑（泓宇 950 萬挑、老早過期 300 萬不挑）：${fed2.join('|')}`);
  chk(!fed2.includes('新莊雜貨商行') && !fed2.includes('免用發票商行'), `版本 429：零售的、不開發票的商行條件再好也不挑：${fed2.join('|')}`);
  chk(fed2.includes('只有稅籍商行') && !fed2.includes('板橋企業社'), `再補的商行是只有稅籍商行（500 萬以上＋5 年以上），板橋企業社還沒輪到：${fed2.filter(x=>/商行|企業社/.test(x)).join('|')}`);
  chk(/符合：3 個月內到期、我的分公司、500 萬以上/.test(await pg.evaluate(async()=>{ const r=(await window.Store.allRecords()).find(r=>r.company==='自家客戶有限公司'); return r?r.notesRaw:''; })) || !fed2.includes('自家客戶有限公司'), '中租自家的不算同業，排在後面補位');
@@ -162,7 +162,7 @@ const SEED=[mk('1','主力客戶一有限公司','99999991'), mk('2','主力客�
  await pg.evaluate(()=>window.switchTab('chattel')); await pg.waitForSelector('#chattel-cards .card'); await pg.locator('#chattel-fDue .chip:has-text("全部")').click(); await pg.waitForTimeout(200);
  await pg.evaluate(()=>window.switchTab('leads')); await pg.waitForTimeout(300); await pg.locator('#leads-fInd .chip:has-text("批發零售")').click(); await pg.waitForTimeout(200);
  const cand=await pg.evaluate(async()=>{ const c=await window.Chattel.dailyCandidates(); const l=await window.Leads.dailyCandidates(); return {c:c.map(r=>r.cust.name), l:l.map(r=>r['公司名稱'])}; });
- chk(cand.c.length===2 && cand.c.includes('自家客戶有限公司') && cand.c.includes('老早過期有限公司') && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.l.includes('甲一精密有限公司') && cand.l.length<=2 && !cand.l.includes('丁四貿易有限公司'), `兩輪挑完：動保只剩跟中租借的自家客戶、擔保只有 300 萬又查不到資本額的老早過期（版本 433：規模看不出來不挑）（以前刪掉的昱昌分頁也不列）、登記清冊剩被剔除的甲一（本期擴張）；跟畫面篩選無關：${JSON.stringify(cand)}`);
+ chk(cand.c.length===2 && cand.c.includes('自家客戶有限公司') && cand.c.includes('老早過期有限公司') && !cand.c.includes('昱昌汽車貨運股份有限公司') && cand.l.includes('甲一精密有限公司') && cand.l.length<=2 && !cand.l.includes('丁四貿易有限公司'), `兩輪挑完：動保只剩跟中租借的自家客戶、擔保只有 300 萬又查不到資本額的老早過期（版本 436：規模看不出來不挑）（以前刪掉的昱昌分頁也不列）、登記清冊剩被剔除的甲一（本期擴張）；跟畫面篩選無關：${JSON.stringify(cand)}`);
  // 今天不打了：今天排著的全部挪到下一個上班日（10/5 一 → 10/6 二）
  await pg.click('.tab[data-tab="all"]'); await pg.waitForTimeout(300);
  const dueNow=await pg.evaluate(()=>window.customerViews().filter(v=>v.nextDate==='2026-10-05'&&!v.blocked).length);
