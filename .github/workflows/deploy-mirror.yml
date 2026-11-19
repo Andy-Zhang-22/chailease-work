@@ -1,0 +1,81 @@
+# 網站在 Google Cloud Storage 另外放一份（備用網址）。
+# 使用者 2026/11/19：公司網路擋 GitHub，公司電腦開不了 GitHub Pages 上的網站 →「把網站另外放一份到 Google 的主機」。
+# 公司沒擋 Google（雲端硬碟同步照常），所以放在 https://<值區>.storage.googleapis.com/index.html。
+#
+# 放的東西跟 GitHub Pages 一樣（都是公開的）：index.html、sw.js、manifest、version.json、assets/、leads/；測試與工具不放。
+# 值區要使用者自己在 Google Cloud 主控台建、開權限（Actions 的服務帳號在專案裡沒有任何權限；步驟見 README「網站在 Google 主機放一份」）；
+# 值區還沒建好、或服務帳號還沒有權限時，這支只印一句就結束，不算失敗。
+name: 網站備用網址（Google 主機）
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 22 * * *'   # 台灣 06:23：main 上機器人自動合併的名單資料（那種推送不會觸發 push）也每天帶過去一次
+    - cron: '23 4 * * *'    # 台灣 12:23：中午再帶一次（標案、補成立日）
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+  id-token: write   # Workload Identity：用 GitHub 的 OIDC token 換 Google 的
+
+concurrency:
+  group: deploy-mirror
+  cancel-in-progress: true
+
+env:
+  # 值區名稱不是祕密（就是網址的一部分）。使用者建的名稱不一樣的話，在 repo 的 Variables 設 MIRROR_BUCKET 蓋掉
+  BUCKET: ${{ vars.MIRROR_BUCKET || 'tel-list-az22' }}
+
+jobs:
+  deploy:
+    if: vars.GCP_WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: 值區建好了嗎
+        id: ready
+        run: |
+          if gcloud storage ls "gs://$BUCKET" --limit=1 >/dev/null 2>ls.err; then echo "ok=yes" >> "$GITHUB_OUTPUT"; echo "值區在、有權限"
+          else echo "ok=no" >> "$GITHUB_OUTPUT"; echo "值區還沒建好，或服務帳號還沒有權限，這次不放：$(head -c 300 ls.err | tr '\n' ' ')"; fi
+
+      - name: 整理要放的檔案
+        if: steps.ready.outputs.ok == 'yes'
+        run: |
+          mkdir _site
+          cp index.html sw.js manifest.webmanifest version.json _site/
+          cp -r assets leads _site/
+          # Cloud Storage 的網址沒有「資料夾首頁」：開 / 不會給 index.html，所以加到主畫面的起始網址要寫明 index.html
+          sed -i 's#"start_url": "./"#"start_url": "index.html"#' _site/manifest.webmanifest
+          grep -q '"start_url": "index.html"' _site/manifest.webmanifest
+          echo "檔案 $(find _site -type f | wc -l) 個，$(du -sh _site | cut -f1)"
+
+      - name: 放上去
+        if: steps.ready.outputs.ok == 'yes'
+        run: |
+          gcloud storage rsync _site "gs://$BUCKET" --recursive --delete-unmatched-destination-objects --quiet
+          # 首頁、版本檔、離線快取程式、各份名單的索引不要讓瀏覽器或中間的快取存著（預設公開檔案會快取一小時）
+          gcloud storage objects update "gs://$BUCKET/index.html" "gs://$BUCKET/sw.js" "gs://$BUCKET/version.json" --cache-control="no-cache" --quiet
+          gcloud storage objects update "gs://$BUCKET/manifest.webmanifest" --content-type="application/manifest+json" --cache-control="no-cache" --quiet
+          gcloud storage objects update "gs://$BUCKET/leads/**/index.json" "gs://$BUCKET/leads/index.json" --cache-control="no-cache" --quiet || true
+          echo "已放到 https://$BUCKET.storage.googleapis.com/index.html（版本 $(cat version.json)）"
+
+      - name: 外面讀得到嗎
+        if: steps.ready.outputs.ok == 'yes'
+        run: |
+          code=$(curl -s -o /tmp/v.json -w '%{http_code}' "https://$BUCKET.storage.googleapis.com/version.json?t=$(date +%s)")
+          echo "公開讀取 version.json：HTTP $code $(head -c 80 /tmp/v.json)"
+          if [ "$code" != "200" ]; then echo "::warning::檔案放上去了，但外面讀不到（值區還沒開放公開讀取：allUsers → Storage 物件檢視者）"; fi

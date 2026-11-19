@@ -5964,3 +5964,24 @@ CI 的 `test-hiring.js` 抓到：每週池只補了 2 家。原因是「今天�
 - 這個修正本身要連得到 GitHub 才下載得到：公司電腦要等公司網路通一次（或接手機熱點開一次）才會換上新的 `sw.js`。
   在那之前的做法：先讓電腦斷網（飛航模式）再開 App——斷網是立刻失敗，馬上用存著的那份；開起來後再連回網路，同步走 Google 雲端硬碟照常。
 - 測試：`tests/e2e/test-pwa.js` 的測試伺服器加「扣著不回應」模式——重新整理後 6 秒左右開起來、名單看得到、樣式在；恢復後照常開。版號 20261119-448。
+
+## 網站在 Google 主機放一份：公司網路擋 GitHub 時的備用網址（版本 448 之後，網站程式沒改）
+
+使用者 11/19 下午：「看起來是被公司擋掉，有甚麼做法能讓我可以在這使用電推網站嗎」→ 回報三條路（請資訊單位放行、接手機熱點、另放一份到 Google 的主機；
+並提醒第三條等於繞過公司的網路管制，建議先問清楚是刻意擋還是當天網路問題）→「把網站另外放一份到 Google 的主機」。
+
+- 放哪裡：Google Cloud Storage 的值區，網址 `https://<值區>.storage.googleapis.com/index.html`。公司沒擋 Google（雲端硬碟同步照常），這個網域跟雲端硬碟的 API 同一家。
+  用「值區名稱在網域前面」這種網址，瀏覽器裡的名單資料才不會跟別人的值區共用同一個來源。
+- 探路（Actions，腳本看完已刪）：Actions 用的 Google 服務帳號（Workload Identity）在專案裡**沒有任何權限**（列值區 403、`testIamPermissions` 回空），
+  所以值區要使用者自己在主控台建、開權限；Firebase 沒啟用，不走那條。
+- `.github/workflows/deploy-mirror.yml`「網站備用網址（Google 主機）」：main 一有新版、每天 06:23 與 12:23、或手動，把 `index.html`、`sw.js`、`manifest.webmanifest`、`version.json`、`assets/`、`leads/` 同步到值區
+  （測試、工具不放；內容跟 GitHub Pages 上公開的一樣）。Cloud Storage 沒有資料夾首頁，放上去的那份 manifest 起始網址改成 `index.html`；首頁、版本檔、`sw.js`、各份名單的索引設成不快取。
+  值區還沒建好或沒權限時只印一句、不算失敗；放完會自己讀一次 `version.json`，外面讀不到就警告（公開讀取沒開）。
+  值區名稱預設 `tel-list-az22`，不一樣就在 repo 的 Variables 設 `MIRROR_BUCKET`。
+- **使用者要在 Google Cloud 主控台做的**（同步用的那個專案）：
+  1. 先在公司電腦開 `https://storage.googleapis.com/`：看到一小段錯誤訊息的文字＝連得到；被擋或一直轉圈＝這條路不通，不用往下做。
+  2. Cloud Storage → 建立值區：名稱 `tel-list-az22`、區域 `us-west1`（在免費額度的區域）、Standard、統一存取權、**不要勾**「強制禁止公開存取」。要有帳單帳戶。
+  3. 值區的「權限」加兩筆：`allUsers` →「Storage 物件檢視者」；Actions 的服務帳號（repo Variables 的 `GCP_SERVICE_ACCOUNT`）→「Storage 物件管理員」。
+  4. API 和服務 → 憑證 → 同步用的 OAuth 用戶端 →「已授權的 JavaScript 來源」加 `https://tel-list-az22.storage.googleapis.com`。
+  5. 之後在公司電腦開備用網址：輸入密碼 → 選單「雲端同步設定」貼用戶端 ID、登入 → 名單從雲端硬碟同步下來（新網址是新的來源，瀏覽器裡一開始是空的）。
+- 兩個網址是同一套程式、同一份雲端硬碟同步檔；GitHub Pages 那個照舊是主要的。
