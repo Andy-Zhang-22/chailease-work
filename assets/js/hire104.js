@@ -151,19 +151,26 @@
   }
 
   /* ---------------- 沒電話的：後台讓 Claude 上網找（版本 442） ----------------
-   * Mac 每週把「合格但公開名單沒電話」的公司寫在設定 hiring-pool-104-nophone；後台清晨拿幾家（資本額 300～6,000 萬且新北先）
+   * Mac 每週把「合格但公開名單沒電話」的公司寫在設定 hiring-pool-104-nophone；後台清晨拿幾家（版本 446：資本額 1,000 萬以上未達 5 億、成立 10 年內，徵財務主管的先、再來新北）
    * 用 Claude＋網路搜尋找電話，找到的搬進池子（15 欄一列、備註記電話來源），沒找到的記今天查過不重查。
    * 使用者 11/18：點數是每月送的 US$100、不另外儲值、別浪費 → 後台每天最多 HUNT104 家、每月估價到 HUNT104_USD 就停（花費記在設定 hunt104-usage）。 */
   const NOPHONE_KEY = 'hiring-pool-104-nophone'; const USAGE_KEY = 'hunt104-usage';
+  const HUNT_CAP_MIN = 10000; const HUNT_CAP_MAX = 500000;   // 仟元：1,000 萬～未達 5 億，跟每日新名單的規模門檻一樣（版本 436）
   const readSetting = async (key) => { try { const all = (await global.Store.getMeta('settings')) || {}; const v = all[key] && all[key].v; return v ? JSON.parse(v) : null; } catch (e) { return null; } };
   async function huntBatch(n) {
     const np = await readSetting(NOPHONE_KEY); if (!np || !Array.isArray(np.list)) return [];
     const tried = np.tried || {};
-    const rank = (x) => (x.target && /^新北市/.test(String(x.city || x.addr || '')) ? 0 : x.target ? 1 : 2);
-    return np.list.filter((x) => x && x.key && !tried[x.key]).sort((a, b) => rank(a) - rank(b) || (Number(b.count) || 0) - (Number(a.count) || 0))
+    // 版本 446（使用者 11/19 選「只找用得到的」）：只找每日新名單會挑的——資本額 1,000 萬以上、未達 5 億（cap 是仟元），成立明顯超過 10 年的不找；
+    // 徵財務主管的排最前（有電話就進需求證據第四層，一個月內打得到），再來新北、職缺多的
+    const year = new Date().getFullYear();
+    const usable = (x) => { const cap = Number(x.cap) || 0; const y = Number(x.setup) || 0; return cap >= HUNT_CAP_MIN && cap < HUNT_CAP_MAX && !(y && year - y >= 11); };
+    const rank = (x) => (x.fin ? 0 : /^新北市/.test(String(x.city || x.addr || '')) ? 1 : 2);
+    return np.list.filter((x) => x && x.key && !tried[x.key] && usable(x)).sort((a, b) => rank(a) - rank(b) || (Number(b.count) || 0) - (Number(a.count) || 0))
       .slice(0, Math.max(0, Number(n) || 0)).map((x) => ({ key: x.key, name: x.name, taxId: x.key, address: x.addr || '' }));
   }
   const huntSpent = async (month) => { const u = await readSetting(USAGE_KEY); return u && u.month === month ? Number(u.usd) || 0 : 0; };
+  /** 今天找過了沒（版本 446）：後台一天可能跑兩次（06:35 備援＋GitHub 延後的排程），找電話一天只做一次 */
+  const huntedToday = async () => { const u = await readSetting(USAGE_KEY); return !!(u && u.day === todayIso()); };
   async function adoptHunted(results, { usd = 0, month = '' } = {}) {
     const np = await readSetting(NOPHONE_KEY); if (!np || !Array.isArray(np.list)) return { found: 0, tried: 0 };
     const pool = (await readSetting('hiring-pool-104')) || { head: HEAD.join(','), list: [] };
@@ -192,10 +199,10 @@
     await global.Store.setSetting('hiring-pool-104', JSON.stringify(pool));
     await global.Store.setSetting(NOPHONE_KEY, JSON.stringify({ at: Date.now(), list: keep, tried }));
     const u = (await readSetting(USAGE_KEY)) || {}; const same = u.month === month;
-    await global.Store.setSetting(USAGE_KEY, JSON.stringify({ month, usd: Math.round(((same ? Number(u.usd) || 0 : 0) + (Number(usd) || 0)) * 100) / 100,
+    await global.Store.setSetting(USAGE_KEY, JSON.stringify({ month, day: today, usd: Math.round(((same ? Number(u.usd) || 0 : 0) + (Number(usd) || 0)) * 100) / 100,
       asked: (same ? Number(u.asked) || 0 : 0) + found + miss, found: (same ? Number(u.found) || 0 : 0) + found }));
     return { found, tried: miss };
   }
 
-  global.Hire104 = { ensureData, lookup, poolInfo, dailyCandidates, dailyFacts, cardFacts, factsOf, toStandardCsv, addToList, huntBatch, huntSpent, adoptHunted, DAILY_PRIORITY, DAY };
+  global.Hire104 = { ensureData, lookup, poolInfo, dailyCandidates, dailyFacts, cardFacts, factsOf, toStandardCsv, addToList, huntBatch, huntSpent, huntedToday, adoptHunted, DAILY_PRIORITY, DAY };
 })(window);

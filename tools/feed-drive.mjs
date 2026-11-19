@@ -16,7 +16,7 @@
  * report 模式：整套照跑，但送去雲端硬碟的「上傳」都被攔下來假裝成功，什麼都不會寫回（只看筆數對不對）。
  * 這個 repo 是公開的，Actions 的紀錄誰都看得到：這裡只印筆數，不印公司名、電話。
  *
- * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes] [--hunt104 30] [--hunt104-usd 50]
+ * 用法：node tools/feed-drive.mjs [--mode report|write] [--nophone auto|yes|no] [--recheck auto|yes|no] [--model sonnet|opus] [--compare yes] [--hunt104 20] [--hunt104-usd 50]
  *   --research yes：每日新名單候選上網查擴張訊號（版本 349 起預設不查）。--model：查訊號用哪個模型（版本 335，預設 sonnet）。--recheck-max：主力客戶一次查幾家（預設 120；版本 348 使用者要把到期的點數用掉）。--compare yes：比較模式，不管今天挑過沒都再挑一批（跟網站「再補」一樣），
  *   只能配 report（不寫回），拿來看另一個模型在同一批候選上查到幾家訊號。
  *   recheck（版本 328）：主力客戶每月 1 日上網查一次擴張訊號（customerIntel，一個月最多 120 家，約 NT$80）
@@ -47,7 +47,7 @@ const REDO = (process.env.REDO || opt('redo', 'no')).toLowerCase() === 'yes' && 
 const RECHECK_MAX = Math.max(1, Math.min(2000, Number(process.env.RECHECK_MAX || opt('recheck-max', '260')) || 260));   // 主力客戶一次查幾家（版本 348；版本 351 預設 260）
 // 主力客戶用哪個模型（版本 351；使用者選「做 2」：主力客戶改用 Opus）：預設 opus，跟每日新名單的 --model 分開
 // 104 池子裡沒電話的，每天讓 Claude 找幾家（版本 442；0＝關）；這段每月估價到上限就停（使用者 11/18：點數每月送 US$100、不儲值、別浪費）
-const HUNT104 = Math.max(0, Math.min(200, Number(process.env.HUNT104 || opt('hunt104', '30')) || 0));
+const HUNT104 = Math.max(0, Math.min(200, Number(process.env.HUNT104 || opt('hunt104', '20')) || 0));   // 版本 446：30 → 20（實際每家約 US$0.10，20 家／天一個月約 US$45，在上限內）
 const HUNT104_USD = Math.max(0, Number(process.env.HUNT104_USD || opt('hunt104-usd', '50')) || 0);
 const RECHECK_MODEL = (process.env.RECHECK_MODEL || opt('recheck-model', 'opus')).toLowerCase() === 'sonnet' ? 'sonnet' : 'opus';
 const PLACES_KEY = (process.env.PLACES_API_KEY || '').trim();
@@ -262,7 +262,9 @@ async function main() {
     if (CLAUDE_ON && MODE === 'write' && HUNT104 > 0) {
       const month = taipeiDate().toISOString().slice(0, 7);
       const spent = await page.evaluate((m) => (window.Hire104 && window.Hire104.huntSpent ? window.Hire104.huntSpent(m) : 0), month);
+      const huntedToday = await page.evaluate(() => (window.Hire104 && window.Hire104.huntedToday ? window.Hire104.huntedToday() : false));
       if (spent >= HUNT104_USD) out(`104 池子找電話：本月已約 US$${Number(spent).toFixed(2)}，到上限 US$${HUNT104_USD}，今天不查`);
+      else if (huntedToday) out('104 池子找電話：今天找過了，不再找（一天一次）');
       else {
         const batch = await page.evaluate((n) => (window.Hire104 && window.Hire104.huntBatch ? window.Hire104.huntBatch(n) : []), HUNT104);
         if (batch.length) {

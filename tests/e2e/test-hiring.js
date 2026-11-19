@@ -114,14 +114,20 @@ const mk=(i)=>({id:`r${i}`,source:'A.csv',company:`主力${i}有限公司`,alias
  // 版本 442：沒電話的——後台拿去找電話（huntBatch 新北且資本額符合先）、找到的搬進池子帶電話與來源、沒找到的記查過、記這個月花費
  const ad=await pg.evaluate(async()=>{
    await window.Store.setSetting('hiring-pool-104-nophone', JSON.stringify({at:Date.now(),list:[
-     {key:'30000008',name:'午八工業有限公司',addr:'台北市中山區民生東路8號',cap:5000,setup:'2018',ind:'製造',count:9,week:'2026-W44',day:'10/26',target:true,city:'臺北市'},
-     {key:'30000007',name:'巳七實業有限公司',addr:'新北市新莊區中正路7號',cap:8000,setup:'2020',ind:'批發',count:3,week:'2026-W44',day:'10/26',target:true,city:'新北市'}],tried:{}}));
+     {key:'30000008',name:'午八工業有限公司',addr:'台北市中山區民生東路8號',cap:15000,setup:'2018',ind:'製造',count:9,week:'2026-W44',day:'10/26',target:true,city:'臺北市'},
+     {key:'30000007',name:'巳七實業有限公司',addr:'新北市新莊區中正路7號',cap:18000,setup:'2020',ind:'批發',count:3,week:'2026-W44',day:'10/26',target:true,city:'新北市'},
+     // 版本 446：只找每日新名單會挑的——資本額未達 1,000 萬（500 萬）、5 億以上、成立超過 10 年的不找；徵財務主管的排最前
+     {key:'30000011',name:'小額貿易有限公司',addr:'新北市新莊區中正路11號',cap:5000,setup:'2021',ind:'批發',count:20,week:'2026-W44',day:'10/26',target:true,city:'新北市'},
+     {key:'30000012',name:'太大實業股份有限公司',addr:'新北市新莊區中正路12號',cap:600000,setup:'2019',ind:'製造',count:30,week:'2026-W44',day:'10/26',target:false,city:'新北市'},
+     {key:'30000013',name:'老牌機械有限公司',addr:'新北市新莊區中正路13號',cap:30000,setup:'2010',ind:'製造',count:15,week:'2026-W44',day:'10/26',target:true,city:'新北市'},
+     {key:'30000014',name:'徵財務科技有限公司',addr:'台北市內湖區瑞光路14號',cap:20000,setup:'2019',ind:'資訊',count:1,fin:'財務經理',week:'2026-W44',day:'10/26',target:true,city:'臺北市'}],tried:{}}));
+   const before=await window.Hire104.huntedToday();
    const batch=await window.Hire104.huntBatch(5);
    const r=await window.Hire104.adoptHunted({'30000007':{phone:'02-2999-0000',kind:'landline',source:'https://example.com/contact',who:'官網'},'30000008':null},{usd:0.12,month:'2026-10'});
    await window.Hire104.ensureData(); const p=window.Hire104.lookup('30000007'); const all=await window.Store.getMeta('settings'); const np=JSON.parse(all['hiring-pool-104-nophone'].v);
-   return {batch:batch.map(x=>x.key), r, tel:p&&p.tel, count:p&&p.count, left:np.list.map(x=>x.key), tried:Object.keys(np.tried), spent:await window.Hire104.huntSpent('2026-10'), spentOther:await window.Hire104.huntSpent('2026-11')}; });
- chk(ad.batch.join()==='30000007,30000008' && ad.r.found===1 && ad.r.tried===1 && ad.tel==='02-2999-0000' && ad.count===3 && ad.left.join()==='30000008' && ad.tried.join()==='30000008' && ad.spent===0.12 && ad.spentOther===0,
-   `沒電話的：新北先、找到的搬進池子帶電話、沒找到的記查過、花費記在當月：${JSON.stringify(ad)}`);
+   return {batch:batch.map(x=>x.key), r, tel:p&&p.tel, count:p&&p.count, left:np.list.map(x=>x.key), tried:Object.keys(np.tried), spent:await window.Hire104.huntSpent('2026-10'), spentOther:await window.Hire104.huntSpent('2026-11'), before, after:await window.Hire104.huntedToday()}; });
+ chk(ad.batch.join()==='30000014,30000007,30000008' && ad.r.found===1 && ad.r.tried===1 && ad.tel==='02-2999-0000' && ad.count===3 && ad.left.join()==='30000008,30000011,30000012,30000013,30000014' && ad.tried.join()==='30000008' && ad.spent===0.12 && ad.spentOther===0 && ad.before===false && ad.after===true,
+   `沒電話的：徵財務主管的先、再來新北；資本額 500 萬、6 億、成立 16 年的不找；找到的搬進池子帶電話、沒找到的記查過、花費記在當月、記下今天找過了（一天一次）：${JSON.stringify(ad)}`);
  console.log('ERRORS:', errs.length?errs:'none'); console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
 })();
