@@ -1,0 +1,41 @@
+name: 探路 Google 主機放網站（一次性，看完刪）
+# 使用者 11/19：公司網路擋 GitHub，「把網站另外放一份到 Google 的主機」。
+# 先看 Actions 用的那個 Google 服務帳號（Workload Identity）在專案裡有哪些權限：能不能建 Cloud Storage 值區、傳檔、設公開；帳單有沒有開。
+# 只印 HTTP 狀態與有／沒有，不印權杖。
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+      - name: 看權限
+        env:
+          TOKEN: ${{ steps.auth.outputs.access_token }}
+          SA: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -u
+          PROJECT="${SA#*@}"; PROJECT="${PROJECT%%.iam.gserviceaccount.com}"
+          echo "專案代號長度 ${#PROJECT}"
+          code() { curl -s -o /tmp/out.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$@"; }
+          echo "列出值區：HTTP $(code "https://storage.googleapis.com/storage/v1/b?project=$PROJECT&maxResults=50")"
+          python3 -c "import json;d=json.load(open('/tmp/out.json'));print('  值區數',len(d.get('items',[])),'；錯誤',(d.get('error') or {}).get('message','')[:160])"
+          echo "專案層的權限（testIamPermissions）：HTTP $(code -X POST -H 'Content-Type: application/json' -d '{"permissions":["storage.buckets.create","storage.buckets.list","storage.buckets.setIamPolicy","storage.objects.create","storage.objects.delete","storage.objects.list","firebasehosting.sites.update","firebase.projects.get","serviceusage.services.enable","resourcemanager.projects.get"]}' "https://cloudresourcemanager.googleapis.com/v1/projects/$PROJECT:testIamPermissions")"
+          python3 -c "import json;d=json.load(open('/tmp/out.json'));print('  有的權限',d.get('permissions',[]),'；錯誤',(d.get('error') or {}).get('message','')[:200])"
+          echo "帳單：HTTP $(code "https://cloudbilling.googleapis.com/v1/projects/$PROJECT/billingInfo")"
+          python3 -c "import json;d=json.load(open('/tmp/out.json'));print('  billingEnabled',d.get('billingEnabled'),'；錯誤',(d.get('error') or {}).get('message','')[:200])"
+          echo "已啟用的服務（storage／firebase 相關）：HTTP $(code "https://serviceusage.googleapis.com/v1/projects/$PROJECT/services?filter=state:ENABLED&pageSize=200")"
+          python3 -c "import json;d=json.load(open('/tmp/out.json'));n=[s.get('config',{}).get('name','') for s in d.get('services',[])];print('  啟用',len(n),'個；相關的',[x for x in n if any(k in x for k in ('storage','firebase','drive','places','people'))],'；錯誤',(d.get('error') or {}).get('message','')[:200])"
+          echo "Firebase 專案：HTTP $(code "https://firebase.googleapis.com/v1beta1/projects/$PROJECT")"
+          python3 -c "import json;d=json.load(open('/tmp/out.json'));print('  ',{k:('有' if d.get(k) else '') for k in ('projectId','resources')},'；錯誤',(d.get('error') or {}).get('message','')[:200])"
