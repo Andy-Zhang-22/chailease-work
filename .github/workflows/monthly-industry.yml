@@ -13,6 +13,12 @@ on:
         description: '留哪些縣市（逗號分隔）'
         required: false
         default: '新北市,臺北市'
+      tpe_news_only:
+        description: '只更新臺北市核定公告的快取（版本 445，幾十秒；產業名單不重寫）'
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'yes']
 
 # run 步驟一律用 bash（-eo pipefail）：抓檔的 node 掛了，| tee 不會把它吞成成功（10/10 健保那次就是這樣被當成功，版本 332）
 defaults:
@@ -39,8 +45,10 @@ jobs:
       - name: 抓產業名單、對稅籍與電話表
         env:
           CITIES: ${{ inputs.cities || '新北市,臺北市' }}
+          TPE_NEWS_ONLY: ${{ inputs.tpe_news_only || 'no' }}
         run: |
-          node tools/fetch-industry.mjs --cities "$CITIES" | tee fetch-industry.log
+          extra=(); if [ "$TPE_NEWS_ONLY" = "yes" ]; then extra+=(--tpe-news-only); fi
+          node tools/fetch-industry.mjs --cities "$CITIES" "${extra[@]}" | tee fetch-industry.log
           printf '```\n' >> "$GITHUB_STEP_SUMMARY"; cat fetch-industry.log >> "$GITHUB_STEP_SUMMARY"; printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: 存回 repo
