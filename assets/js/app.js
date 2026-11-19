@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261119-446';
+  const APP_VERSION = '20261119-447';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -371,6 +371,38 @@
     // 今天已經在提醒列按過「完成」的就不再列——按掉了又跳回來是使用者最不能接受的
     return allViews().filter((r) => r.nextDate === today && !r.blocked && r.dueDoneOn !== today)
       .sort((a, b) => a.company.localeCompare(b.company, 'zh-Hant'));
+  }
+  /*
+   * 存完、刪完直接開今天要打的下一家（版本 447；使用者 11/19 看了使用次數——一個月存紀錄 214 次、刪除 238 次，每次都要回名單再點下一家——「照你說的做」）。
+   * 只有「這一家本來就是今天要打的」才跳：翻別天的客戶、補記一筆時照舊回名單，不會突然跳到別家。
+   * 順序跟名單畫面一樣（照現在的排序與篩選），畫面上沒有的才照公司名；跳的是這一家後面那一家，後面沒有就從頭。
+   */
+  function dueQueue() {
+    // 今天已經記過通話的不算「下一家」：存的時候沒改下次聯絡日的，日期還停在今天，不濾掉會打完一輪又跳回來
+    const today = todayISO();
+    const due = dueToday().filter((r) => r.lastDate !== today);
+    if (!due.length) return [];
+    const ids = new Set(due.map((r) => r.id));
+    let seen = [];
+    try { seen = visibleRecords().filter((r) => ids.has(r.id)); } catch (e) { seen = []; }
+    const have = new Set(seen.map((r) => r.id));
+    return [...seen, ...due.filter((r) => !have.has(r.id))];
+  }
+  /** 動手之前先記位置：回 { wasDue, after }；after＝這一家後面依序的 id */
+  function dueSpot(id) {
+    const q = dueQueue().map((r) => r.id);
+    const i = q.indexOf(id);
+    return { wasDue: i >= 0, after: i >= 0 ? [...q.slice(i + 1), ...q.slice(0, i)] : [] };
+  }
+  /** 動手之後：開下一家，回有沒有開。沒有下一家就講一聲 */
+  function openNextDue(spot, doneId) {
+    if (!spot || !spot.wasDue) return false;
+    const still = new Set(dueQueue().map((r) => r.id));
+    still.delete(doneId);
+    const next = spot.after.find((id) => still.has(id)) || [...still][0];
+    if (!next) { toast('今天要打的都打完了'); return false; }
+    openDetail(next);
+    return true;
   }
   function checkDueToday() {
     const today = todayISO();
@@ -1337,6 +1369,39 @@
   // 版本 346：「其他原因」改成「總機不轉接」——使用者說會選其他的都是總機不幫忙轉給老闆；key 不改，舊資料照舊
   const DELETE_REASONS = [['target', '不是目標（行業、規模不對）'], ['customer', '已是客戶／跟中租有往來'], ['other', '總機不轉接給老闆，刪掉']];
   const REASON_BADGE = { target: '不是目標', customer: '已是客戶', other: '總機不轉接' };
+  /*
+   * 不是目標：一步刪掉（版本 447；11 月刪除 238 次裡 167 次選「不是目標」，每次都是「刪除這筆」→ 選原因兩步）。
+   * 只給「還沒動過」的單一家用：沒通話紀錄、沒連結同老闆的公司、名單裡沒有同一家的重複、沒改過欄位——
+   * 這種刪掉沒有東西會跟著消失，不用再確認一次；有的照舊走「刪除這筆」看清楚再選。
+   */
+  function notTargetBtn(r) {
+    const members = groupMembers(r);
+    const twins = state.records.filter((x) => x.id !== r.id && sameCompany(x, r));
+    const hasLogs = state.logs.some((l) => l.recordId === r.id);
+    if (members.length || twins.length || hasLogs || r.edited || r.blocked) return '';
+    const btn = el('button', { className: 'btn btn-tiny danger-text not-target', type: 'button', textContent: '不是目標', title: '行業、規模不對：直接刪掉（這種行業刪過兩次，之後不再挑），接著開今天要打的下一家' });
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const spot = dueSpot(r.id);
+      const why = { noPhone: false, reason: 'target', src: freshOrigin(r) || '', industry: String(r.industry || '').slice(0, 40) };
+      try {
+        await window.Store.deleteRecord(r.id, why);
+        if ((await window.Store.allRecords()).some((x) => x.id === r.id)) throw new Error('刪掉了但還讀得到');
+      } catch (err) {
+        console.error('刪除客戶失敗', err);
+        btn.disabled = false;
+        toast(`刪不掉：${err && err.message ? err.message : err}。請重新整理再試一次。`);
+        return;
+      }
+      await reload();
+      closeOverlays();
+      render();
+      toast(`已刪除「${r.company}」（不是目標）`);
+      openNextDue(spot, r.id);
+      scheduleSync();
+    };
+    return btn;
+  }
   function deleteBtn(r) {
     const btn = el('button', { className: 'btn btn-tiny danger', type: 'button', textContent: '刪除這筆' });
     btn.onclick = async () => {
@@ -1385,6 +1450,7 @@
       const noPhoneOk = core.every((x) => !(x.phones && x.phones.length));
       const pick = await askPick(msg, [...(noPhoneOk ? [NO_PHONE_PICK] : []), ...DELETE_REASONS.map(([, t]) => t)]);
       if (!pick) return;
+      const spot = dueSpot(r.id);   // 版本 447：刪完開今天要打的下一家
       const noPhone = pick === NO_PHONE_PICK;
       const why = { noPhone, reason: noPhone ? 'nophone' : (DELETE_REASONS.find(([, t]) => t === pick) || ['other'])[0], src: freshOrigin(r) || '', industry: String(r.industry || '').slice(0, 40) };
 
@@ -1403,6 +1469,7 @@
       closeOverlays();
       render();
       toast(all.length > 1 ? `已刪除「${r.company}」等共 ${all.length} 筆` : `已刪除「${r.company}」`);
+      openNextDue(spot, r.id);
       scheduleSync();
     };
     return btn;
@@ -2089,55 +2156,8 @@
   function phoneFinder(r) {
     const box = el('div', { className: 'phone-finder' });
     box.append(phoneSearchRow(r, { detail: true }));
-    const btn = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '用 Google 地圖找電話' });
-    const out = el('div', { className: 'phone-finder-out' });
-    btn.onclick = async () => {
-      if (!placesKey()) { openPlacesSetup(() => { openDetail(r.id); }); return; }
-      btn.disabled = true; btn.textContent = '查詢中…';
-      out.textContent = '';
-      try {
-        const { best, candidates } = await placesLookup(r);
-        if (!candidates.length) {
-          out.append(el('p', { className: 'muted', textContent: 'Google 地圖上找不到這家。' }));
-        } else {
-          candidates.forEach((p) => {
-            const line = el('div', { className: `place-cand is-${p.level}` }, [
-              el('strong', { textContent: p.name }),
-              el('span', { className: 'badge', textContent: p.level === 'sure' ? '確定' : p.level === 'maybe' ? '疑似' : '不像' }),
-              el('div', { className: 'muted', textContent: `${p.address}${p.phone ? `　☎ ${p.phone}` : '　（沒有電話）'}${p.status && p.status !== 'OPERATIONAL' ? `　${p.status === 'CLOSED_PERMANENTLY' ? '已歇業' : p.status}` : ''}` }),
-            ]);
-            const acts = el('div', { className: 'card-actions' });
-            if (p.maps) acts.append(el('a', { className: 'btn btn-tiny', href: p.maps, target: '_blank', rel: 'noopener', textContent: '開地圖' }));
-            if (p.website) acts.append(el('a', { className: 'btn btn-tiny', href: p.website, target: '_blank', rel: 'noopener', textContent: '官網' }));
-            if (p.phone) {
-              const use = el('button', { className: `btn btn-tiny${p === best ? ' btn-primary' : ''}`, type: 'button', textContent: '採用這支電話' });
-              use.onclick = async () => { await adoptPlacePhone(r, p); render(); openDetail(r.id); scheduleSync(); toast(`已填入 ${p.phone}`); };
-              acts.append(use);
-            }
-            line.append(acts);
-            out.append(line);
-          });
-        }
-        // 找不到就刪：使用者的規矩。放在結果下面，跟刪除鈕一樣要確認
-        // 記成「找不到電話」：之後公開資料查到電話會提醒（見 phoneBackDaily）
-        const del = el('button', { className: 'btn btn-tiny danger-text', type: 'button', textContent: '找不到電話，先收起來' });
-        del.onclick = async () => {
-          if (!await askConfirm(`把「${r.company}」從名單收起來？通話紀錄與編輯內容會一起消失，而且會同步到其他裝置。\n\n之後出進口、健保、電子發票、新設工廠的公開資料查到這家的電話，名單上面會提醒你。`, { danger: true, okText: '收起來' })) return;
-          await window.Store.deleteRecord(r.id, { noPhone: true });
-          await reload(); closeOverlays(); render(); scheduleSync(); toast(`已刪除 ${r.company}`);
-        };
-        out.append(el('div', { className: 'card-actions' }, [del]));
-      } catch (err) {
-        out.append(el('p', { className: 'save-err', textContent: `查不到：${err.message}` }));
-        if (/金鑰/.test(err.message)) {
-          const fix = el('button', { className: 'btn btn-tiny', type: 'button', textContent: '設定金鑰' });
-          fix.onclick = () => openPlacesSetup(() => openDetail(r.id));
-          out.append(el('div', { className: 'card-actions' }, [fix]));
-        }
-      }
-      btn.disabled = false; btn.textContent = '再找一次';
-    };
-    box.append(el('div', { className: 'card-actions' }, [btn]), out);
+    // 版本 447：「用 Google 地圖找電話」拿掉了（10 月按 2 次、11 月 0 次；每日新名單版本 428 起不再挑沒電話的）。
+    // 上面那排 Google／地圖／104 的搜尋連結照留；「找不到電話，先收起來」在「刪除這筆」裡本來就有。
     return box;
   }
 
@@ -5568,6 +5588,22 @@
     return det;
   }
 
+  /*
+   * 詳細頁第一眼（版本 447）：這家做什麼、多大、為什麼被挑進來。
+   * 使用者 11/19：「開 google 是看該公司做的業務跟值不值得撥打」——一個月按 Google 139 次；產業別原本收在下面的資料表、挑它的原因埋在訪談內容裡。
+   * 只把已經有的資料搬到公司名底下，不另外查；沒資料的那段就不顯示。
+   */
+  function detailBrief(r) {
+    const years = /^\d{4}$/.test(String(r.founded || '')) ? new Date().getFullYear() - Number(r.founded) : null;
+    const what = [r.industry ? `做 ${r.industry}` : '', r.capital ? `資本額 ${r.capital} 仟元${capitalScale(r) ? `（${capitalScale(r)}）` : ''}` : '',
+      years != null && years >= 0 ? `成立 ${years} 年` : ''].filter(Boolean).join('・');
+    const why = (String(r.notesRaw || '').match(/每日新名單，符合：([^\n]+)/) || [])[1] || '';
+    if (!what && !why) return '';
+    return el('div', { className: 'detail-brief' }, [
+      what ? el('p', { className: 'brief-what', textContent: what }) : '',
+      why ? el('p', { className: 'brief-why', textContent: `挑它的原因：${why}` }) : '',
+    ].filter(Boolean));
+  }
   function openDetail(id, opts) {
     const raw = state.records.find((r) => r.id === id);
     if (!raw) return;
@@ -5641,9 +5677,11 @@
         chanceBtn('yes'),
         chanceBtn('no'),
         editBtn,
+        notTargetBtn(r),
         deleteBtn(r),
         xlsxBtn,
       ].filter(Boolean)),
+      detailBrief(r),
       r.chanceFrom ? el('p', { className: 'muted', textContent: `${r.chance === 'yes' ? '有機會' : '無機會'} 是跟著同老闆的「${r.chanceFrom}」，整組一起算。在這裡按也可以，會以最後按的為準。` }) : '',
     ].filter(Boolean)));
 
@@ -6133,6 +6171,7 @@
       // 勾了約到拜訪就要有日期：行事曆是靠「約的那天」標 🚗 的，沒日期等於沒約
       if (meet.checked && !nextInput.value) { toast('勾了「約到拜訪」要填下次聯絡日：哪天去？'); nextInput.focus(); return; }
       const today = todayISO();
+      const spot = dueSpot(r.id);   // 版本 447：存完開今天要打的下一家
 
       /*
        * 日期欄沒填，但內容裡寫了再聯絡的日期，就補進去。
@@ -6248,8 +6287,10 @@
       const coolNote = cooled === 'cold' ? `；連續未接 ${streak} 次，移到冷名單、不再排日期（打通一次就解除）` : cooled === 'cool' ? `；連續未接 ${streak} 次，自動排到兩週後 ${dateLabel(picked)}` : '';
       toast((blocking && !text ? `已標記禁止推廣${extra}` : auto ? autoNote : `已儲存通話紀錄${extra}`) + coolNote + (meet.checked ? `，${logTarget !== r.id ? `改了「${groupVisit.company}」的拜訪：` : '約到 '}${dateLabel(picked)} 拜訪 🚗${arriveInput.value ? ` ${departInput.value ? `${departInput.value} 出發、` : ''}${arriveInput.value} 到` : ''}` : ''));
       // 存完直接回到名單（版本 315；使用次數顯示每存一次就要再按一次關閉）。要設回撥提醒的再點開那一家
+      // 版本 447：這一家是今天要打的 → 直接開下一家，不用回名單再點
       render();
       closeOverlays();
+      openNextDue(spot, r.id);
       scheduleSync();
     };
     // 「讓 AI 整理」「訊息草稿」拿掉了（使用者：「把詳細頁裡的訊息草稿跟讓ai整理刪掉，我用不到」）
@@ -8419,6 +8460,28 @@ export default {
    * 刪剩一列很花時間，而且容易連別家客戶的資料一起送出去。
    * 格式沿用整份匯出那一套，所以拿到的檔案跟平常的母檔長得一樣，改完還能直接拖回網站。
    */
+  /*
+   * 選單的「匯出 Excel」：今天有聯絡過的就先問要日報還是整份（版本 447；使用者 11/19：「我每天匯出是要匯報給主管」）。
+   * 日報＝今天記過通話的那幾家，格式跟整份的一模一樣（主管看慣的母檔樣子），照今天打的先後排；今天還沒打就直接匯整份，跟以前一樣一步。
+   */
+  async function exportMenu() {
+    const today = todayISO();
+    const first = new Map();
+    state.logs.filter((l) => l.date === today).forEach((l) => { const t = l.createdAt || 0; if (!first.has(l.recordId) || t < first.get(l.recordId)) first.set(l.recordId, t); });
+    const all = allViews();
+    const todays = all.filter((r) => first.has(r.id)).sort((a, b) => first.get(a.id) - first.get(b.id));
+    if (!todays.length) { exportXlsx(); return; }
+    const a = `今天聯絡過的 ${todays.length} 家（日報）`; const b = `整份名單 ${all.length} 家`;
+    const pick = await askPick('要匯出哪些？', [a, b]);
+    if (!pick) return;
+    if (pick !== a) { exportXlsx(); return; }
+    exportXlsx(todays, `電推日報_${today}.xlsx`);
+    const logs = state.logs.filter((l) => l.date === today);
+    const reached = logs.filter((l) => l.outcome === 'contacted' || l.outcome === 'blocked').length;
+    toast(`已匯出今天的日報：${todays.length} 家、${logs.length} 通（接通 ${reached}、約到拜訪 ${logs.filter((l) => l.meeting).length}）`);
+  }
+  window.exportMenu = exportMenu;
+
   function exportOneXlsx(id) {
     const r = allViews().find((x) => x.id === id);
     if (!r) { toast('找不到這筆客戶'); return; }
@@ -8975,7 +9038,7 @@ export default {
       if (!act) return;
       if (act === 'menu-more') { menuMore($('#menuMore').hidden); return; }
       $('#menu').hidden = true;
-      if (act === 'export-xlsx') exportXlsx();
+      if (act === 'export-xlsx') exportMenu();
       if (act === 'sync-setup') {
         $('#clientId').value = window.DriveSync.clientId();
         $('#placesKeyInput').value = placesKey();
