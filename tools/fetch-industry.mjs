@@ -36,6 +36,7 @@ const OUT = opt('out', 'leads/industry');
 const CITIES = opt('cities', '新北市,臺北市').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
 const PHONES = opt('phones', 'leads/trade/phones.csv');
 const RESET = args.includes('--reset-baseline');
+const TPE_NEWS_ONLY = args.includes('--tpe-news-only');   // 版本 445：只更新臺北市核定公告的快取（幾十秒），其他來源不動、industry.csv 不重寫
 const TAX_SOURCE = 'https://eip.fia.gov.tw/data/BGMOPEN1.csv';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 /*
@@ -338,6 +339,129 @@ async function fetchTpeGrant(now) {
   console.log(`  ${rows.toLocaleString()} 列，核定 ${TPE_GRANT.months} 個月內 ${n.toLocaleString()} 列、${by.size.toLocaleString()} 家（之後對稅籍檔的營業人名稱）`);
   return by;
 }
+/*
+ * 第六批補充（版本 445）：臺北市產業發展獎勵補助網站每月的「審議委員大會核定結果」公告。
+ *   使用者 11/19 貼公司電腦那邊的提案（開放資料慢一年，網站每月有核定公告）問「你做得到嗎」。
+ *   開放資料（121519）一年才更新一次（最新核定 2025/12）；網站公告每月一則、一次 2～18 家，兩年 25 則約 206 家。
+ *   探路（Actions 連得到；公司電腦 TLS 連不上）：列表 /news?p=N 一頁 5 則，最新一則有時只在首頁；公告內文一張表——
+ *   第 160 次起是「序｜類型（rowspan）｜公司」，之前是單欄（類型一列、底下幾列公司）。沒統編、沒金額 → 跟開放資料一樣用公司名對稅籍檔。
+ *   核定年月用內文的開會日（民國），抓不到用公告日。抓過的公告存 tpe-news-cache.json，下次只抓新的；連不到就整份用快取。
+ */
+export const TPE_NEWS = { base: 'https://www.industry-incentive.taipei', months: 24, maxPages: 40, maxDetails: 60, gap: 500 };
+const tpeNoScript = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '');
+const tpeText = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t\r\n　]+/g, ' ').trim();
+const TPE_CO_RE = /公司|商行|企業社|工作室|事務所/;
+const TPE_TYPE_RE = /補助|獎勵|補貼|主題式|研發|創業|品牌|育成|拔尖/;
+const TPE_HEAD_RE = /^(序|序號|編號|項次|類型|類別|公司|公司名稱|廠商|廠商名稱|申請單位|單位名稱|獲補助單位)$/;
+export const tpeNewsIsResult = (title) => /核定/.test(title || '') && /審議|委員/.test(title || '');
+/** 首頁、列表頁 → [{ id, title, date }]：連到 news_detail/N 的連結（title 屬性或連結文字當標題，文字裡的 YYYY-MM-DD 當公告日） */
+export function tpeNewsList(html) {
+  const out = []; const seen = new Set();
+  for (const m of tpeNoScript(html).matchAll(/<a\b([^>]*href\s*=\s*["'][^"']*news_detail\/(\d+)["'][^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const id = Number(m[2]); const text = tpeText(m[3]);
+    const title = halfWidth((m[1].match(/title\s*=\s*["']([^"']*)["']/i) || [])[1] || text.replace(/\s*20\d{2}-\d{2}-\d{2}[\s\S]*$/, '')).trim();
+    if (seen.has(id) || !title) continue;
+    seen.add(id);
+    out.push({ id, title, date: (text.match(/20\d{2}-\d{2}-\d{2}/) || [''])[0] });
+  }
+  return out;
+}
+/** 公告頁 → { title, date（公告日）, ym（核定年月：內文「於 115 年 10 月 22 日…召開」，沒有就用公告日） } */
+export function tpeNewsMeta(html) {
+  const body = tpeText(tpeNoScript(html));
+  const title = halfWidth(tpeText((String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1])).trim();
+  const date = (body.match(/20\d{2}-\d{2}-\d{2}/) || [''])[0];
+  const m = halfWidth(body).match(/於\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日[^。]{0,12}召開/);
+  let ym = date ? date.slice(0, 7).replace('-', '') : '';
+  if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) ym = `${Number(m[1]) + 1911}${String(Number(m[2])).padStart(2, '0')}`;
+  return { title, date, ym };
+}
+/** 公告裡的表 → [{ type, name }]。新格式類型那格 rowspan 跨好幾列；舊格式單欄，類型自己一列。表頭、序號不算 */
+export function tpeNewsRows(html) {
+  const out = []; let type = '';
+  for (const tbl of tpeNoScript(html).matchAll(/<table\b[\s\S]*?<\/table>/gi)) {
+    for (const tr of tbl[0].matchAll(/<tr\b[\s\S]*?<\/tr>/gi)) {
+      const cells = [...tr[0].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((c) => halfWidth(tpeText(c[1])).trim()).filter((t) => t && !/^\d+$/.test(t) && !TPE_HEAD_RE.test(t));
+      for (const t of cells) {
+        if (TPE_TYPE_RE.test(t) && !TPE_CO_RE.test(t)) type = t.replace(/\s+/g, '');
+        else if (t.length >= 3) out.push({ type, name: t });
+      }
+    }
+  }
+  return out;
+}
+/** 公告的一家 → 跟 tpeGrantRow 同形（沒金額、沒計畫名）：類型去掉「計畫」當補助來源，有「研發」算研發補助 */
+export function tpeNewsRow(x, ym) {
+  const name = nameKey(x.name);
+  if (!name || !/^\d{6}$/.test(String(ym || ''))) return null;
+  const type = String(x.type || '').replace(/計畫/g, '');
+  return { name, district: '', ym: String(ym), amount: 0, title: '', prog: `臺北市${type || '獎勵補助'}`, kind: /研發/.test(type) ? TPE_GRANT.kinds.rd : TPE_GRANT.kinds.startup };
+}
+const ymDiff = (a, b) => (Number(String(a).slice(0, 4)) - Number(String(b).slice(0, 4))) * 12 + (Number(String(a).slice(4, 6)) - Number(String(b).slice(4, 6)));
+/** 公告的一家併進開放資料那份：同一次核定（核定年月差一個月內）開放資料已經有就不重複算；比較新的才換成這次的類型、年月。回有沒有加進去 */
+export function tpeNewsMerge(by, r) {
+  const have = by.get(r.name);
+  if (!have) { by.set(r.name, { ...r, n: 1, keys: new Set([`${r.ym}:news`]) }); return true; }
+  if ([...have.keys].some((k) => Math.abs(ymDiff(String(k).split(':')[0], r.ym)) <= 1)) return false;
+  have.keys.add(`${r.ym}:news`); have.n += 1;
+  if (r.ym > have.ym) Object.assign(have, { ym: r.ym, title: r.title, prog: r.prog, kind: r.kind, district: r.district });
+  return true;
+}
+/** 快取：抓過的公告 { 編號: { date, ym, title, rows: [[類型, 公司], …] } } */
+export function tpeNewsCacheOf(seen, generatedAt = new Date().toISOString()) {
+  const out = {};
+  [...seen.keys()].sort((a, b) => a - b).forEach((id) => { const v = seen.get(id); out[id] = { date: v.date, ym: v.ym, title: v.title, rows: v.rows.map((x) => [x.type, x.name]) }; });
+  return { generatedAt, total: Object.keys(out).length, source: `${TPE_NEWS.base}/news`, seen: out };
+}
+export function tpeNewsCacheToMap(j) {
+  const seen = new Map();
+  Object.entries((j && j.seen) || {}).forEach(([id, v]) => { seen.set(Number(id), { date: String(v.date || ''), ym: String(v.ym || ''), title: String(v.title || ''), rows: (v.rows || []).map((x) => ({ type: String(x[0] || ''), name: String(x[1] || '') })) }); });
+  return seen;
+}
+/** 抓過的公告 → 公司名稱 → 一筆（只收核定 months 個月內的），併進 by。回 { rows, added } */
+export function tpeNewsApply(by, seen, { now = new Date(), months = TPE_NEWS.months } = {}) {
+  let rows = 0; let added = 0;
+  const nowYm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  [...seen.keys()].sort((a, b) => a - b).forEach((id) => {
+    const v = seen.get(id); const age = /^\d{6}$/.test(v.ym) ? ymDiff(nowYm, v.ym) : -1;
+    if (age < 0 || age > months) return;
+    v.rows.forEach((x) => { const r = tpeNewsRow(x, v.ym); if (!r) return; rows += 1; if (tpeNewsMerge(by, r)) added += 1; });
+  });
+  return { rows, added };
+}
+/** 網站公告：首頁＋列表往後翻，找「審議委員大會核定結果」；快取裡有的不再抓。回更新後的 seen（Map） */
+async function fetchTpeNews(now, cache) {
+  const seen = new Map(cache);
+  const wait = () => new Promise((ok) => setTimeout(ok, TPE_NEWS.gap));
+  const text = (url) => fetchRetry(url, (r) => r.text(), 60000, 2);
+  const cut = new Date(now.getTime()); cut.setMonth(cut.getMonth() - TPE_NEWS.months - 1);
+  const cutDate = cut.toISOString().slice(0, 10);
+  console.log(`臺北市產業發展獎勵補助網站的核定公告 ${TPE_NEWS.base}/news（快取 ${cache.size} 則）`);
+  const found = new Map(); const listed = new Set();
+  const take = (items) => { let fresh = 0; items.forEach((x) => { if (!listed.has(x.id)) { listed.add(x.id); fresh += 1; if (tpeNewsIsResult(x.title)) found.set(x.id, x); } }); return fresh; };
+  take(tpeNewsList(await text(`${TPE_NEWS.base}/`)));
+  let pages = 0;
+  for (let p = 1; p <= TPE_NEWS.maxPages; p += 1) {
+    await wait();
+    const items = tpeNewsList(await text(`${TPE_NEWS.base}/news?p=${p}`));
+    pages += 1;
+    if (!take(items) && p > 1) break;   // 翻到底（或 ?p= 沒作用）
+    const oldest = items.map((x) => x.date).filter(Boolean).sort()[0] || '';
+    if (oldest && oldest < cutDate) break;
+    if (items.some((x) => tpeNewsIsResult(x.title) && cache.has(x.id))) break;   // 這頁以前抓過了，更舊的都在快取
+  }
+  const todo = [...found.values()].filter((x) => !seen.has(x.id) && (!x.date || x.date >= cutDate)).sort((a, b) => b.id - a.id).slice(0, TPE_NEWS.maxDetails);
+  let got = 0; let empty = 0;
+  for (const x of todo) {
+    await wait();
+    const html = await text(`${TPE_NEWS.base}/news_detail/${x.id}`);
+    const meta = tpeNewsMeta(html); const rows = tpeNewsRows(html);
+    if (!rows.length) { empty += 1; continue; }   // 格式變了或沒附名單：不存，下次再試
+    seen.set(x.id, { date: meta.date || x.date, ym: meta.ym, title: x.title || meta.title, rows }); got += 1;
+  }
+  console.log(`  翻了 ${pages} 頁、看過 ${listed.size} 則，核定公告 ${found.size} 則，這次新抓 ${got} 則${empty ? `、${empty} 則拆不出名單` : ''}；累計 ${seen.size} 則、${[...seen.values()].reduce((a, v) => a + v.rows.length, 0)} 列`);
+  return seen;
+}
 /** data.gov.tw 資料集的全部 CSV 檔（網址、說明） */
 async function datasetFiles(id) {
   const r = await fetch(`https://data.gov.tw/api/v2/rest/dataset/${id}`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(60000) });
@@ -517,6 +641,20 @@ async function main() {
   const now = new Date();
   const ym = ymOf(now);
   await fs.mkdir(OUT, { recursive: true });
+  if (TPE_NEWS_ONLY) {
+    let j = null;
+    try { j = JSON.parse(await fs.readFile(path.join(OUT, 'tpe-news-cache.json'), 'utf8')); } catch (e) { j = null; }
+    const seen = await fetchTpeNews(now, tpeNewsCacheToMap(j));
+    const by = new Map(); const ap = tpeNewsApply(by, seen, { now });
+    const byYm = {}; const byKind = {};
+    seen.forEach((v) => { byYm[v.ym] = (byYm[v.ym] || 0) + v.rows.length; });
+    by.forEach((v) => { byKind[v.kind] = (byKind[v.kind] || 0) + 1; });
+    console.log(`  核定 ${TPE_NEWS.months} 個月內 ${ap.rows} 列、不重複 ${by.size} 家（${Object.entries(byKind).map(([k, v]) => `${k} ${v}`).join('、')}）`);
+    console.log(`  各核定年月的家數：${Object.keys(byYm).sort().map((k) => `${k} ${byYm[k]}`).join('、')}`);
+    if (seen.size) await fs.writeFile(path.join(OUT, 'tpe-news-cache.json'), `${JSON.stringify(tpeNewsCacheOf(seen))}\n`, 'utf8');
+    console.log('只更新核定公告的快取；產業名單要等下次整份跑才會帶進去');
+    return;
+  }
   let prevIndex = {};
   try { prevIndex = JSON.parse(await fs.readFile(path.join(OUT, 'index.json'), 'utf8')); } catch (e) { prevIndex = {}; }
   const prevSeen = RESET ? new Map() : await readSeen(path.join(OUT, 'seen.csv'));
@@ -583,6 +721,19 @@ async function main() {
   let tpeBy = new Map();
   if (inCity(TPE_GRANT.city, CITIES)) {
     try { tpeBy = await fetchTpeGrant(now); } catch (err) { console.log(`  臺北市獎勵補助抓不到（${err && err.message ? err.message : err}），這個月沒有這一類`); }
+  }
+  // 2f. 臺北市網站每月的核定公告（版本 445）：比開放資料快一年；Actions 連得到、公司電腦連不上 → 抓到就存 tpe-news-cache.json，抓不到沿用快取
+  let tpeNewsSeen = new Map(); let tpeNewsCachedFrom = ''; let tpeNewsAdded = 0;
+  if (inCity(TPE_GRANT.city, CITIES)) {
+    let j = null;
+    try { j = JSON.parse(await fs.readFile(path.join(OUT, 'tpe-news-cache.json'), 'utf8')); } catch (e) { j = null; }
+    const cache = tpeNewsCacheToMap(j);
+    try { tpeNewsSeen = await fetchTpeNews(now, cache); } catch (err) {
+      tpeNewsSeen = cache; tpeNewsCachedFrom = j ? String(j.generatedAt || '') : '（沒有快取）';
+      console.log(`  臺北市核定公告抓不到（${err && err.message ? err.message : err}），沿用 ${tpeNewsCachedFrom.slice(0, 10)} 的快取 ${cache.size} 則`);
+    }
+    const ap = tpeNewsApply(tpeBy, tpeNewsSeen, { now }); tpeNewsAdded = ap.added;
+    console.log(`  核定 ${TPE_NEWS.months} 個月內 ${ap.rows.toLocaleString()} 列，開放資料沒有的 ${ap.added.toLocaleString()} 列；合計 ${tpeBy.size.toLocaleString()} 家（之後對稅籍檔的營業人名稱）`);
   }
   let tpeHit = 0;
 
@@ -659,6 +810,9 @@ async function main() {
   };
   if (envCachedFrom) index.envCachedFrom = envCachedFrom;
   else await fs.writeFile(path.join(OUT, 'env-cache.json'), `${JSON.stringify(envCacheOf(byTax, index.generatedAt))}\n`, 'utf8');
+  index.tpeNewsTotal = tpeNewsSeen.size; index.tpeNewsAdded = tpeNewsAdded;
+  if (tpeNewsCachedFrom) index.tpeNewsCachedFrom = tpeNewsCachedFrom;
+  else if (tpeNewsSeen.size) await fs.writeFile(path.join(OUT, 'tpe-news-cache.json'), `${JSON.stringify(tpeNewsCacheOf(tpeNewsSeen, index.generatedAt))}\n`, 'utf8');
   if (sbirCachedFrom) index.sbirCachedFrom = sbirCachedFrom;
   else await fs.writeFile(path.join(OUT, 'sbir-cache.json'), `${JSON.stringify(sbirCacheOf(sbirBy, index.generatedAt))}\n`, 'utf8');
   await fs.writeFile(path.join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`, 'utf8');

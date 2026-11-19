@@ -359,7 +359,8 @@
   /** 補助是研發還是創業（訊號用字）：SBIR、臺北市研發類＝研發；臺北市創業、新創、品牌類＝創業（版本 435） */
   const grantWord = (r) => ((r.kinds || []).includes('研發補助') || !(r.kinds || []).includes('創業補助') ? '研發' : '創業');
   /** 補助那句：「2026/03 核定 SBIR 研發補助（AI 視覺檢測，補助 80 萬）」「2026/03 核定臺北市創業補助（雲端報價，補助 100 萬）」（卡片用 ymLabel，備註用 ymIso） */
-  const sbirText = (r, ymText) => `${ymText(r.sbir.ym)} 核定${r.sbir.prog && r.sbir.prog !== 'SBIR' ? r.sbir.prog : ' SBIR 研發補助'}（${[r.sbir.title, r.sbir.amount ? `補助 ${money(r.sbir.amount)}` : ''].filter(Boolean).join('，')}）`;
+  // 版本 445：臺北市網站核定公告來的沒有計畫名、金額 → 不帶空括號
+  const sbirText = (r, ymText) => { const more = [r.sbir.title, r.sbir.amount ? `補助 ${money(r.sbir.amount)}` : ''].filter(Boolean).join('，'); return `${ymText(r.sbir.ym)} 核定${r.sbir.prog && r.sbir.prog !== 'SBIR' ? r.sbir.prog : ' SBIR 研發補助'}${more ? `（${more}）` : ''}`; };
   /** 卡片、備註那整行：「🏗 2026/09 建照：正在蓋廠房（造價 1,280 萬），蓋在 ○○」「🏢 2024/05 使照：進駐新商辦（○○）」（備註用 ymIso、沒圖示） */
   const permitLine = (r, ymText) => `${ymText === ymLabel ? `${r.permit.stage === '進駐' ? '🏢' : '🏗'} ` : ''}${ymText(r.permit.ym)} ${r.permit.stage === '進駐' ? '使照' : r.permit.stage}${ymText === ymLabel ? '：' : ' '}${permitText(r)}${r.permit.stage !== '進駐' && r.permit.address ? `，蓋在 ${r.permit.address}` : ''}`;
   // 分頁篩選的「利率不敏感」：跟每日新名單同一套

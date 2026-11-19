@@ -247,3 +247,60 @@ test('fetch-industry 第六批（版本 435）：臺北市產業發展獎勵補�
   assert.deepEqual(I.dailyFacts(rd).signals, ['剛拿到研發補助（補助 200 萬）']);
   assert.match(I.noteFor(rd), /2026-05 核定臺北市主題式研發（AI 排程，補助 200 萬）/);
 });
+
+test('fetch-industry 第六批補充（版本 445）：臺北市網站每月的核定公告——列表、公告表格兩種格式、核定年月、併進開放資料不重複、快取', async () => {
+  const t = await tool();
+  // 列表：首頁與 /news 的連結；title 屬性或文字當標題，文字裡的日期當公告日；同一則只算一次；不是核定公告的不算
+  const list = `<a class="onesetin" href="https://www.industry-incentive.taipei/news_detail/502" title="SITI臺北市產業發展獎勵補助計畫第165次審議委員大會核定結果計畫公告"><div><div>SITI臺北市產業發展獎勵補助計畫第165次審議委員大會核定結果計畫公告</div><div>2026-11-11</div></div><div>第165次…召開</div></a>
+    <a href="/news_detail/502"><img src="a.png"></a>
+    <a href="https://www.industry-incentive.taipei/news_detail/503" title="新創交流活動"><div>新創交流活動</div><div class="news_date">2026-11-16</div></a>
+    <a href="https://www.industry-incentive.taipei/news_detail/457"><div>第159次審議委員大會核定結果公告</div><div>2026-04-29</div></a>
+    <script>var x = '<a href="news_detail/999">假的</a>';</script>`;
+  const items = t.tpeNewsList(list);
+  assert.deepEqual(items.map((x) => [x.id, x.date]), [[502, '2026-11-11'], [503, '2026-11-16'], [457, '2026-04-29']]);
+  assert.equal(items[2].title, '第159次審議委員大會核定結果公告', '沒 title 屬性就用文字（去掉日期之後）');
+  assert.deepEqual(items.map((x) => t.tpeNewsIsResult(x.title)), [true, false, true]);
+  // 新格式：序｜類型（rowspan）｜公司
+  const fresh = `<title>SITI臺北市產業發展獎勵補助計畫第165次審議委員大會核定結果計畫公告</title><div>2026-11-11</div>
+    <p>第 165 次產業發展獎勵及補助審議委員會於 115 年 10 月 22 日（四）召開，審議通過創業計畫補助 2 案、研發計畫補助 1 案。</p>
+    <table><tbody><tr><td><p><span>序</span></p></td><td><p><span>類型</span></p></td><td><p><span>公司</span></p></td></tr>
+    <tr><td><p><span lang="EN-US">1</span></p></td><td rowspan="2"><p><span>創業計畫補助</span></p></td><td><p><span>甲一科技有限公司</span></p></td></tr>
+    <tr><td><p><span>2</span></p></td><td><p><span>乙二研發股份有限公司</span></p></td></tr>
+    <tr><td><p><span>3</span></p></td><td><p><span>淨零科技 主題式研發</span></p></td><td><p><span>丙三　股份有限公司</span></p></td></tr></tbody></table>`;
+  assert.deepEqual(t.tpeNewsMeta(fresh), { title: 'SITI臺北市產業發展獎勵補助計畫第165次審議委員大會核定結果計畫公告', date: '2026-11-11', ym: '202610' }, '核定年月用開會日（民國 115 年 10 月）');
+  assert.deepEqual(t.tpeNewsRows(fresh), [{ type: '創業計畫補助', name: '甲一科技有限公司' }, { type: '創業計畫補助', name: '乙二研發股份有限公司' }, { type: '淨零科技主題式研發', name: '丙三 股份有限公司' }],
+    '類型跨列往下帶；公司名裡有「研發」不會被當成類型；表頭、序號不算');
+  // 舊格式：單欄，類型自己一列
+  const old = `<title>第159次審議委員大會核定結果公告</title><div>2026-04-29</div><p>沒有寫開會日</p>
+    <table><tr><td>創業計畫補助</td></tr><tr><td>丁四有限公司</td></tr><tr><td>研發計畫補助</td></tr><tr><td>戊五股份有限公司臺灣分公司</td></tr></table>`;
+  assert.equal(t.tpeNewsMeta(old).ym, '202604', '沒開會日就用公告日');
+  assert.deepEqual(t.tpeNewsRows(old), [{ type: '創業計畫補助', name: '丁四有限公司' }, { type: '研發計畫補助', name: '戊五股份有限公司臺灣分公司' }]);
+  assert.deepEqual(t.tpeNewsRows('<p>這則沒有表</p>'), []);
+  // 一家 → 跟開放資料同形（沒金額、沒計畫名）
+  assert.deepEqual(t.tpeNewsRow({ type: '創業計畫補助', name: '　台灣甲一 有限公司' }, '202610'), { name: '臺灣甲一有限公司', district: '', ym: '202610', amount: 0, title: '', prog: '臺北市創業補助', kind: '創業補助' });
+  assert.equal(t.tpeNewsRow({ type: '淨零科技主題式研發', name: '丙三股份有限公司' }, '202610').kind, '研發補助');
+  assert.equal(t.tpeNewsRow({ type: '', name: '丙三股份有限公司' }, '202610').prog, '臺北市獎勵補助');
+  assert.equal(t.tpeNewsRow({ type: '創業計畫補助', name: '甲' }, ''), null, '沒年月不收');
+  // 併進開放資料：同一次核定（差一個月內）不重複；更新的一次才換類型、年月，筆數加一；金額不動
+  const by = new Map();
+  t.tpeGrantMerge(by, { name: '甲一科技有限公司', district: '內湖區', ym: '202509', amount: 1000000, title: '雲端報價', prog: '臺北市創業補助', kind: '創業補助' });
+  assert.equal(t.tpeNewsMerge(by, t.tpeNewsRow({ type: '創業計畫補助', name: '甲一科技有限公司' }, '202510')), false, '開放資料 9 月、公告 10 月＝同一次');
+  assert.equal(by.get('甲一科技有限公司').n, 1);
+  assert.equal(t.tpeNewsMerge(by, t.tpeNewsRow({ type: '研發計畫補助', name: '甲一科技有限公司' }, '202610')), true);
+  assert.deepEqual([by.get('甲一科技有限公司').ym, by.get('甲一科技有限公司').prog, by.get('甲一科技有限公司').kind, by.get('甲一科技有限公司').n, by.get('甲一科技有限公司').amount, by.get('甲一科技有限公司').title], ['202610', '臺北市研發補助', '研發補助', 2, 1000000, '']);
+  assert.equal(t.tpeNewsMerge(by, t.tpeNewsRow({ type: '研發計畫補助', name: '甲一科技有限公司' }, '202610')), false, '同一則再併一次不重複');
+  assert.equal(t.tpeNewsMerge(by, t.tpeNewsRow({ type: '創業計畫補助', name: '乙二研發股份有限公司' }, '202610')), true, '開放資料沒有的直接加');
+  // 快取存讀同形；套用時只收 24 個月內的
+  const seen = new Map([[502, { date: '2026-11-11', ym: '202610', title: '第165次', rows: t.tpeNewsRows(fresh) }], [10, { date: '2024-09-01', ym: '202408', title: '第138次', rows: [{ type: '創業計畫補助', name: '太舊有限公司' }] }]]);
+  const j = JSON.parse(JSON.stringify(t.tpeNewsCacheOf(seen, '2026-11-19T00:00:00.000Z')));
+  assert.equal(j.total, 2); assert.deepEqual(j.seen[502].rows[0], ['創業計畫補助', '甲一科技有限公司']);
+  assert.deepEqual([...t.tpeNewsCacheToMap(j).entries()], [...seen.entries()].sort((a, b) => a[0] - b[0]));
+  assert.equal(t.tpeNewsCacheToMap(null).size, 0);
+  const by2 = new Map();
+  assert.deepEqual(t.tpeNewsApply(by2, seen, { now: new Date(2026, 10, 19) }), { rows: 3, added: 3 });
+  assert.equal(by2.has('太舊有限公司'), false, '核定超過 24 個月的不收');
+  // 分頁：沒計畫名、沒金額的不帶空括號
+  const r = I.toRecord({ 統編: '56789021', 名稱: '甲一科技有限公司', 類別: '創業補助', 地址: '臺北市內湖區', 首見年月: '202611', 補助年月: '202610', 補助金額: '', 補助計畫: '', 補助來源: '臺北市創業補助' }, TODAY, '202611');
+  assert.match(I.noteFor(r), /2026-10 核定臺北市創業補助(\n|$)/);
+  assert.deepEqual(I.dailyFacts(r).signals, ['剛拿到創業補助']);
+});
