@@ -31,7 +31,9 @@ const srv=http.createServer((rq,rs)=>{const f=path.join(ROOT,rq.url==='/'?'index
  const del=async(name,pick)=>{ await pg.locator(`#cards .card:has-text("${name}") .card-name`).click(); await pg.waitForSelector('#drawerBody h2');
    await pg.click('#drawerBody button:has-text("刪除這筆")'); await pg.waitForSelector('.ask-overlay');
    const opts=await pg.$$eval('.ask-overlay .ask-list .btn',bs=>bs.map(b=>b.textContent));
-   await pg.click(`.ask-overlay .ask-list .btn:has-text("${pick}")`); await pg.waitForTimeout(900); return opts; };
+   await pg.click(`.ask-overlay .ask-list .btn:has-text("${pick}")`); await pg.waitForTimeout(900);
+   // 版本 447：刪完會直接開今天要打的下一家，這支測試接著要點名單上的別家，先關掉
+   await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200); return opts; };
  const opts=await del('甲範例','找不到電話');
  chk(opts.length===4 && /找不到電話，先收起來/.test(opts[0]) && /不是目標/.test(opts[1]) && /已是客戶/.test(opts[2]) && /總機不轉接/.test(opts[3]), `沒電話的刪除有四種（版本 326）：${opts.join('｜')}`);
  await del('乙範例','不是目標');

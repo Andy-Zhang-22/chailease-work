@@ -1,6 +1,6 @@
 // 版本 315 的三件事：
 // 1. 詳細頁「空號」一鍵收起來：墓碑記 noPhone＋打不通的號碼；之後公開資料給的還是那支就不提醒，給了別支才提醒
-// 2. 存完通話紀錄自動關閉詳細頁
+// 2. 存完通話紀錄自動關閉詳細頁（版本 447：今天要打的還有別家就直接開下一家，不用回名單再點）
 // 3. Google 地圖金鑰在「設定：雲端同步、Google 金鑰」裡填；今天的新名單有沒電話的、又沒金鑰，名單上方提一句
 const { chromium } = require('playwright');
 const http=require('http'),fs=require('fs'),path=require('path');
@@ -54,7 +54,10 @@ const SEED=[mk('1','甲範例精密有限公司','11111111','02-0000-1234'),mk('
  await open('丙範例');
  await pg.selectOption('#drawerBody select','contacted'); await pg.fill('#drawerBody textarea','接通了，下週再聊');
  await pg.click('#drawerBody button:has-text("儲存紀錄")'); await pg.waitForTimeout(900);
- chk(await pg.isHidden('#drawer'), '存完通話紀錄直接回到名單');
+ // 版本 447：丙是今天要打的、今天還有別家要打 → 存完不用自己關、也不用回名單，直接開下一家
+ const nextTitle=(await pg.isHidden('#drawer'))?'':(await pg.textContent('#drawerBody h2')).replace(/\s+/g,'');
+ chk(nextTitle && !/丙範例/.test(nextTitle), `存完通話紀錄不用按關閉：直接開今天要打的下一家（${nextTitle}）`);
+ await pg.evaluate(()=>document.querySelectorAll('.drawer-close').forEach(b=>{ if(b.offsetParent) b.click(); })); await pg.waitForTimeout(200);
  chk(/已儲存通話紀錄/.test(await pg.textContent('#toast')), `有提示：${await pg.textContent('#toast')}`);
  chk((await pg.evaluate(async()=>(await window.Store.allLogs()).length))===1, '紀錄有存到');
 

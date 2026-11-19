@@ -354,6 +354,10 @@ details.detail-more[open] > summary::before { content: '▾ '; }
 .company-link:hover, .company-link:focus-visible { color: var(--primary); border-bottom-color: var(--primary); }
 .detail-title h2 { margin-bottom: 0; }
 .detail-alias { font-size: 13px; color: var(--muted); }
+/* 版本 447：公司名底下第一眼——做什麼、多大、為什麼被挑進來 */
+.detail-brief { margin: 6px 0 2px; padding: 8px 10px; border-left: 3px solid var(--primary); background: var(--surface, rgba(0,0,0,.03)); border-radius: 4px; }
+.detail-brief p { margin: 0; font-size: 14px; line-height: 1.5; }
+.detail-brief .brief-why { color: var(--muted); font-size: 13px; }
 .detail-grid {
   display: grid; grid-template-columns: 84px 1fr; gap: 7px 12px;
   margin: 16px 0; font-size: 14px;
