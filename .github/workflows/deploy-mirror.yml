@@ -49,7 +49,7 @@ jobs:
       - name: 值區建好了嗎
         id: ready
         run: |
-          if gcloud storage ls "gs://$BUCKET" --limit=1 >/dev/null 2>ls.err; then echo "ok=yes" >> "$GITHUB_OUTPUT"; echo "值區在、有權限"
+          if gcloud storage ls "gs://$BUCKET" >/dev/null 2>ls.err; then echo "ok=yes" >> "$GITHUB_OUTPUT"; echo "值區在、有權限"
           else echo "ok=no" >> "$GITHUB_OUTPUT"; echo "值區還沒建好，或服務帳號還沒有權限，這次不放：$(head -c 300 ls.err | tr '\n' ' ')"; fi
 
       - name: 整理要放的檔案
