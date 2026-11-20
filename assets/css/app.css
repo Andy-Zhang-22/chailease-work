@@ -789,6 +789,8 @@ details.remind-fold[open] > summary::before { content: '▾ '; }
 .registry-fill { height: 100%; background: var(--primary); transition: width .2s ease; }
 /* 兩條都出現時，更新提示讓到上面 */
 body.has-registry-bar .update-bar { bottom: 60px; }
+/* 程式沒跑起來時那一行（版本 449）：跟更新提示同一個樣子，放在畫面中間偏上，空白的名單上一眼看得到 */
+.update-bar.boot-bar { bottom: auto; top: 40%; }
 
 .badge-chance-yes { border-color: var(--ok); color: var(--ok); font-weight: 600; }
 .badge-chance-no { border-color: var(--muted); color: var(--muted); }

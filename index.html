@@ -17,10 +17,10 @@
 <!-- 中文字型：只有沒有蘋方的裝置（Windows）會真的下載（見 app.css 的字型說明） -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400..700&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20261119-448">
+<link rel="stylesheet" href="assets/css/app.css?v=20261120-449">
 <!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
 <style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
-<script src="assets/js/lock.js?v=20261119-448"></script>
+<script src="assets/js/lock.js?v=20261120-449"></script>
 </head>
 <body data-theme="auto">
 
@@ -364,29 +364,55 @@
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="assets/vendor/pdfjs/pdf.min.js?v=20261119-448"></script>
-<script src="assets/vendor/xlsx/xlsx.min.js?v=20261119-448"></script>
+<!--
+  程式沒跑起來時留一行（版本 449；使用者 11/20 手機打開名單是空的、「0」和「—」：「為什麼」→「開始做」）。
+  那個畫面是網頁的空殼：底下的程式有檔案沒載到、或啟動到一半停住，原本只跳一行幾秒就消失的字，之後看不出是壞了還是沒資料。
+  這一段寫在頁面裡、排在所有程式檔前面，程式檔載不到它也照樣會跑：
+  有檔案沒載到 → 馬上留一行；10 秒還沒把名單畫出來 → 留一行；名單畫出來了（app.js 叫 __bootOk）→ 收掉。
+-->
+<div id="bootBar" class="update-bar boot-bar" hidden>
+  <span id="bootMsg">還沒載入完成，名單還沒顯示。</span>
+  <button id="btnBootReload" class="btn btn-primary" type="button">重新載入</button>
+</div>
+<script>
+(function () {
+  var bar = document.getElementById('bootBar'); var msg = document.getElementById('bootMsg'); var ready = false;
+  var show = function (text) { if (ready) return; msg.textContent = text; bar.hidden = false; };
+  document.getElementById('btnBootReload').onclick = function () { location.reload(); };
+  var timer = setTimeout(function () { show('還沒載入完成，名單還沒顯示。等一下還是這樣，請按重新載入。'); }, 10000);
+  window.__bootFail = show;
+  window.__bootOk = function () { ready = true; clearTimeout(timer); bar.hidden = true; };
+  // 程式檔沒載到（斷線、換新版換到一半）：script 的 error 不會往上冒，要在捕捉階段接
+  window.addEventListener('error', function (e) {
+    var el = e && e.target;
+    if (el && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(location.origin + '/') === 0) show('有檔案沒載到，名單還沒顯示。請按重新載入。');
+  }, true);
+})();
+</script>
+
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261120-449"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261120-449"></script>
 <script src="assets/vendor/tesseract/tesseract.min.js"></script>
-<script src="assets/js/pdf-table.js?v=20261119-448"></script>
-<script src="assets/js/normalize.js?v=20261119-448"></script>
-<script src="assets/js/holidays.js?v=20261119-448"></script>
-<script src="assets/js/registry.js?v=20261119-448"></script>
-<script src="assets/js/ocr.js?v=20261119-448"></script>
-<script src="assets/js/rules.js?v=20261119-448"></script>
-<script src="assets/js/store.js?v=20261119-448"></script>
-<script src="assets/js/sync.js?v=20261119-448"></script>
-<script src="assets/js/leads.js?v=20261119-448"></script>
-<script src="assets/js/chattel.js?v=20261119-448"></script>
-<script src="assets/js/listed.js?v=20261119-448"></script>
-<script src="assets/js/biz.js?v=20261119-448"></script>
-<script src="assets/js/trade.js?v=20261119-448"></script>
-<script src="assets/js/nhi.js?v=20261119-448"></script>
-<script src="assets/js/einv.js?v=20261119-448"></script>
-<script src="assets/js/factory.js?v=20261119-448"></script>
-<script src="assets/js/industry.js?v=20261119-448"></script>
-<script src="assets/js/pcc.js?v=20261119-448"></script>
-<script src="assets/js/hire104.js?v=20261119-448"></script>
-<script src="assets/js/mix.js?v=20261119-448"></script>
-<script src="assets/js/app.js?v=20261119-448"></script>
+<script src="assets/js/pdf-table.js?v=20261120-449"></script>
+<script src="assets/js/normalize.js?v=20261120-449"></script>
+<script src="assets/js/holidays.js?v=20261120-449"></script>
+<script src="assets/js/registry.js?v=20261120-449"></script>
+<script src="assets/js/ocr.js?v=20261120-449"></script>
+<script src="assets/js/rules.js?v=20261120-449"></script>
+<script src="assets/js/store.js?v=20261120-449"></script>
+<script src="assets/js/sync.js?v=20261120-449"></script>
+<script src="assets/js/leads.js?v=20261120-449"></script>
+<script src="assets/js/chattel.js?v=20261120-449"></script>
+<script src="assets/js/listed.js?v=20261120-449"></script>
+<script src="assets/js/biz.js?v=20261120-449"></script>
+<script src="assets/js/trade.js?v=20261120-449"></script>
+<script src="assets/js/nhi.js?v=20261120-449"></script>
+<script src="assets/js/einv.js?v=20261120-449"></script>
+<script src="assets/js/factory.js?v=20261120-449"></script>
+<script src="assets/js/industry.js?v=20261120-449"></script>
+<script src="assets/js/pcc.js?v=20261120-449"></script>
+<script src="assets/js/hire104.js?v=20261120-449"></script>
+<script src="assets/js/mix.js?v=20261120-449"></script>
+<script src="assets/js/app.js?v=20261120-449"></script>
 </body>
 </html>
