@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261119-448';
+  const APP_VERSION = '20261120-449';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -9191,6 +9191,7 @@ export default {
     await reload();
     const undone = await undoClosedBatch();
     render();
+    if (window.__bootOk) window.__bootOk();   // 名單畫出來了：把「還沒載入完成」那一行收掉（版本 449，index.html）
     if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
     if (BACKEND_RUN) {
       // 後台模式：什麼都不自己跑，等 feed-drive.mjs 照順序叫 runSync → dailyFeed → autoRebalance → runSync
@@ -9284,5 +9285,7 @@ export default {
   init().catch((err) => {
     console.error(err);
     toast(`初始化失敗：${err.message}`);
+    // 名單還沒畫出來就失敗：留一行不消失的，可以按重新載入（版本 449；名單已經出來的照舊只跳提示）
+    if (window.__bootFail) window.__bootFail(`沒有啟動成功（${String(err && err.message || err).slice(0, 60)}），名單還沒顯示。請按重新載入。`);
   });
 })();
