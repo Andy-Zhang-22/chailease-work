@@ -5981,7 +5981,7 @@ CI 的 `test-hiring.js` 抓到：每週池只補了 2 家。原因是「今天�
 - **使用者要在 Google Cloud 主控台做的**（同步用的那個專案）：
   1. 先在公司電腦開 `https://storage.googleapis.com/`：看到一小段錯誤訊息的文字＝連得到；被擋或一直轉圈＝這條路不通，不用往下做。
   2. Cloud Storage → 建立值區：名稱 `tel-list-az22`、區域 `us-west1`（在免費額度的區域）、Standard、統一存取權、**不要勾**「強制禁止公開存取」。要有帳單帳戶。
-  3. 值區的「權限」加兩筆：`allUsers` →「Storage 物件檢視者」；Actions 的服務帳號（repo Variables 的 `GCP_SERVICE_ACCOUNT`）→「Storage 物件管理員」。
+  3. 值區的「權限」加兩筆：`allUsers` →「Storage 物件檢視者」；Actions 的服務帳號（repo Variables 的 `GCP_SERVICE_ACCOUNT`）→「Storage 物件管理員」和「Storage 舊版值區讀取者」（`roles/storage.legacyBucketReader`；11/23 實際放的時候才發現少這個：同步指令要先看值區本身，只有物件管理員會被擋）。
   4. API 和服務 → 憑證 → 同步用的 OAuth 用戶端 →「已授權的 JavaScript 來源」加 `https://tel-list-az22.storage.googleapis.com`。
   5. 之後在公司電腦開備用網址：輸入密碼 → 選單「雲端同步設定」貼用戶端 ID、登入 → 名單從雲端硬碟同步下來（新網址是新的來源，瀏覽器裡一開始是空的）。
 - 兩個網址是同一套程式、同一份雲端硬碟同步檔；GitHub Pages 那個照舊是主要的。
