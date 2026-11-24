@@ -1,7 +1,7 @@
 {
- "dailyAt": "2026-11-23T02:46:01.920Z",
- "newsAt": "2026-11-22",
- "newsCount": 8659,
+ "dailyAt": "2026-11-24T06:03:27.722Z",
+ "newsAt": "2026-11-23",
+ "newsCount": 8820,
  "revenueYm": "2026-10",
  "generatedAt": "2026-11-23T02:45:35.071Z",
  "total": 2371,
@@ -28,7 +28,7 @@
   },
   {
    "path": "news.json",
-   "rows": 8659
+   "rows": 8820
   },
   {
    "path": "revenue.json",
