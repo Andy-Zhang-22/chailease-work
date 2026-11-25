@@ -9,7 +9,7 @@
    * 靜態主機會把 js/css 快取起來，沒有版本號的話使用者更新後還是拿到舊檔案。
    * index.html 的每個 assets 網址都帶 ?v=，改版時一起換掉這個字串即可。
    */
-  const APP_VERSION = '20261119-448';
+  const APP_VERSION = '20261125-450';
   const TAX_LABEL = { yes: '有統編', no: '無統編' };
   const PHONE_LABEL = { yes: '有電話', no: '無電話' };
   // 變更登記：商工登記查核時發現的異動。一家公司可以同時有好幾種（增資＋負責人異動）
@@ -366,10 +366,12 @@
    * 當天打開網站就列在提醒列、跳一次提示與通知（一天一次）。
    */
   const DUE_NOTIFIED_KEY = 'due-notified';
+  /** 不排、不列的：自己標了禁止推廣，或同老闆連結的公司有一家標了（版本 450）。成效統計照舊只算自己被標的 */
+  function offLimits(r) { return !!(r && (r.blocked || r.groupBlocked)); }
   function dueToday() {
     const today = todayISO();
     // 今天已經在提醒列按過「完成」的就不再列——按掉了又跳回來是使用者最不能接受的
-    return allViews().filter((r) => r.nextDate === today && !r.blocked && r.dueDoneOn !== today)
+    return allViews().filter((r) => r.nextDate === today && !offLimits(r) && r.dueDoneOn !== today)
       .sort((a, b) => a.company.localeCompare(b.company, 'zh-Hant'));
   }
   /*
@@ -704,7 +706,7 @@
     if (typeof window.backendResearch !== 'function') return { off: true, asked: 0, withSignals: 0, strong: 0, skipped: 0 };
     const recent = Date.now() - 60 * 86400000;   // 版本 351：30 → 60 天（每月 260 家輪一遍要兩個月，Opus 一家約 US$0.17）
     // 中租往來的（dealingKind active，首頁預設隱藏的那群）不查（版本 348；使用者：「主力客戶不是 525 家嗎」）
-    const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !v.blocked && v.dealingKind !== 'active' && !FRESH_SOURCE_RE.test(String(v.source || '')));
+    const pool = allViews().filter((v) => /^\d{8}$/.test(String(v.taxId || '').replace(/\D/g, '')) && !offLimits(v) && v.dealingKind !== 'active' && !FRESH_SOURCE_RE.test(String(v.source || '')));
     const fresh = pool.filter((v) => !(v.intel && v.intel.at > recent));
     fresh.sort((a, b) => Number(b.chance === 'yes') - Number(a.chance === 'yes') || String(b.lastDate || '').localeCompare(String(a.lastDate || '')));
     const batchItems = fresh.slice(0, max);
@@ -732,7 +734,7 @@
   async function fillTodayIntel() {
     if (typeof window.backendResearch !== 'function' || window.researchDaily === false) return { off: true, asked: 0, withSignals: 0, strong: 0 };
     const today = todayISO();
-    const list = allViews().filter((v) => isFreshLead(v) && v.nextDate === today && !v.blocked && !v.intel);
+    const list = allViews().filter((v) => isFreshLead(v) && v.nextDate === today && !offLimits(v) && !v.intel);
     let withSignals = 0; let strong = 0; let asked = 0;
     for (let i = 0; i < list.length; i += 15) {
       const batch = list.slice(i, i + 15);
@@ -2822,7 +2824,7 @@
   const wanLabel = (n) => `${Math.round(Number(n) / 10000).toLocaleString()} 萬`;
   const OPP_REG_KINDS = ['capitalUp', 'address', 'owner', 'other'];
   function oppOf(r) {
-    if (r.blocked) return [];
+    if (offLimits(r)) return [];
     const today = todayISO();
     if (r.nextDate && r.nextDate >= today && dayDiff(r.nextDate) <= 7) return [];
     if (r.nextDate && r.nextDate < today) return [];   // 逾期的本來就在待打清單上
@@ -2940,6 +2942,13 @@
        * 下次聯絡日也被洗掉，可是它本身沒被禁，「隱藏禁止推廣」藏不到它。禁打是一家一家判的，不該帶著整組走。
        */
       const live = members.filter((m) => !m.blocked);
+      /*
+       * 同老闆有一家標了禁止推廣：連結的其他家不再排、不再出現（版本 450；使用者 11/25 看到一家沒有自己電話、
+       * 借的是同老闆那家的號碼，而那家已經禁止推廣：「關係企業以標註禁止撥打，這個就不應該再出現」）。
+       * 只是不排、不列（offLimits），這一家自己的狀態、下次聯絡日、紀錄都沒改——不替使用者標記；要分開看就把連結拿掉。
+       */
+      const banned = members.find((m) => m.blocked);
+      if (banned) live.forEach((m) => { m.groupBlocked = true; m.groupBlockedFrom = banned.company; m.groupBlockedAt = banned.blockedAt || ''; });
       const lead = (live.length ? live : members).reduce((a, b) => ((b.lastDate || '') > (a.lastDate || '') ? b : a));
       const lastDate = lead.lastDate || null;
       const nextDate = lead.nextDate || (live.length ? live : members).map((m) => m.nextDate).filter(Boolean).sort().pop() || null;
@@ -3180,7 +3189,7 @@
     let beyond = 0;
     allViews().forEach((v) => {
       // 今天已經在提醒列按過「完成」的不佔額度，跟 dueToday 同一條規則
-      if (!v.nextDate || v.blocked || v.dueDoneOn === today) return;
+      if (!v.nextDate || offLimits(v) || v.dueDoneOn === today) return;
       if (v.nextDate < today) overdue += 1;
       const i = at(v.nextDate < today ? today : v.nextDate);
       if (i < 0) { beyond += 1; return; }
@@ -3198,7 +3207,7 @@
     const today = todayISO();
     const counts = new Map(days.map((d) => [d, 0]));
     allViews().forEach((v) => {
-      if (!v.nextDate || v.blocked || !isFreshLead(v) || v.dueDoneOn === today) return;
+      if (!v.nextDate || offLimits(v) || !isFreshLead(v) || v.dueDoneOn === today) return;
       const want = v.nextDate < today ? today : v.nextDate;
       const d = days.find((x) => x >= want);
       if (d) counts.set(d, (counts.get(d) || 0) + 1);
@@ -3308,7 +3317,7 @@
   window.autoRebalance = autoRebalance;   // 測試用
 
   /** 今天排著、還沒處理、可以挪的：禁止推廣的、今天處理過的、固定日期的、約了拜訪的不算 */
-  const movableToday = () => { const today = todayISO(); return allViews().filter((v) => v.nextDate === today && !v.blocked && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate && !visitBooked(v)); };
+  const movableToday = () => { const today = todayISO(); return allViews().filter((v) => v.nextDate === today && !offLimits(v) && v.dueDoneOn !== today && v.lastDate !== today && !v.pinDate && !visitBooked(v)); };
   /*
    * 放假那天（颱風假、國定假日）排著的全部挪到下個上班日（版本 373；使用者：「今天要打的電話也要因為颱風假順延啊」）。
    * 後台每天清晨跑（feed-drive.mjs）；用 soft 寫，使用者自己在別台改過的日期不會被蓋掉。
@@ -4327,6 +4336,8 @@
     const f = state.filters;
     // 「隱藏禁止推廣」對洽談狀態那組不算：禁打的家數還是要看得到，才知道藏了幾筆
     if (state.hideBlocked && r.blocked && skip !== 'outcome') return false;
+    // 同老闆有一家被禁的跟著藏（版本 450）；它自己的洽談狀態不是禁止推廣，所以算家數時也不算它，不然點進去對不上
+    if (state.hideBlocked && !r.blocked && r.groupBlocked) return false;
     // 「隱藏中租往來」對往來情形那組不算（家數照樣看得到）；自己在篩選點了「中租往來」就不藏，不然點了會是空的
     // 但下次聯絡日到了（今天或逾期、今天還沒在提醒列按完成）的照樣列（使用者：藏起來的到期了不能漏打）
     if (state.hideDealing && r.dealingKind === 'active' && skip !== 'relation' && !state.filters.relation.has('active') && !dealingDue(r)) return false;
@@ -4784,6 +4795,7 @@
       r.branch && r.branch.kind === 'common' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: r.branchKey, title: r.branch.label }) : '',
       r.branch && r.branch.kind === 'shared' ? el('span', { className: 'badge badge-branch badge-branch-common', textContent: '全公司共同區域' }) : '',
       r.blocked ? el('span', { className: 'badge badge-blocked', textContent: `禁止推廣${r.blockedAt ? ` ${regKindDateLabel(r.blockedAt)}` : ''}`, title: r.blockedReason ? `${r.blockedAt ? `${dateLabel(r.blockedAt)}：` : ''}${r.blockedReason}` : '原因未填' }) : '',
+      !r.blocked && r.groupBlocked ? el('span', { className: 'badge badge-blocked', textContent: '關係企業禁止推廣', title: `同老闆的「${r.groupBlockedFrom}」標了禁止推廣` }) : '',
     ].filter(Boolean));
     node.append(top);
     // 公司名底下：Google／地圖／104／1111＋貼電話的框，只給還沒電話的；有電話的這排搬進詳細頁（畫面瘦身）
@@ -4898,7 +4910,7 @@
     const ago = (iso) => (iso ? -dayDiff(iso) : null);   // 幾天前；未來是負的
     const mine = state.userStates.get(r.id);
     // 出局的：禁止推廣、自己標了無機會、按過略過還沒到期、已經設了回撥提醒（那是排好的事，不用再推）
-    if (r.blocked) return null;
+    if (offLimits(r)) return null;
     if (r.chance === 'no') return null;
     if (mine && mine.pickSkipUntil && mine.pickSkipUntil > today) return null;
     if (r.remindAt && r.remindAt > now) return null;
@@ -5519,7 +5531,7 @@
     if (!r.district) return [];
     const road = roadOf(r.addressActual || r.address);
     return allViews()
-      .filter((v) => v.id !== r.id && v.district === r.district && (!r.city || !v.city || v.city === r.city) && !v.blocked && !v.cold)
+      .filter((v) => v.id !== r.id && v.district === r.district && (!r.city || !v.city || v.city === r.city) && !offLimits(v) && !v.cold)
       .map((v) => ({ v, tier: nearbyTier(v), sameRoad: !!road && roadOf(v.addressActual || v.address) === road }))
       .filter((x) => x.tier >= 0)
       .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.tier - b.tier || (b.v.lastDate || '').localeCompare(a.v.lastDate || '') || a.v.company.localeCompare(b.v.company, 'zh-Hant'));
@@ -5700,6 +5712,12 @@
         warn.append(el('p', { textContent: '這筆是在通話結果裡被標記為禁止推廣的，原因沒填。「不要再打」的名單要留得住原因與日期，建議在下面的通話紀錄補一句。' }));
       }
       body.append(warn);
+    } else if (r.groupBlocked) {
+      // 同老闆的另一家被禁（版本 450）：這家自己沒被標，但一樣不要打——撥號鍵就在上面，所以也放最上面
+      body.append(el('div', { className: 'blocked-warning group-blocked-warning' }, [
+        el('strong', { textContent: `⛔ 同老闆的「${r.groupBlockedFrom}」已標禁止推廣 — 請勿撥打${r.groupBlockedAt ? `（${dateLabel(r.groupBlockedAt)} 標記）` : ''}` }),
+        el('p', { textContent: '這家自己沒有被標記，但是同一個老闆，所以不再排進今天要打，名單上也跟著隱藏。要分開看，按下面「修改連結」把連結拿掉。' }),
+      ]));
     }
 
     if (r.phones.length) {
@@ -8969,6 +8987,7 @@ export default {
      * 只給它讀 allViews（有快取）與 openDetail，名單的邏輯還是全在這裡。
      */
     window.customerViews = () => allViews();
+    window.dueTodayNames = () => dueToday().map((r) => r.company);   // 測試用（版本 450）
     /*
      * 各分頁「加入」用的檔名（版本 422）：同一天從同一頁分兩次各加一家，檔名都是「來源-日期-1家.csv」，
      * 第二次匯入照「同名重匯＝更新」把第一次那家整批換掉（test-hiring 抓到：合併頁加了子一再加卯四，子一就不見）。
@@ -9191,6 +9210,7 @@ export default {
     await reload();
     const undone = await undoClosedBatch();
     render();
+    if (window.__bootOk) window.__bootOk();   // 名單畫出來了：把「還沒載入完成」那一行收掉（版本 449，index.html）
     if (undone) toast(`停業表拿掉了（資料不準）：之前整批標禁止推廣的 ${undone} 家已復原；下次聯絡日照紀錄裡寫的日期或名單檔的，推不出來的排今天`);
     if (BACKEND_RUN) {
       // 後台模式：什麼都不自己跑，等 feed-drive.mjs 照順序叫 runSync → dailyFeed → autoRebalance → runSync
@@ -9284,5 +9304,7 @@ export default {
   init().catch((err) => {
     console.error(err);
     toast(`初始化失敗：${err.message}`);
+    // 名單還沒畫出來就失敗：留一行不消失的，可以按重新載入（版本 449；名單已經出來的照舊只跳提示）
+    if (window.__bootFail) window.__bootFail(`沒有啟動成功（${String(err && err.message || err).slice(0, 60)}），名單還沒顯示。請按重新載入。`);
   });
 })();

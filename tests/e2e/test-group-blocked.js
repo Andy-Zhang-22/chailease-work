@@ -1,6 +1,8 @@
 // 停業表拿掉了（使用者：「這份名單好像是錯誤的，這家客戶還是在營業中」）：
 // 1) 以前「已停業整批標禁止推廣」標的那家，一打開就復原（那則紀錄刪掉、狀態推回來、變未排定），同組的另一家不動；
-// 2) 自己把一家標禁止推廣：同老闆的另一家不該跟著變「禁止推廣」、下次聯絡日不該被洗掉；「隱藏禁止推廣」只藏被禁的那家
+// 2) 自己把一家標禁止推廣：同老闆的另一家不該跟著變「禁止推廣」、下次聯絡日不該被洗掉（狀態不替使用者改）；
+//    版本 450（使用者 11/25「關係企業以標註禁止撥打，這個就不應該再出現」）：但它跟著不排、不列——「隱藏禁止推廣」一起藏、今天要打不列、
+//    卡片與詳細頁寫明是關係企業被禁；把連結拿掉就回來
 const { chromium } = require('playwright');
 const openFilters=async(p)=>p.evaluate(()=>{const f=document.querySelector('#filters');if(f&&!f.classList.contains('is-open'))document.querySelector('#btnFilters').click();});   // 版本 383：篩選收成右側面板，點之前先打開
 const http=require('http'),fs=require('fs'),path=require('path');
@@ -30,7 +32,7 @@ const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,g
    await window.Store.setState({recordId:'2',group:'g1',groupIds:['1','2'],groupAt:now,outcome:'blocked',nextDate:null,lastDate:'2026-10-03',updatedAt:now}); },
    {r:[mk('1','寶絢科技股份有限公司','53461522','2026-10-20'), mk('2','証宇科技有限公司','53461523',''), mk('3','大順工業有限公司','53461524','')], now:Date.now()});
  await pg.reload(); await pg.waitForSelector('#btnImport'); await pg.waitForTimeout(800);
- const views=()=>pg.evaluate(()=>window.customerViews().map(v=>({c:v.company,blocked:v.blocked,outcome:v.outcome,next:v.nextDate,last:v.lastDate})));
+ const views=()=>pg.evaluate(()=>window.customerViews().map(v=>({c:v.company,blocked:v.blocked,gb:!!v.groupBlocked,from:v.groupBlockedFrom||'',outcome:v.outcome,next:v.nextDate,last:v.lastDate})));
  let v=await views();
  const bx=()=>v.find(x=>x.c==='寶絢科技股份有限公司'); const zy=()=>v.find(x=>x.c==='証宇科技有限公司');
  chk(!zy().blocked && zy().outcome==='contacted' && zy().next==='2026-10-20' && zy().last==='2026-09-20', `証宇復原：狀態從剩下的紀錄推回來、下次聯絡日照紀錄寫的 10/20：${JSON.stringify(zy())}`);
@@ -50,11 +52,25 @@ const mk=(id,company,taxId,next)=>({id,source:'A.csv',company,aliases:[],taxId,g
  chk(zy().blocked && zy().outcome==='blocked', `証宇被禁：${JSON.stringify(zy())}`);
  chk(!bx().blocked && bx().outcome!=='blocked' && bx().next==='2026-10-20' && !bx().last, `寶絢沒被禁，狀態與下次聯絡日都沒被同組的禁打抄過去：${JSON.stringify(bx())}`);
  const names=await pg.$$eval('#cards .card .card-name',a=>a.map(x=>x.textContent.trim()));
- chk(await pg.isChecked('#hideBlocked') && !names.includes('証宇科技有限公司') && names.includes('寶絢科技股份有限公司') && names.includes('大順工業有限公司'), `隱藏禁止推廣：証宇藏起來、寶絢與大順還在：${names.join('|')}`);
- chk(!/禁止推廣/.test(await pg.locator('#cards .card:has-text("寶絢") .card-top').textContent()), '寶絢的卡片不會寫禁止推廣');
+ chk(bx().gb && bx().from==='証宇科技有限公司', `寶絢記著是同老闆的証宇被禁（只是記號，狀態沒改）：${JSON.stringify(bx())}`);
+ chk(await pg.isChecked('#hideBlocked') && !names.includes('証宇科技有限公司') && !names.includes('寶絢科技股份有限公司') && names.includes('大順工業有限公司'), `隱藏禁止推廣：証宇藏起來，同老闆的寶絢跟著藏，大順還在：${names.join('|')}`);
+ // 寶絢排在今天也不列進今天要打、不佔當天的量
+ await pg.evaluate(async()=>{ await window.Store.setState({recordId:'1',group:'g1',groupIds:['1','2'],groupAt:1,nextDate:'2026-10-05',updatedAt:Date.now()}); await window.reloadRecords(); }); await pg.waitForTimeout(400);
+ const due=await pg.evaluate(()=>window.dueTodayNames());
+ chk(!due.includes('寶絢科技股份有限公司') && due.includes('大順工業有限公司'), `今天要打：同老闆被禁的寶絢不列、大順照列：${due.join('|')}`);
  await openFilters(pg);
  await pg.uncheck('#hideBlocked'); await pg.waitForTimeout(300);
  chk((await pg.$$eval('#cards .card .card-name',a=>a.length))===3, '取消隱藏三家都在');
+ const top=(await pg.locator('#cards .card:has-text("寶絢") .card-top').textContent()).replace(/\s+/g,'');
+ chk(/關係企業禁止推廣/.test(top), `寶絢的卡片寫的是「關係企業禁止推廣」：${top}`);
+ await pg.locator('#cards .card:has-text("寶絢") .card-name').click(); await pg.waitForSelector('#drawerBody h2');
+ const warn=(await pg.locator('#drawerBody .group-blocked-warning').textContent()).replace(/\s+/g,'');
+ chk(/同老闆的「証宇科技有限公司」已標禁止推廣—請勿撥打/.test(warn) && /修改連結/.test(warn), `寶絢的詳細頁最上面講明是哪一家被禁、怎麼分開：${warn.slice(0,60)}`);
+ await pg.evaluate(()=>document.querySelector('#drawer .drawer-close').click()); await pg.waitForTimeout(300);
+ // 把連結拿掉：寶絢回來
+ await pg.evaluate(async()=>{ const now=Date.now(); await window.Store.setState({recordId:'1',group:'',groupIds:[],groupAt:now,nextDate:'2026-10-05',updatedAt:now}); await window.Store.setState({recordId:'2',group:'',groupIds:[],groupAt:now,outcome:'blocked',lastDate:'2026-10-05',updatedAt:now}); await window.reloadRecords(); }); await pg.waitForTimeout(400);
+ v=await views();
+ chk(!bx().gb && (await pg.evaluate(()=>window.dueTodayNames())).includes('寶絢科技股份有限公司'), `連結拿掉後寶絢不再跟著藏、回到今天要打：${JSON.stringify(bx())}`);
  chk(errs.length===0, `沒有 JS 錯誤：${errs.join(' | ')}`);
  console.log(bad?`\n${bad} 項失敗`:'\n全部通過');
  await br.close(); srv.close(); process.exit(bad?1:0);
