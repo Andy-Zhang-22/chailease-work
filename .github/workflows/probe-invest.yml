@@ -1,0 +1,59 @@
+# 一次性（看完就刪）：從財政部稅籍登記（data.gov.tw 9400，fetch-biz.mjs 也用這份）篩雙北、名稱有「投資／資本」的公司。
+# 使用者 2026/11/27 轉主管的指示要這份名單，先給了近半年有登記動作的，回「要完整的」。開發環境連不到財政部，所以在 Actions 上篩。
+# 記錄只印欄位與筆數；篩出來的列放成一天就過期的 artifact，下載後連這次 run 一起刪，不進 repo。
+name: 探路 稅籍檔篩投資公司（一次性，看完刪）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 下載、篩選（只印統計）
+        shell: bash
+        run: |
+          set -eo pipefail
+          curl -sSL --retry 3 -A 'Mozilla/5.0' -o BGMOPEN1.zip https://eip.fia.gov.tw/data/BGMOPEN1.zip
+          ls -la BGMOPEN1.zip | awk '{print "zip 大小", $5}'
+          python3 - <<'PY'
+          import csv, io, re, zipfile, collections
+          z = zipfile.ZipFile('BGMOPEN1.zip')
+          name = [n for n in z.namelist() if n.lower().endswith('.csv')][0]
+          f = io.TextIOWrapper(z.open(name), encoding='utf-8-sig', newline='')
+          rd = csv.reader(f)
+          head = next(rd)
+          print('欄位', head)
+          ix = {h: i for i, h in enumerate(head)}
+          A, T, P, N, C, O = ix['營業地址'], ix['統一編號'], ix['總機構統一編號'], ix['營業人名稱'], ix['資本額'], ix['組織別名稱']
+          total = 0; stat = collections.Counter(); org = collections.Counter(); band = collections.Counter()
+          out = csv.writer(open('invest.csv', 'w', encoding='utf-8-sig', newline=''))
+          out.writerow(head)
+          for r in rd:
+              total += 1
+              if len(r) <= max(A, T, P, N, C, O): continue
+              if total == 1 and not re.match(r'\d{8}$', r[T] or ''): print('出檔日期', r[0]); continue
+              city = (r[A] or '')[:3].replace('台', '臺')
+              if city not in ('臺北市', '新北市'): continue
+              if not re.search('投資|資本', r[N] or ''): continue
+              if (r[P] or '').strip(): stat['分公司（不收）'] += 1; continue
+              stat[city] += 1; org[r[O]] += 1
+              c = int(re.sub(r'\D', '', r[C] or '') or 0)
+              band['0' if c == 0 else '未達 500 萬' if c < 5e6 else '500～1,000 萬' if c < 1e7 else '1,000 萬～1 億' if c < 1e8 else '1～5 億' if c < 5e8 else '5 億以上'] += 1
+              out.writerow(r)
+          print('全檔列數', total)
+          print('雙北、名稱有投資／資本', dict(stat))
+          print('組織別', dict(org.most_common(12)))
+          print('資本額', dict(band))
+          PY
+          wc -l invest.csv | awk '{print "invest.csv 列數", $1}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: invest
+          path: invest.csv
+          retention-days: 1
