@@ -1,13 +1,18 @@
 # 一次性（看完就刪）：從財政部稅籍登記（data.gov.tw 9400，fetch-biz.mjs 也用這份）篩雙北、名稱有「投資／資本」的公司。
 # 使用者 2026/11/27 轉主管的指示要這份名單，先給了近半年有登記動作的，回「要完整的」。開發環境連不到財政部，所以在 Actions 上篩。
-# 記錄只印欄位與筆數；篩出來的列放成一天就過期的 artifact，下載後連這次 run 一起刪，不進 repo。
+# 記錄只印欄位與筆數；篩出來的列暫存在 Google 值區幾分鐘（檔名不印）、下載完就刪，不進 repo。
 name: 探路 稅籍檔篩投資公司（一次性，看完刪）
 
 on:
   workflow_dispatch:
+    inputs:
+      key:
+        description: '暫存檔名（不印出來）'
+        required: true
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   probe:
@@ -52,8 +57,19 @@ jobs:
           PY
           wc -l invest.csv | awk '{print "invest.csv 列數", $1}'
 
-      - uses: actions/upload-artifact@v4
+      # 開發環境連不到 GitHub 放 artifact 的主機，改放到 Google 值區暫存幾分鐘（檔名不印），這邊下載完就刪
+      - uses: google-github-actions/auth@v3
         with:
-          name: invest
-          path: invest.csv
-          retention-days: 1
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: 暫存、等下載、刪掉
+        shell: bash
+        env:
+          KEY: ${{ inputs.key }}
+        run: |
+          gzip -9 invest.csv
+          gcloud storage cp invest.csv.gz "gs://tel-list-az22/tmp-$KEY.gz" --quiet >/dev/null 2>&1
+          echo "已暫存，4 分鐘後刪"
+          sleep 240
+          gcloud storage rm "gs://tel-list-az22/tmp-$KEY.gz" --quiet >/dev/null 2>&1 && echo "已刪"
