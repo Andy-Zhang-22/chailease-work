@@ -65,9 +65,9 @@ jobs:
 
       - name: 暫存、等下載、刪掉
         shell: bash
-        env:
-          KEY: ${{ inputs.key }}
         run: |
+          # 檔名從事件檔讀（放 env 會被印在記錄裡），再遮起來
+          KEY=$(jq -r '.inputs.key' "$GITHUB_EVENT_PATH"); echo "::add-mask::$KEY"
           gzip -9 invest.csv
           gcloud storage cp invest.csv.gz "gs://tel-list-az22/tmp-$KEY.gz" --quiet >/dev/null 2>&1
           echo "已暫存，4 分鐘後刪"
