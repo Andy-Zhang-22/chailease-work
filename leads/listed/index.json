@@ -1,9 +1,9 @@
 {
- "dailyAt": "2026-11-27T06:19:05.148Z",
+ "dailyAt": "2026-11-27T06:27:42.659Z",
  "newsAt": "2026-11-26",
  "newsCount": 9123,
  "revenueYm": "2026-10",
- "generatedAt": "2026-11-27T06:17:15.311Z",
+ "generatedAt": "2026-11-27T06:27:15.698Z",
  "total": 2374,
  "markets": {
   "上市": 1098,
@@ -11,9 +11,9 @@
   "興櫃": 377
  },
  "chairmen": 2020,
- "chairmenLeft": 184,
- "withInvest": 1217,
- "investCompanies": 2475,
+ "chairmenLeft": 0,
+ "withInvest": 1309,
+ "investCompanies": 2644,
  "files": [
   {
    "path": "companies.csv",
