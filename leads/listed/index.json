@@ -1,19 +1,19 @@
 {
- "dailyAt": "2026-11-27T06:27:42.659Z",
- "newsAt": "2026-11-26",
- "newsCount": 9123,
+ "dailyAt": "2026-11-28T03:54:58.393Z",
+ "newsAt": "2026-11-27",
+ "newsCount": 9122,
  "revenueYm": "2026-10",
- "generatedAt": "2026-11-27T06:27:15.698Z",
+ "generatedAt": "2026-11-28T03:54:27.959Z",
  "total": 2374,
  "markets": {
   "上市": 1098,
   "上櫃": 899,
   "興櫃": 377
  },
- "chairmen": 2020,
+ "chairmen": 2019,
  "chairmenLeft": 0,
  "withInvest": 1309,
- "investCompanies": 2644,
+ "investCompanies": 2640,
  "files": [
   {
    "path": "companies.csv",
@@ -24,11 +24,11 @@
   },
   {
    "path": "changes.json",
-   "rows": 419
+   "rows": 430
   },
   {
    "path": "news.json",
-   "rows": 9123
+   "rows": 9122
   },
   {
    "path": "revenue.json",
